@@ -58,7 +58,21 @@ const ALLOWED_SET_PREFIXES = [
   "vbat_",
   "ibat_",
   "current_",
-  "failsafe_"
+  "failsafe_",
+  // Verified against the Rotorflight firmware settings table
+  // (all 728 CLI keys, 2026-08-02) — tuning families the
+  // original list missed:
+  "error_", // PID error-decay tuning
+  "offset_", // high-collective O-term tuning
+  "setpoint_", // setpoint boost
+  "d_max", // D-term ceiling (list had d_min only)
+  "min_throttle",
+  "max_throttle",
+  "min_command",
+  "battery_", // cell count contextualizes sag numbers
+  "dshot_", // RPM-telemetry provenance (rpm filter source)
+  "ibata_", // current-meter calibration scale — data QA
+  "imu_" // attitude estimator gains
 ];
 
 // Whole-line commands that carry setup information worth
@@ -87,7 +101,12 @@ const DENY_PATTERNS = [
   /(^|_)bind/i,
   /rx_spi/i,
   /resource/i,
-  /mac_|uid/i
+  /mac_|uid/i,
+  // Per-device calibration constants (e.g. acc_calibration)
+  // are a stable fingerprint of one specific board with zero
+  // tuning value — the opposite of what the dump is for.
+  // Pilot trims (acc_trim_*) are tuning and stay.
+  /calibration/i
 ];
 
 function isDenied(text) {

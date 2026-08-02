@@ -55,6 +55,19 @@ set roll_i = 120
 set yaw_cw_stop_gain = 120
 set rescue_mode = 1
 set blackbox_sample_rate = 1
+set error_decay_time_cyclic = 25
+set offset_flood_relax_level = 30
+set setpoint_boost_gain = 15
+set d_max_gain = 40
+set min_throttle = 1070
+set max_throttle = 2000
+set min_command = 1000
+set battery_cell_count = 12
+set dshot_bidir = ON
+set ibata_scale = 400
+set imu_dcm_kp = 25000
+set acc_trim_pitch = 12
+set acc_calibration = -42,18,344,1
 set totally_unknown_future_thing = 42
 `;
 
@@ -93,6 +106,38 @@ test("tuning setup survives, verbatim and parsed", () => {
   assert.equal(parsed.gear_ratio, "1090");
   assert.equal(parsed.roll_p, "80");
   assert.equal(parsed.motor_poles, "10");
+});
+
+test("firmware-verified tuning families survive (2026-08-02 extension)", () => {
+  const { parsed } = scrubDump(SYNTHETIC_DUMP);
+
+  assert.equal(parsed.error_decay_time_cyclic, "25");
+  assert.equal(parsed.offset_flood_relax_level, "30");
+  assert.equal(parsed.setpoint_boost_gain, "15");
+  assert.equal(parsed.d_max_gain, "40");
+  assert.equal(parsed.min_throttle, "1070");
+  assert.equal(parsed.max_throttle, "2000");
+  assert.equal(parsed.min_command, "1000");
+  assert.equal(parsed.battery_cell_count, "12");
+  assert.equal(parsed.dshot_bidir, "ON");
+  assert.equal(parsed.ibata_scale, "400");
+  assert.equal(parsed.imu_dcm_kp, "25000");
+});
+
+test("per-device calibration constants die; pilot trims survive", () => {
+  const { scrubbedText, parsed } = scrubDump(SYNTHETIC_DUMP);
+
+  assert.equal(parsed.acc_calibration, undefined);
+  assert.ok(
+    !scrubbedText.includes("acc_calibration"),
+    "device calibration key leaked"
+  );
+  assert.ok(
+    !scrubbedText.includes("-42,18,344,1"),
+    "device calibration vector leaked"
+  );
+
+  assert.equal(parsed.acc_trim_pitch, "12");
 });
 
 test("unknown settings are dropped, not forwarded", () => {
