@@ -1,3 +1,5 @@
+> **Incubator.** Canonical repo: [github.com/hillbilly1975/Blackbox_Lab](https://github.com/hillbilly1975/Blackbox_Lab) — stabilized work flows back there as PRs.
+
 # Blackbox Lab
 
 **Professional Rotorflight Analysis Suite**
