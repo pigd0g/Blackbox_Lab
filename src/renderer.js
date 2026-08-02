@@ -1114,16 +1114,29 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
 
   return chosen.map((peak) => {
     let name = `${peak.hz.toFixed(0)} Hz`;
+    let classification = "unclassified";
 
     if (headspeedRpm && headspeedRpm > 300) {
       const ratio = peak.hz / (headspeedRpm / 60);
 
-      if (Math.abs(ratio - 1) < 0.15) name = `main rotor 1/rev · ${name}`;
-      else if (Math.abs(ratio - 2) < 0.2) name = `main rotor 2/rev · ${name}`;
-      else if (ratio > 3.5 && ratio < 6.5) name = `tail region · ${name}`;
+      if (Math.abs(ratio - 1) < 0.15) {
+        name = `main rotor 1/rev · ${name}`;
+        classification = "main_rotor_1rev";
+      } else if (Math.abs(ratio - 2) < 0.2) {
+        name = `main rotor 2/rev · ${name}`;
+        classification = "main_rotor_2rev";
+      } else if (ratio > 3.5 && ratio < 6.5) {
+        name = `tail region · ${name}`;
+        classification = "tail_region";
+      }
     }
 
-    return { hz: peak.hz, label: name };
+    return {
+      hz: peak.hz,
+      label: name,
+      magnitude: peak.magnitude,
+      classification
+    };
   });
 }
 

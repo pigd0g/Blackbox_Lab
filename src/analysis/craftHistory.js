@@ -181,6 +181,91 @@ export function clearHistory(storage) {
 }
 
 // ------------------------------------------------------
+// Craft class card — the minimum context that makes
+// flights comparable: confirmed once per craft, stored
+// locally, attached to contributions only when sharing
+// is on. Local app data first, contribution metadata
+// second.
+// ------------------------------------------------------
+
+const CRAFT_CARD_KEY = "blackboxLabCraftCards";
+
+export const CRAFT_SIZE_CLASSES = [
+  "450",
+  "500",
+  "550",
+  "600",
+  "700",
+  "other"
+];
+export const CRAFT_POWER_TYPES = ["electric", "nitro", "gasoline"];
+export const CRAFT_DRIVES = ["direct", "belt", "torque_tube_tail"];
+
+function loadCraftCards(storage) {
+  try {
+    const raw = storage.getItem(CRAFT_CARD_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getCraftCard(storage, craftName) {
+  return loadCraftCards(storage)[craftName] ?? null;
+}
+
+// Allowlist on write, same philosophy as the payload:
+// only the five card fields survive, everything else is
+// dropped. Unknown enum values fall back to null rather
+// than travelling on.
+export function saveCraftCard(storage, craftName, card) {
+  const cards = loadCraftCards(storage);
+
+  const numberOrNull = (value) => {
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) && number > 0
+      ? Math.round(number)
+      : null;
+  };
+
+  const oneOf = (value, allowed) =>
+    allowed.includes(value) ? value : null;
+
+  cards[craftName] = {
+    size_class: oneOf(card?.size_class, CRAFT_SIZE_CLASSES),
+    blade_length_mm: numberOrNull(card?.blade_length_mm),
+    power_type: oneOf(card?.power_type, CRAFT_POWER_TYPES),
+    typical_headspeed_rpm: numberOrNull(card?.typical_headspeed_rpm),
+    drive: oneOf(card?.drive, CRAFT_DRIVES)
+  };
+
+  storage.setItem(CRAFT_CARD_KEY, JSON.stringify(cards));
+  return cards[craftName];
+}
+
+// Pre-fill from what the log already knows, so the pilot
+// confirms instead of typing. Only suggestions the log can
+// actually support are made; everything else stays null
+// and waits for the pilot.
+export function prefillCraftCard({
+  medianHeadspeedRpm = null,
+  hasElectricalTelemetry = false
+} = {}) {
+  const headspeed = Number.parseFloat(medianHeadspeedRpm);
+
+  return {
+    size_class: null,
+    blade_length_mm: null,
+    power_type: hasElectricalTelemetry ? "electric" : null,
+    typical_headspeed_rpm:
+      Number.isFinite(headspeed) && headspeed > 300
+        ? Math.round(headspeed / 10) * 10
+        : null,
+    drive: null
+  };
+}
+
+// ------------------------------------------------------
 // Trend assessment — the sentences that make this a
 // health record instead of a diary.
 // ------------------------------------------------------
