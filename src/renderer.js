@@ -12,10 +12,16 @@ import {
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import {
-  buildContribution,
+  buildContributionV1,
   describeContribution
 } from "./contribute/contributionBuilder.js";
-import { uploadContribution } from "./contribute/uploader.js";
+import { uploadContributionV1 } from "./contribute/uploader.js";
+import { scrubDump, looksLikeDump } from "./contribute/dumpScrubber.js";
+import { buildFingerprint } from "./contribute/fingerprint.js";
+import {
+  hasContributed,
+  recordContributed
+} from "./contribute/uploadLedger.js";
 import {
   CONTRIBUTE_ENDPOINT,
   CONTRIBUTE_APP_VERSION
@@ -43,7 +49,10 @@ import {
   buildHistoryEntry,
   assessTrends,
   deleteFlight,
-  clearHistory
+  clearHistory,
+  getCraftCard,
+  saveCraftCard,
+  prefillCraftCard
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import {
@@ -2064,9 +2073,14 @@ function renderAllCharts(dataset) {
   renderEscEvidence(dataset);
 }
 
+// The latest quality-gate result, kept for the contribution
+// payload so it never has to be recomputed.
+let currentLogQuality = null;
+
 function renderQuality(dataset, flightStats) {
   if (!dataset) {
     qualityCard.hidden = true;
+    currentLogQuality = null;
     return;
   }
 
@@ -2080,6 +2094,8 @@ function renderQuality(dataset, flightStats) {
       : 0,
     ...dataset.columnPresence
   });
+
+  currentLogQuality = quality;
 
   qualityCard.hidden = false;
   qualitySummary.textContent = quality.summary;
@@ -2423,9 +2439,12 @@ function analyzeFlight(flightIndex) {
     : "Open a log first.";
 
   // ---- file this flight in the craft's health record ----
+  const rawCraftName = getMetadataValue(currentFlightLines, "Craft name");
+  const craftKeyName =
+    rawCraftName === "Not found" ? "Unknown craft" : rawCraftName;
+
   if (currentDataset) {
-   
-    const craftName = getMetadataValue(currentFlightLines, "Craft name");
+    const craftName = rawCraftName;
 
     const entry = buildHistoryEntry({
       fileName: file.name,
@@ -2449,6 +2468,15 @@ function analyzeFlight(flightIndex) {
     );
 
     refreshHistoryScreen(craftKey);
+
+    // First analysis of a new craft: offer the craft card,
+    // pre-filled from the log. Local model info first,
+    // contribution metadata second — independent of sharing.
+    // Bundled sample flights are not the pilot's craft, so
+    // they never prompt for one.
+    if (!file.name.startsWith("sample-")) {
+      maybeAskCraftCard(craftKey);
+    }
   }
 
   refreshCompareButtons();
@@ -2463,11 +2491,12 @@ function analyzeFlight(flightIndex) {
     // them, so contributing them would only fill the community
     // bucket with identical copies.
     if (!file.name.startsWith("sample-")) {
-      maybeContributeFlight(
-        flight.decoded,
-        fileType,
-        `${file.name}#${flightIndex}`
-      );
+      maybeContributeFlight(flight.decoded, fileType, `${file.name}#${flightIndex}`, {
+        dataset: currentDataset,
+        pidAnalysis,
+        logQuality: currentLogQuality,
+        craftName: craftKeyName
+      });
     }
   }
 
@@ -2903,8 +2932,19 @@ const contributeToggle = document.getElementById("contributeToggle");
 const contributePower = document.getElementById("contributePower");
 const contributeGps = document.getElementById("contributeGps");
 const contributeSetup = document.getElementById("contributeSetup");
+const contributeDump = document.getElementById("contributeDump");
 const contributeStatus = document.getElementById("contributeStatus");
 const contributeAsk = document.getElementById("contributeAsk");
+
+const dumpPasteArea = document.getElementById("dumpPasteArea");
+const dumpPasteStatus = document.getElementById("dumpPasteStatus");
+const dumpConsentRow = document.getElementById("dumpConsentRow");
+const dumpConsentInline = document.getElementById("dumpConsentInline");
+
+// The scrubbed dump from this session's paste, attached to
+// contributions while it lives. Only ever the SCRUBBED
+// result — the raw paste is never kept.
+let sessionScrubbedDump = null;
 
 function contributionEnabled() {
   return (
@@ -2921,10 +2961,25 @@ function loadContributeCats() {
     return {
       power: stored.power === true,
       gps: stored.gps === true,
-      setup: stored.setup === true
+      setup: stored.setup === true,
+      dump: stored.dump === true
     };
   } catch {
-    return { power: true, gps: false, setup: true };
+    return { power: true, gps: false, setup: true, dump: false };
+  }
+}
+
+// The dump category arrived after the first installs
+// consented. Whether it was ever ANSWERED (either way) is
+// what decides if the one-time inline ask still shows.
+function dumpConsentAnswered() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
+    );
+    return typeof stored.dump === "boolean";
+  } catch {
+    return false;
   }
 }
 
@@ -2943,43 +2998,82 @@ function refreshContributeCard() {
   contributePower.checked = cats.power;
   contributeGps.checked = cats.gps;
   contributeSetup.checked = cats.setup;
+  contributeDump.checked = cats.dump;
 
   const disabled = !contributeToggle.checked;
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.disabled = disabled;
-  });
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.disabled = disabled;
+    }
+  );
 }
 
-function maybeContributeFlight(flight, fileType, key) {
+async function maybeContributeFlight(flight, fileType, key, extras = {}) {
   if (!contributionEnabled()) return;
   if (contributedThisSession.has(key)) return;
   contributedThisSession.add(key);
 
-  const payload = buildContribution(
-    flight,
-    fileType,
-    loadContributeCats(),
-    CONTRIBUTE_APP_VERSION
-  );
+  const cats = loadContributeCats();
 
-  if (contributeStatus) {
-    contributeStatus.textContent = `Sharing: ${describeContribution(payload)} …`;
-  }
-
-  uploadContribution(CONTRIBUTE_ENDPOINT, payload)
-    .then((result) => {
-      if (contributeStatus) {
-        contributeStatus.textContent = result.ok
-          ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
-          : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+  try {
+    const contribution = await buildContributionV1(
+      flight,
+      fileType,
+      cats,
+      CONTRIBUTE_APP_VERSION,
+      {
+        scrubbedDump: cats.dump === true ? sessionScrubbedDump : null,
+        craftCard: extras.craftName
+          ? getCraftCard(localStorage, extras.craftName)
+          : null,
+        analysisContext: extras.pidAnalysis?.analysisContext ?? null,
+        logQuality: extras.logQuality ?? null,
+        fingerprint: buildFingerprint({
+          dataset: extras.dataset,
+          pidAnalysis: extras.pidAnalysis
+        })
       }
-    })
-    .catch(() => {
+    );
+
+    // Same flight already confirmed uploaded from this
+    // install — nothing new to say, skip entirely.
+    if (hasContributed(localStorage, contribution.contentHash)) {
       if (contributeStatus) {
         contributeStatus.textContent =
-          "Sharing failed (no connection) — the tool keeps working normally.";
+          "This flight was already shared earlier — not sent again.";
       }
-    });
+      return;
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = `Sharing: ${describeContribution({
+        fields: contribution.frames.fields,
+        frames: contribution.frames.frames,
+        gps: contribution.frames.gps,
+        categories: contribution.payload.categories
+      })} …`;
+    }
+
+    const result = await uploadContributionV1(
+      CONTRIBUTE_ENDPOINT,
+      contribution
+    );
+
+    if (result.ok) {
+      recordContributed(localStorage, contribution.contentHash);
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = result.ok
+        ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
+        : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+    }
+  } catch {
+    if (contributeStatus) {
+      contributeStatus.textContent =
+        "Sharing failed (no connection) — the tool keeps working normally.";
+    }
+  }
 }
 
 if (contributeToggle) {
@@ -2991,15 +3085,18 @@ if (contributeToggle) {
     refreshContributeCard();
   });
 
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.addEventListener("change", () => {
-      saveContributeCats({
-        power: contributePower.checked,
-        gps: contributeGps.checked,
-        setup: contributeSetup.checked
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.addEventListener("change", () => {
+        saveContributeCats({
+          power: contributePower.checked,
+          gps: contributeGps.checked,
+          setup: contributeSetup.checked,
+          dump: contributeDump.checked
+        });
       });
-    });
-  });
+    }
+  );
 }
 
 if (contributeAsk && CONTRIBUTE_ENDPOINT) {
@@ -3013,7 +3110,8 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
       saveContributeCats({
         power: document.getElementById("askPower").checked,
         gps: document.getElementById("askGps").checked,
-        setup: document.getElementById("askSetup").checked
+        setup: document.getElementById("askSetup").checked,
+        dump: document.getElementById("askDump").checked
       });
       contributeAsk.hidden = true;
       refreshContributeCard();
@@ -3027,7 +3125,159 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
   }
 }
 
+// ---- CLI dump paste (Settings card) ----
+// The paste is scrubbed IMMEDIATELY; only the scrubbed
+// result is kept, and the pilot sees exactly what was
+// removed. Users who consented before the dump category
+// existed answer it once, inline, right where they paste.
+if (dumpPasteArea) {
+  dumpPasteArea.addEventListener("input", () => {
+    const text = dumpPasteArea.value;
+
+    if (text.trim().length === 0) {
+      sessionScrubbedDump = null;
+      dumpPasteStatus.textContent = "";
+      return;
+    }
+
+    if (!looksLikeDump(text)) {
+      sessionScrubbedDump = null;
+      dumpPasteStatus.textContent =
+        "This doesn't look like a Rotorflight `dump all` yet — paste the whole output.";
+      return;
+    }
+
+    const cats = loadContributeCats();
+    sessionScrubbedDump = scrubDump(text, {
+      includeCraftName: cats.setup === true
+    });
+
+    dumpPasteStatus.textContent =
+      `Scrubbed: ${sessionScrubbedDump.stats.kept} setting${
+        sessionScrubbedDump.stats.kept === 1 ? "" : "s"
+      } kept` +
+      (sessionScrubbedDump.report.length > 0
+        ? ` · ${sessionScrubbedDump.report.join(" · ")}`
+        : "") +
+      ". It travels with your next shared flights.";
+
+    // Users who consented before the dump category existed:
+    // the pre-checked inline checkbox appears once, and its
+    // shown state IS the stored answer from that moment —
+    // unchecking it updates the stored answer immediately.
+    // Pilots who declined sharing are never asked here; the
+    // ask card covers everyone who consents later.
+    if (contributionEnabled() && !dumpConsentAnswered() && dumpConsentRow) {
+      dumpConsentRow.hidden = false;
+      saveContributeCats({
+        ...loadContributeCats(),
+        dump: dumpConsentInline.checked
+      });
+      refreshContributeCard();
+    }
+  });
+}
+
+if (dumpConsentInline) {
+  dumpConsentInline.addEventListener("change", () => {
+    const cats = loadContributeCats();
+    saveContributeCats({ ...cats, dump: dumpConsentInline.checked });
+    refreshContributeCard();
+  });
+}
+
 refreshContributeCard();
+
+// ======================================================
+// Craft class card — confirmed once per craft, local
+// model info first, contribution metadata second.
+// ======================================================
+
+const craftCardAsk = document.getElementById("craftCardAsk");
+const craftCardTitle = document.getElementById("craftCardTitle");
+const craftCardSize = document.getElementById("craftCardSize");
+const craftCardBlade = document.getElementById("craftCardBlade");
+const craftCardPower = document.getElementById("craftCardPower");
+const craftCardHeadspeed = document.getElementById("craftCardHeadspeed");
+const craftCardDrive = document.getElementById("craftCardDrive");
+const craftCardSave = document.getElementById("craftCardSave");
+const craftCardLater = document.getElementById("craftCardLater");
+const editCraftCardButton = document.getElementById("editCraftCardButton");
+
+const craftCardSkippedThisSession = new Set();
+let craftCardTarget = null;
+
+function openCraftCardPanel(craftName, prefill) {
+  if (!craftCardAsk) return;
+
+  craftCardTarget = craftName;
+  craftCardTitle.textContent = `About your ${craftName}`;
+
+  const card = getCraftCard(localStorage, craftName) ?? prefill ?? {};
+
+  craftCardSize.value = card.size_class ?? "";
+  craftCardBlade.value = card.blade_length_mm ?? "";
+  craftCardPower.value = card.power_type ?? "";
+  craftCardHeadspeed.value = card.typical_headspeed_rpm ?? "";
+  craftCardDrive.value = card.drive ?? "";
+
+  craftCardAsk.hidden = false;
+}
+
+function maybeAskCraftCard(craftName) {
+  if (!craftCardAsk) return;
+  // Never stack on top of the sharing ask — the card
+  // simply waits for a later analysis of this craft.
+  if (contributeAsk && !contributeAsk.hidden) return;
+  if (craftName === "Unknown craft") return;
+  if (getCraftCard(localStorage, craftName)) return;
+  if (craftCardSkippedThisSession.has(craftName)) return;
+
+  openCraftCardPanel(
+    craftName,
+    prefillCraftCard({
+      medianHeadspeedRpm:
+        currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+      hasElectricalTelemetry:
+        currentDataset?.columnPresence?.hasVbat === true
+    })
+  );
+}
+
+if (craftCardSave) {
+  craftCardSave.addEventListener("click", () => {
+    if (craftCardTarget) {
+      saveCraftCard(localStorage, craftCardTarget, {
+        size_class: craftCardSize.value || null,
+        blade_length_mm: craftCardBlade.value,
+        power_type: craftCardPower.value || null,
+        typical_headspeed_rpm: craftCardHeadspeed.value,
+        drive: craftCardDrive.value || null
+      });
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+  });
+}
+
+if (craftCardLater) {
+  craftCardLater.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+  });
+}
+
+if (editCraftCardButton) {
+  editCraftCardButton.addEventListener("click", () => {
+    const craft = historyCraftSelect.value;
+    if (craft) {
+      openCraftCardPanel(craft, prefillCraftCard({}));
+    }
+  });
+}
 
 // ======================================================
 // Welcome hero (empty state): extra open/sample buttons,

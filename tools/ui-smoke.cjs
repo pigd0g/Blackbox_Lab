@@ -183,6 +183,38 @@ const { mkdirSync } = require("node:fs");
   console.log("history note:", historyNote);
   await window.screenshot({ path: "smoke-shots/09-history.png" });
 
+  // ---- craft card: opens from the health record, saves ----
+  await window.click("#editCraftCardButton");
+  await window.waitForSelector("#craftCardAsk:not([hidden])", { timeout: 3000 });
+  await window.selectOption("#craftCardSize", "700");
+  await window.click("#craftCardSave");
+  const savedCard = await window.evaluate(() => {
+    const cards = JSON.parse(
+      localStorage.getItem("blackboxLabCraftCards") ?? "{}"
+    );
+    return Object.values(cards)[0] ?? null;
+  });
+  if (!savedCard || savedCard.size_class !== "700") {
+    throw new Error("craft card did not save: " + JSON.stringify(savedCard));
+  }
+  console.log("craft card saved:", JSON.stringify(savedCard));
+
+  // ---- CLI dump paste: scrubbed live, report shown ----
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(300);
+  await window.fill(
+    "#dumpPasteArea",
+    "# Rotorflight 4.4.0\nboard_name SECRET\nset gov_headspeed = 2100\nset totally_unknown = 1\n"
+  );
+  await window.waitForTimeout(200);
+  const dumpStatus = await window.textContent("#dumpPasteStatus");
+  // 2 kept = the version banner line + gov_headspeed.
+  if (!dumpStatus.includes("2 settings kept")) {
+    throw new Error("dump paste status unexpected: " + dumpStatus);
+  }
+  console.log("dump paste ok:", dumpStatus.trim());
+  await window.screenshot({ path: "smoke-shots/10-dump-paste.png" });
+
   if (errors.length) {
     console.log("\n==== ERRORS ====");
     for (const error of errors) console.log(error);

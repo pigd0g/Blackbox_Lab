@@ -648,6 +648,50 @@ body.advanced-mode details.advanced-block {
   min-height: 18px;
 }
 
+/* ---------------- CLI dump paste ---------------- */
+
+.dump-paste {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.dump-paste textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+/* ---------------- craft card ---------------- */
+
+.craft-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.craft-card-row select,
+.craft-card-row input {
+  width: 180px;
+  padding: 8px 12px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

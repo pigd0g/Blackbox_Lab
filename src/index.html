@@ -789,6 +789,10 @@ current demand; the steady downward slope is normal discharge.
           </p>
           <div class="flight-picker">
             <select id="historyCraftSelect"></select>
+            <button class="secondary-button" id="editCraftCardButton"
+              title="Size class, blades, power, headspeed, drive">
+              Edit craft card
+            </button>
           </div>
           <p class="lab-story" id="historyNote" style="margin-top:14px;">No flights recorded yet.</p>
           <div id="historyFindings"></div>
@@ -890,7 +894,37 @@ current demand; the steady downward slope is normal discharge.
               <span>Model &amp; tuning info — craft model and setup
                 values, so logs can be grouped by setup type.</span>
             </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="contributeDump" />
+              <span>CLI settings (<code>dump</code>) — scrubbed of
+                anything identifying; your settings help us improve
+                recommendations for your specific model.</span>
+            </label>
           </div>
+
+          <div class="dump-paste">
+            <p>
+              <strong>CLI settings (<code>dump all</code>)</strong> —
+              paste the output of the <code>dump all</code> CLI
+              command here to include your (scrubbed) settings with
+              shared flights. Names, board identity and anything
+              password-like are removed before anything is kept:
+            </p>
+            <textarea
+              id="dumpPasteArea"
+              rows="5"
+              spellcheck="false"
+              placeholder="# paste your Rotorflight `dump all` here"
+            ></textarea>
+            <label class="toggle-row" id="dumpConsentRow" hidden>
+              <input type="checkbox" id="dumpConsentInline" checked />
+              <span>Share these scrubbed settings with my flights —
+                your settings help us improve recommendations for
+                your specific model.</span>
+            </label>
+            <p class="contribute-status" id="dumpPasteStatus"></p>
+          </div>
+
           <p class="contribute-status" id="contributeStatus"></p>
         </section>
 
@@ -934,6 +968,67 @@ current demand; the steady downward slope is normal discharge.
     </div>
   </div>
 
+  <!-- Craft class card: confirmed once per craft on first
+       analysis, editable later from the Health Record.
+       Local model info first, contribution metadata second. -->
+  <div class="overlay" id="craftCardAsk" hidden>
+    <div class="overlay-dialog">
+      <h3 id="craftCardTitle">About your craft</h3>
+      <p>
+        A few facts about this model make its flights comparable —
+        in your Health Record, and (only if you share logs) for
+        everyone's recommendations. Confirm once; edit any time
+        from the Health Record screen.
+      </p>
+      <label class="craft-card-row">
+        <span>Size class</span>
+        <select id="craftCardSize">
+          <option value="">—</option>
+          <option value="450">450</option>
+          <option value="500">500</option>
+          <option value="550">550</option>
+          <option value="600">600</option>
+          <option value="700">700</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Main blade length (mm)</span>
+        <input type="number" id="craftCardBlade" min="100" max="1200" />
+      </label>
+      <label class="craft-card-row">
+        <span>Power</span>
+        <select id="craftCardPower">
+          <option value="">—</option>
+          <option value="electric">electric</option>
+          <option value="nitro">nitro</option>
+          <option value="gasoline">gasoline</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Typical headspeed (rpm)</span>
+        <input type="number" id="craftCardHeadspeed" min="500" max="4000" />
+      </label>
+      <label class="craft-card-row">
+        <span>Tail drive</span>
+        <select id="craftCardDrive">
+          <option value="">—</option>
+          <option value="direct">direct</option>
+          <option value="belt">belt</option>
+          <option value="torque_tube_tail">torque tube</option>
+        </select>
+      </label>
+      <div class="overlay-actions">
+        <button class="overlay-primary" id="craftCardSave">Save craft card</button>
+        <button class="overlay-secondary" id="craftCardLater">Not now</button>
+      </div>
+      <p class="overlay-footnote">
+        Pre-filled from your log where possible — please correct
+        anything that's off.
+      </p>
+    </div>
+  </div>
+
   <div class="overlay" id="contributeAsk" hidden>
     <div class="overlay-dialog">
       <h3>Help improve Blackbox Lab?</h3>
@@ -958,6 +1053,12 @@ current demand; the steady downward slope is normal discharge.
       <label class="toggle-row">
         <input type="checkbox" id="askSetup" checked />
         <span>Model &amp; tuning info</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="askDump" checked />
+        <span>Your CLI settings (<code>dump</code>), scrubbed of
+          anything identifying — your settings help us improve
+          recommendations for your specific model</span>
       </label>
       <div class="overlay-actions">
         <button class="overlay-primary" id="askYes">Yes, share anonymized logs</button>
