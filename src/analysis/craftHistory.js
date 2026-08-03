@@ -250,10 +250,78 @@ export function saveCraftCard(storage, craftName, card) {
   return cards[craftName];
 }
 
+// ------------------------------------------------------
+// Per-craft CLI dump — the SCRUBBED result only, filed
+// under the craft so it persists across sessions and
+// attaches to every contribution of that craft. The raw
+// paste is never stored.
+// ------------------------------------------------------
+
+const CRAFT_DUMP_KEY = "blackboxLabCraftDumps";
+
+function loadCraftDumps(storage) {
+  try {
+    const raw = storage.getItem(CRAFT_DUMP_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getCraftDump(storage, craftName) {
+  return loadCraftDumps(storage)[craftName] ?? null;
+}
+
+// Allowlist on write: exactly the scrubber's output fields
+// plus a timestamp — nothing else survives into storage.
+export function saveCraftDump(storage, craftName, scrubbed) {
+  const dumps = loadCraftDumps(storage);
+
+  dumps[craftName] = {
+    scrubbedText: String(scrubbed?.scrubbedText ?? ""),
+    parsed: scrubbed?.parsed ?? {},
+    report: Array.isArray(scrubbed?.report) ? scrubbed.report : [],
+    stats: {
+      kept: scrubbed?.stats?.kept ?? 0,
+      dropped: scrubbed?.stats?.dropped ?? 0
+    },
+    savedAtMs: Date.now()
+  };
+
+  storage.setItem(CRAFT_DUMP_KEY, JSON.stringify(dumps));
+  return dumps[craftName];
+}
+
 // Pre-fill from what the log already knows, so the pilot
 // confirms instead of typing. Only suggestions the log can
 // actually support are made; everything else stays null
 // and waits for the pilot.
+// What a parsed CLI dump can contribute to the craft card:
+// numbers and modes, never guesses. Fills only what it
+// actually knows; the pilot confirms the rest.
+export function craftCardFromDump(parsed = {}) {
+  const headspeed = Number.parseFloat(parsed.gov_headspeed);
+
+  const powerByGovMode = {
+    ELECTRIC: "electric",
+    NITRO: "nitro",
+    GAS: "gasoline",
+    GASOLINE: "gasoline"
+  };
+
+  return {
+    size_class: null,
+    blade_length_mm: null,
+    power_type:
+      powerByGovMode[String(parsed.gov_mode ?? "").toUpperCase()] ?? null,
+    typical_headspeed_rpm:
+      Number.isFinite(headspeed) && headspeed > 300
+        ? Math.round(headspeed / 10) * 10
+        : null,
+    drive: null
+  };
+}
+
 export function prefillCraftCard({
   medianHeadspeedRpm = null,
   hasElectricalTelemetry = false

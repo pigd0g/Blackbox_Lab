@@ -171,6 +171,22 @@
           <div id="verdictCards"></div>
         </section>
 
+        <!-- The unlock nudge: shown while this craft has no CLI
+             dump attached yet. One click opens the craft panel. -->
+        <section class="card unlock-card" id="unlockDumpCard" hidden>
+          <div class="unlock-card-text">
+            <h3>Unlock setup-aware insights</h3>
+            <p>
+              Add this craft's CLI settings (<code>dump all</code>)
+              once — the analysis learns your exact setup, and your
+              craft card fills itself in.
+            </p>
+          </div>
+          <button class="primary-button" id="unlockDumpButton">
+            Add CLI settings
+          </button>
+        </section>
+
         <section class="card" id="qualityCard" hidden>
           <h3>What This Log Can Tell Us</h3>
           <p id="qualitySummary"></p>
@@ -903,29 +919,6 @@ current demand; the steady downward slope is normal discharge.
             </label>
           </div>
 
-          <div class="dump-paste">
-            <p>
-              <strong>CLI settings (<code>dump all</code>)</strong> —
-              paste the output of the <code>dump all</code> CLI
-              command here to include your (scrubbed) settings with
-              shared flights. Names, board identity and anything
-              password-like are removed before anything is kept:
-            </p>
-            <textarea
-              id="dumpPasteArea"
-              rows="5"
-              spellcheck="false"
-              placeholder="# paste your Rotorflight `dump all` here"
-            ></textarea>
-            <label class="toggle-row" id="dumpConsentRow" hidden>
-              <input type="checkbox" id="dumpConsentInline" checked />
-              <span>Share these scrubbed settings with my flights —
-                your settings help us improve recommendations for
-                your specific model.</span>
-            </label>
-            <p class="contribute-status" id="dumpPasteStatus"></p>
-          </div>
-
           <p class="contribute-status" id="contributeStatus"></p>
         </section>
 
@@ -1019,6 +1012,39 @@ current demand; the steady downward slope is normal discharge.
           <option value="torque_tube_tail">torque tube</option>
         </select>
       </label>
+
+      <!-- The unlock step: the craft's CLI dump fills the card
+           automatically and makes recommendations setup-aware. -->
+      <div class="craft-card-dump">
+        <p>
+          <strong>Go further:</strong> add this craft's CLI settings
+          (<code>dump all</code>) — it fills the card in
+          automatically and unlocks recommendations tuned to your
+          exact setup. Names, serials and anything identifying are
+          removed on the spot.
+        </p>
+        <textarea
+          id="craftDumpPaste"
+          rows="3"
+          spellcheck="false"
+          placeholder="# paste your Rotorflight `dump all` here…"
+        ></textarea>
+        <div class="button-row">
+          <button class="secondary-button" id="craftDumpOpenButton">
+            …or open a saved dump file
+          </button>
+        </div>
+        <input type="file" id="craftDumpFileInput" accept=".txt,.dump,.cli"
+          hidden />
+        <label class="toggle-row" id="dumpConsentRow" hidden>
+          <input type="checkbox" id="dumpConsentInline" checked />
+          <span>Share these scrubbed settings with my flights —
+            your settings help us improve recommendations for
+            your specific model.</span>
+        </label>
+        <p class="contribute-status" id="craftDumpStatus"></p>
+      </div>
+
       <div class="overlay-actions">
         <button class="overlay-primary" id="craftCardSave">Save craft card</button>
         <button class="overlay-secondary" id="craftCardLater">Not now</button>

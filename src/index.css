@@ -648,15 +648,15 @@ body.advanced-mode details.advanced-block {
   min-height: 18px;
 }
 
-/* ---------------- CLI dump paste ---------------- */
+/* ---------------- craft dump (unlock step) ---------------- */
 
-.dump-paste {
+.craft-card-dump {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--line-soft);
 }
 
-.dump-paste textarea {
+.craft-card-dump textarea {
   display: block;
   width: 100%;
   margin-top: 8px;
@@ -668,6 +668,32 @@ body.advanced-mode details.advanced-block {
   font-family: inherit;
   font-size: 13px;
   resize: vertical;
+}
+
+.craft-card-dump .button-row {
+  margin: 8px 0 0 0;
+}
+
+.unlock-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: var(--line);
+  background: linear-gradient(180deg, rgba(111, 178, 255, 0.08), var(--card));
+}
+
+.unlock-card h3 {
+  margin-bottom: 4px;
+}
+
+.unlock-card p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.unlock-card .primary-button {
+  flex: none;
 }
 
 /* ---------------- craft card ---------------- */

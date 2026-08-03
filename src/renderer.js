@@ -56,7 +56,10 @@ import {
   clearHistory,
   getCraftCard,
   saveCraftCard,
-  prefillCraftCard
+  prefillCraftCard,
+  craftCardFromDump,
+  getCraftDump,
+  saveCraftDump
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import {
@@ -2481,6 +2484,7 @@ function analyzeFlight(flightIndex) {
     if (!file.name.startsWith("sample-")) {
       maybeAskCraftCard(craftKey);
     }
+    setUnlockCraft(craftKey, file.name.startsWith("sample-"));
   }
 
   refreshCompareButtons();
@@ -2940,15 +2944,8 @@ const contributeDump = document.getElementById("contributeDump");
 const contributeStatus = document.getElementById("contributeStatus");
 const contributeAsk = document.getElementById("contributeAsk");
 
-const dumpPasteArea = document.getElementById("dumpPasteArea");
-const dumpPasteStatus = document.getElementById("dumpPasteStatus");
 const dumpConsentRow = document.getElementById("dumpConsentRow");
 const dumpConsentInline = document.getElementById("dumpConsentInline");
-
-// The scrubbed dump from this session's paste, attached to
-// contributions while it lives. Only ever the SCRUBBED
-// result — the raw paste is never kept.
-let sessionScrubbedDump = null;
 
 function contributionEnabled() {
   return (
@@ -3026,7 +3023,10 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
       cats,
       CONTRIBUTE_APP_VERSION,
       {
-        scrubbedDump: cats.dump === true ? sessionScrubbedDump : null,
+        scrubbedDump:
+          cats.dump === true && extras.craftName
+            ? getCraftDump(localStorage, extras.craftName)
+            : null,
         craftCard: extras.craftName
           ? getCraftCard(localStorage, extras.craftName)
           : null,
@@ -3129,67 +3129,6 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
   }
 }
 
-// ---- CLI dump paste (Settings card) ----
-// The paste is scrubbed IMMEDIATELY; only the scrubbed
-// result is kept, and the pilot sees exactly what was
-// removed. Users who consented before the dump category
-// existed answer it once, inline, right where they paste.
-if (dumpPasteArea) {
-  dumpPasteArea.addEventListener("input", () => {
-    const text = dumpPasteArea.value;
-
-    if (text.trim().length === 0) {
-      sessionScrubbedDump = null;
-      dumpPasteStatus.textContent = "";
-      return;
-    }
-
-    if (!looksLikeDump(text)) {
-      sessionScrubbedDump = null;
-      dumpPasteStatus.textContent =
-        "This doesn't look like a Rotorflight `dump all` yet — paste the whole output.";
-      return;
-    }
-
-    // The upload copy never carries the craft name; it is
-    // read from the RAW paste purely to reassure the pilot
-    // that the right file was pasted.
-    sessionScrubbedDump = scrubDump(text);
-    const identity = readDumpIdentity(text);
-
-    const readBack = identity.craftName
-      ? `Read: ${identity.craftName}${
-          identity.boardName ? ` on ${identity.boardName}` : ""
-        } — the name stays on this computer. `
-      : "";
-
-    dumpPasteStatus.textContent =
-      readBack +
-      `Scrubbed: ${sessionScrubbedDump.stats.kept} setting${
-        sessionScrubbedDump.stats.kept === 1 ? "" : "s"
-      } kept` +
-      (sessionScrubbedDump.report.length > 0
-        ? ` · ${sessionScrubbedDump.report.join(" · ")}`
-        : "") +
-      ". It travels with your next shared flights.";
-
-    // Users who consented before the dump category existed:
-    // the pre-checked inline checkbox appears once, and its
-    // shown state IS the stored answer from that moment —
-    // unchecking it updates the stored answer immediately.
-    // Pilots who declined sharing are never asked here; the
-    // ask card covers everyone who consents later.
-    if (contributionEnabled() && !dumpConsentAnswered() && dumpConsentRow) {
-      dumpConsentRow.hidden = false;
-      saveContributeCats({
-        ...loadContributeCats(),
-        dump: dumpConsentInline.checked
-      });
-      refreshContributeCard();
-    }
-  });
-}
-
 if (dumpConsentInline) {
   dumpConsentInline.addEventListener("change", () => {
     const cats = loadContributeCats();
@@ -3216,8 +3155,18 @@ const craftCardSave = document.getElementById("craftCardSave");
 const craftCardLater = document.getElementById("craftCardLater");
 const editCraftCardButton = document.getElementById("editCraftCardButton");
 
+const craftDumpPaste = document.getElementById("craftDumpPaste");
+const craftDumpStatus = document.getElementById("craftDumpStatus");
+const craftDumpOpenButton = document.getElementById("craftDumpOpenButton");
+const craftDumpFileInput = document.getElementById("craftDumpFileInput");
+
 const craftCardSkippedThisSession = new Set();
 let craftCardTarget = null;
+
+// The scrubbed dump staged in the open panel — persisted
+// per craft on Save. Only ever the SCRUBBED result; the
+// raw paste is never kept.
+let stagedCraftDump = null;
 
 function openCraftCardPanel(craftName, prefill) {
   if (!craftCardAsk) return;
@@ -3233,7 +3182,100 @@ function openCraftCardPanel(craftName, prefill) {
   craftCardHeadspeed.value = card.typical_headspeed_rpm ?? "";
   craftCardDrive.value = card.drive ?? "";
 
+  stagedCraftDump = null;
+  craftDumpPaste.value = "";
+  const existingDump = getCraftDump(localStorage, craftName);
+  craftDumpStatus.textContent = existingDump
+    ? `This craft already has its settings on file (${existingDump.stats.kept} kept) — paste again only to replace them.`
+    : "";
+
   craftCardAsk.hidden = false;
+}
+
+// A dump arriving for the open panel — from paste or file.
+// Scrubbed immediately; card fields it knows fill in; the
+// pilot sees what was read and what was removed.
+function stageCraftDump(text) {
+  if (!text || text.trim().length === 0) {
+    stagedCraftDump = null;
+    craftDumpStatus.textContent = "";
+    return;
+  }
+
+  if (!looksLikeDump(text)) {
+    stagedCraftDump = null;
+    craftDumpStatus.textContent =
+      "This doesn't look like a Rotorflight `dump all` yet — paste (or pick) the whole output.";
+    return;
+  }
+
+  stagedCraftDump = scrubDump(text);
+
+  // Read from the RAW text for reassurance only — the
+  // pilot should see "it read the right aircraft".
+  const identity = readDumpIdentity(text);
+  let readBack = "";
+  if (identity.craftName) {
+    const matches =
+      craftCardTarget &&
+      identity.craftName.trim().toLowerCase() ===
+        craftCardTarget.trim().toLowerCase();
+    readBack = matches
+      ? `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — that's this craft. `
+      : `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — this panel is about "${craftCardTarget}"; is this the right dump? `;
+  }
+
+  craftDumpStatus.textContent =
+    readBack +
+    `Scrubbed: ${stagedCraftDump.stats.kept} setting${
+      stagedCraftDump.stats.kept === 1 ? "" : "s"
+    } kept` +
+    (stagedCraftDump.report.length > 0
+      ? ` · ${stagedCraftDump.report.join(" · ")}`
+      : "") +
+    ". Saved with the card.";
+
+  // What the dump knows fills empty card fields — the
+  // pilot confirms instead of typing.
+  const fromDump = craftCardFromDump(stagedCraftDump.parsed);
+  if (!craftCardPower.value && fromDump.power_type) {
+    craftCardPower.value = fromDump.power_type;
+  }
+  if (!craftCardHeadspeed.value && fromDump.typical_headspeed_rpm) {
+    craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
+  }
+
+  // Users who consented to sharing before the dump category
+  // existed answer it once, right here: the pre-checked
+  // checkbox appears, its shown state stored immediately.
+  if (contributionEnabled() && !dumpConsentAnswered() && dumpConsentRow) {
+    dumpConsentRow.hidden = false;
+    saveContributeCats({
+      ...loadContributeCats(),
+      dump: dumpConsentInline.checked
+    });
+    refreshContributeCard();
+  }
+}
+
+if (craftDumpPaste) {
+  craftDumpPaste.addEventListener("input", () => {
+    stageCraftDump(craftDumpPaste.value);
+  });
+}
+
+if (craftDumpOpenButton) {
+  craftDumpOpenButton.addEventListener("click", () => {
+    craftDumpFileInput.click();
+  });
+
+  craftDumpFileInput.addEventListener("change", async () => {
+    const file = craftDumpFileInput.files[0];
+    if (file) {
+      stageCraftDump(await file.text());
+    }
+    craftDumpFileInput.value = "";
+  });
 }
 
 function maybeAskCraftCard(craftName) {
@@ -3266,9 +3308,15 @@ if (craftCardSave) {
         typical_headspeed_rpm: craftCardHeadspeed.value,
         drive: craftCardDrive.value || null
       });
+
+      if (stagedCraftDump) {
+        saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
+      }
     }
     craftCardAsk.hidden = true;
     craftCardTarget = null;
+    stagedCraftDump = null;
+    refreshUnlockCard();
   });
 }
 
@@ -3287,6 +3335,45 @@ if (editCraftCardButton) {
     const craft = historyCraftSelect.value;
     if (craft) {
       openCraftCardPanel(craft, prefillCraftCard({}));
+    }
+  });
+}
+
+// ---- the unlock nudge on Home ----
+// Visible while the analyzed craft has no CLI dump on
+// file; one click opens the craft panel. Sample flights
+// never nag — they are not the pilot's craft.
+const unlockDumpCard = document.getElementById("unlockDumpCard");
+const unlockDumpButton = document.getElementById("unlockDumpButton");
+let unlockCraftTarget = null;
+
+function refreshUnlockCard() {
+  if (!unlockDumpCard) return;
+  unlockDumpCard.hidden =
+    !unlockCraftTarget ||
+    Boolean(getCraftDump(localStorage, unlockCraftTarget));
+}
+
+function setUnlockCraft(craftName, isSample) {
+  unlockCraftTarget =
+    !isSample && craftName && craftName !== "Unknown craft"
+      ? craftName
+      : null;
+  refreshUnlockCard();
+}
+
+if (unlockDumpButton) {
+  unlockDumpButton.addEventListener("click", () => {
+    if (unlockCraftTarget) {
+      openCraftCardPanel(
+        unlockCraftTarget,
+        prefillCraftCard({
+          medianHeadspeedRpm:
+            currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+          hasElectricalTelemetry:
+            currentDataset?.columnPresence?.hasVbat === true
+        })
+      );
     }
   });
 }

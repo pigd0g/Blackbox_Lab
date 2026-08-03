@@ -24,7 +24,10 @@ import { buildFingerprint } from "../src/contribute/fingerprint.js";
 import {
   getCraftCard,
   saveCraftCard,
-  prefillCraftCard
+  prefillCraftCard,
+  craftCardFromDump,
+  getCraftDump,
+  saveCraftDump
 } from "../src/analysis/craftHistory.js";
 import { contributionPaths } from "../src/contribute/uploader.js";
 import {
@@ -398,6 +401,44 @@ test("craft card writes are allowlisted: unknown fields and values dropped", () 
     !JSON.stringify(card).includes("example.com"),
     "unlisted field survived into the card"
   );
+});
+
+test("craft dump round-trips scrubbed-only, per craft", () => {
+  const storage = memoryStorage();
+
+  assert.equal(getCraftDump(storage, "Goosky RS7"), null);
+
+  const scrubbed = scrubDump(SAMPLE_DUMP);
+  saveCraftDump(storage, "Goosky RS7", scrubbed);
+
+  const stored = getCraftDump(storage, "Goosky RS7");
+  assert.equal(stored.parsed.gov_headspeed, "2100");
+  assert.ok(stored.scrubbedText.includes("set gear_ratio = 1090"));
+  assert.ok(Number.isFinite(stored.savedAtMs));
+  assert.ok(
+    !JSON.stringify(stored).includes("003800233438510534383538"),
+    "device id survived into the stored craft dump"
+  );
+
+  assert.equal(getCraftDump(storage, "Other Heli"), null);
+});
+
+test("the dump fills the craft card's numbers and power type", () => {
+  const fromDump = craftCardFromDump({
+    gov_mode: "ELECTRIC",
+    gov_headspeed: "1830"
+  });
+
+  assert.equal(fromDump.power_type, "electric");
+  assert.equal(fromDump.typical_headspeed_rpm, 1830);
+  assert.equal(fromDump.size_class, null, "size class invented from nothing");
+
+  const nitro = craftCardFromDump({ gov_mode: "NITRO" });
+  assert.equal(nitro.power_type, "nitro");
+  assert.equal(nitro.typical_headspeed_rpm, null);
+
+  const empty = craftCardFromDump({});
+  assert.equal(empty.power_type, null);
 });
 
 test("craft card pre-fill suggests, never invents", () => {

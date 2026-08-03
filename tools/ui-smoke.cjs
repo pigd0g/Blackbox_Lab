@@ -199,21 +199,48 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("craft card saved:", JSON.stringify(savedCard));
 
-  // ---- CLI dump paste: scrubbed live, report shown ----
-  await window.click('.nav-button[data-target="settings"]');
-  await window.waitForTimeout(300);
+  // ---- craft dump: paste in the panel, prefill, persist ----
+  await window.click("#editCraftCardButton");
+  await window.waitForSelector("#craftCardAsk:not([hidden])", { timeout: 3000 });
   await window.fill(
-    "#dumpPasteArea",
-    "# Rotorflight 4.4.0\nboard_name SECRET\nset gov_headspeed = 2100\nset totally_unknown = 1\n"
+    "#craftDumpPaste",
+    "# Rotorflight 4.4.0\nboard_name SECRET\nset gov_mode = ELECTRIC\nset gov_headspeed = 2100\nset totally_unknown = 1\n"
   );
   await window.waitForTimeout(200);
-  const dumpStatus = await window.textContent("#dumpPasteStatus");
-  // 3 kept = version banner + board model + gov_headspeed.
-  if (!dumpStatus.includes("3 settings kept")) {
-    throw new Error("dump paste status unexpected: " + dumpStatus);
+  const dumpStatus = await window.textContent("#craftDumpStatus");
+  // 4 kept = banner + board model + gov_mode + gov_headspeed.
+  if (!dumpStatus.includes("4 settings kept")) {
+    throw new Error("craft dump status unexpected: " + dumpStatus);
   }
-  console.log("dump paste ok:", dumpStatus.trim());
+  // The dump fills empty card fields — headspeed from gov_headspeed.
+  const prefilled = await window.evaluate(() => ({
+    headspeed: document.getElementById("craftCardHeadspeed").value,
+    power: document.getElementById("craftCardPower").value
+  }));
+  if (prefilled.headspeed !== "2100" || prefilled.power !== "electric") {
+    throw new Error("dump did not prefill card: " + JSON.stringify(prefilled));
+  }
   await window.screenshot({ path: "smoke-shots/10-dump-paste.png" });
+  await window.click("#craftCardSave");
+  const storedDump = await window.evaluate(() => {
+    const dumps = JSON.parse(
+      localStorage.getItem("blackboxLabCraftDumps") ?? "{}"
+    );
+    return Object.values(dumps)[0] ?? null;
+  });
+  if (!storedDump || storedDump.parsed.gov_headspeed !== "2100") {
+    throw new Error("craft dump did not persist: " + JSON.stringify(storedDump));
+  }
+  console.log("craft dump ok:", dumpStatus.trim().slice(0, 80), "| persisted");
+
+  // Sample flights never show the unlock nudge.
+  const unlockHidden = await window.evaluate(
+    () => document.getElementById("unlockDumpCard").hidden
+  );
+  if (!unlockHidden) {
+    throw new Error("unlock card visible for a sample flight");
+  }
+  console.log("unlock card ok: hidden for samples");
 
   if (errors.length) {
     console.log("\n==== ERRORS ====");
