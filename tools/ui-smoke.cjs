@@ -517,6 +517,30 @@ const { mkdirSync } = require("node:fs");
     "advanced re-triage ok: beginner hides numbers, advanced reveals with live charts"
   );
   await window.screenshot({ path: "smoke-shots/14-governor-advanced.png" });
+  // ---- sidebar advanced-mode switch: one state, two controls ----
+  const advBefore = await window.evaluate(() =>
+    document.body.classList.contains("advanced-mode")
+  );
+  await window.click("#sidebarAdvancedToggle");
+  const advAfter = await window.evaluate(() => ({
+    body: document.body.classList.contains("advanced-mode"),
+    settingsBox: document.getElementById("advancedModeToggle").checked,
+    pressed: document
+      .getElementById("sidebarAdvancedToggle")
+      .getAttribute("aria-pressed")
+  }));
+  if (
+    advAfter.body === advBefore ||
+    advAfter.settingsBox !== advAfter.body ||
+    advAfter.pressed !== String(advAfter.body)
+  ) {
+    throw new Error(
+      "advanced-mode switch out of sync: " + JSON.stringify(advAfter)
+    );
+  }
+  await window.click("#sidebarAdvancedToggle"); // restore
+  console.log("advanced switch ok: toggled to", advAfter.body, "and back");
+  await window.screenshot({ path: "smoke-shots/11-sidebar-advanced.png" });
 
   if (errors.length) {
     console.log("\n==== ERRORS ====");

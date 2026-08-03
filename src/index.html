@@ -28,6 +28,15 @@
       <button class="nav-button" data-target="reports">Reports</button>
       <button class="nav-button" data-target="settings">Settings</button>
 
+      <!-- Advanced mode lives in Settings too, but pilots kept
+           missing it there — this switch is always in view. -->
+      <button class="sidebar-advanced" id="sidebarAdvancedToggle"
+        aria-pressed="false"
+        title="Show raw telemetry blocks and technical detail everywhere. Off = beginner mode: verdicts, charts and plain language only.">
+        <span>Advanced mode</span>
+        <span class="sidebar-advanced-switch" aria-hidden="true"></span>
+      </button>
+
       <div class="sidebar-footer">
         <span class="credit-line">A passion project by</span>
         <span class="credit-name">Daniel Sink</span>
