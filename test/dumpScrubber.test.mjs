@@ -169,6 +169,98 @@ test("scrub report names what was removed", () => {
   assert.ok(stats.kept > 0);
 });
 
+// Shapes learned from a real Rotorflight 4.6 `dump all`
+// (verified 2026-08: full dump, zero leaks). The synthetic
+// corpus carries the same line shapes so the privacy
+// contract stays testable without anyone's real data.
+const REAL_SHAPE_DUMP = `
+# dump
+
+# version
+# Rotorflight / STM32F7X2 (S7X2) 4.6.0 Jun 30 2026 / 07:20:47 (0000000) MSP API: 12.9
+
+# start the command batch
+batch start
+
+board_name TESTBOARD_X1
+board_design F7B5
+manufacturer_id ACME
+
+# name: secret test heli
+
+resource MOTOR 1 A09
+serial 20 1 115200 57600 0 115200
+
+servo 1 1440 -700 700 500 500 333 0 3
+mixer input SR -1000 1000 474
+mixer rule 10 set AUX3 S5 1000 0
+map AETRC123
+
+set acc_calibration = 0,0,42,-12345
+set stats_total_flights = 38
+set stats_total_time_s = 5390
+set stats_total_dist_m = 13106915
+set timezone_offset_minutes = 60
+set profile_name = -
+set box_user_1_name = my secret box
+set motor_poles = 10,0,0,0
+set main_rotor_gear_ratio = 12,134
+set gov_headspeed = 1830
+set name = secret test heli
+
+profile 2
+rateprofile 0
+
+batch end
+`;
+
+test("real-dump shapes: identity, stats and timezone never survive", () => {
+  const { scrubbedText } = scrubDump(REAL_SHAPE_DUMP);
+
+  for (const leak of [
+    "TESTBOARD_X1",
+    "F7B5",
+    "ACME",
+    "secret test heli",
+    "secret",
+    "-12345",
+    "13106915",
+    "5390",
+    "stats_total",
+    "timezone",
+    "batch",
+    "resource",
+    "serial 20",
+    "map AETRC123",
+    "my secret box"
+  ]) {
+    assert.ok(
+      !scrubbedText.includes(leak),
+      `real-shape dump leaked: ${leak}`
+    );
+  }
+});
+
+test("real-dump shapes: setup lines and multi-value settings survive", () => {
+  const { scrubbedText, parsed } = scrubDump(REAL_SHAPE_DUMP);
+
+  // The `# name:` comment form must die even though the
+  // version banner comment is kept.
+  assert.ok(scrubbedText.includes("# Rotorflight /"));
+  assert.ok(!scrubbedText.includes("# name:"));
+
+  assert.ok(scrubbedText.includes("servo 1 1440"));
+  assert.ok(scrubbedText.includes("mixer input SR"));
+  assert.ok(scrubbedText.includes("mixer rule 10"));
+  assert.ok(scrubbedText.includes("profile 2"));
+  assert.ok(scrubbedText.includes("rateprofile 0"));
+
+  // Multi-value settings parse verbatim.
+  assert.equal(parsed.motor_poles, "10,0,0,0");
+  assert.equal(parsed.main_rotor_gear_ratio, "12,134");
+  assert.equal(parsed.gov_headspeed, "1830");
+});
+
 test("dump detection accepts dumps, rejects noise", () => {
   assert.ok(looksLikeDump(SYNTHETIC_DUMP));
   assert.ok(!looksLikeDump("hello world"));
