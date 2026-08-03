@@ -1188,3 +1188,118 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .overlay-link:hover {
   color: var(--ink-soft);
 }
+
+/* ---------------- layout: grids & maximize ---------------- */
+/* Full width is for narrative and deep-dives; grids are for
+   scannable collections of same-shaped things. */
+
+.verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 10px;
+}
+
+.verdict-tile {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--card-soft);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.verdict-tile:hover {
+  border-color: var(--line);
+  transform: translateY(-1px);
+}
+
+.verdict-tile .verdict-item-top {
+  margin-bottom: 4px;
+}
+
+.verdict-tile-headline {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Events on a timeline: time is the natural axis. */
+.events-timeline {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px 10px 2px;
+}
+
+.event-chip {
+  flex: none;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--card-soft);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.event-chip:hover {
+  border-color: var(--line);
+}
+
+.event-chip strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.event-chip.chip-overshoot {
+  border-color: var(--attention);
+}
+
+.event-chip.chip-slow {
+  border-color: var(--watch);
+}
+
+.event-chip.chip-clean {
+  opacity: 0.75;
+}
+
+/* The tuning matrix and its expandable cells. */
+.matrix-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.chart-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.chart-cell h4 {
+  margin: 0 0 6px 0;
+}
+
+.chart-cell.chart-max {
+  grid-column: 1 / -1;
+}
+
+.chart-max-btn {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 5;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.chart-max-btn:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}

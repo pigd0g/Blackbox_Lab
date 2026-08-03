@@ -50,7 +50,7 @@ const { mkdirSync } = require("node:fs");
   await window.waitForTimeout(15000);
 
   const verdictCount = await window.evaluate(
-    () => document.querySelectorAll(".verdict-item").length
+    () => document.querySelectorAll(".verdict-tile").length
   );
   console.log("verdict cards:", verdictCount);
 
@@ -105,9 +105,30 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("preset grid ok: 9/9 charts scaled");
 
-  await window.click(".verdict-jump");
+  await window.click(".verdict-tile");
   await window.waitForTimeout(600);
   await window.screenshot({ path: "smoke-shots/02-filter-zoomed.png" });
+
+  // ---- tuning matrix + maximize toggle ----
+  await window.click('.nav-button[data-target="viewer"]');
+  await window.waitForTimeout(300);
+  await window.click(".chart-max-btn");
+  // The ResizeObserver re-renders asynchronously.
+  await window.waitForTimeout(500);
+  const maxState = await window.evaluate(() => {
+    const cell = document.querySelector(".chart-cell");
+    const chart = document.getElementById("chartTracking").__blackboxLabChart;
+    return {
+      maximized: cell.classList.contains("chart-max"),
+      width: chart ? chart.width : 0
+    };
+  });
+  if (!maxState.maximized || maxState.width < 500) {
+    throw new Error("chart maximize misbehaved: " + JSON.stringify(maxState));
+  }
+  await window.screenshot({ path: "smoke-shots/16-matrix-maximized.png" });
+  await window.click(".chart-max-btn");
+  console.log("tuning matrix ok: maximize expands to", maxState.width, "px and back");
 
   // ---- walk the labs ----
   for (const [target, name] of [

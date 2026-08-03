@@ -231,6 +231,17 @@ advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
 });
 
+// Maximize: any chart living in a grid cell can take the
+// full row width for a closer look — the ResizeObserver
+// machinery re-renders it at the new size automatically.
+document.querySelectorAll(".chart-max-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const cell = button.closest(".chart-cell");
+    const maximized = cell.classList.toggle("chart-max");
+    button.textContent = maximized ? "⤡" : "⤢";
+  });
+});
+
 // ======================================================
 // 03. FILE PICKER + SAMPLE FLIGHT
 // ======================================================
@@ -1195,37 +1206,31 @@ function renderFlightEvents(flightEvents) {
   card.hidden = false;
   summary.textContent = flightEvents.summary.sentence;
   list.innerHTML = "";
+  list.className = "events-timeline";
 
-  // Notable first: everything non-clean, then the cleanest
-  // stay countable but unlisted — the sentence covers them.
-  const notable = flightEvents.events
-    .filter((event) => event.verdict !== "clean")
-    .slice(0, 6);
-
-  for (const event of notable) {
-    const row = document.createElement("div");
-    row.className = `verdict-item status-${
-      event.verdict === "overshoot" ? "attention" : "watch"
-    }`;
+  // Every event as a chip on the time axis — clean ones
+  // muted, notable ones colored. Click = zoom the matching
+  // tracking chart to that exact moment.
+  for (const event of flightEvents.events.slice(0, 60)) {
+    const chip = document.createElement("button");
+    chip.className = `event-chip chip-${event.verdict}`;
 
     const what =
       event.verdict === "overshoot"
-        ? `overshot by ${event.overshoot_percent}%`
-        : `settled slowly (${event.settling_ms} ms)`;
+        ? ` · +${event.overshoot_percent}%`
+        : event.verdict === "slow"
+          ? ` · ${event.settling_ms} ms`
+          : "";
 
-    row.innerHTML = `
-      <div class="verdict-item-top">
-        <span class="status-dot"></span>
-        <span class="verdict-item-title">${event.t?.toFixed(1) ?? "?"} s · ${event.axis}</span>
-        <span class="verdict-item-status">${event.verdict}</span>
-      </div>
-      <div class="verdict-item-detail">A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} command ${what}.</div>
-    `;
+    chip.innerHTML = `<strong>${event.t?.toFixed(1) ?? "?"} s</strong> ${event.axis}${what}`;
+    chip.title =
+      event.verdict === "clean"
+        ? `${event.axis} command (${event.magnitude ?? "?"}°/s) tracked cleanly`
+        : event.verdict === "overshoot"
+          ? `${event.axis} command overshot by ${event.overshoot_percent}%`
+          : `${event.axis} command settled slowly (${event.settling_ms} ms)`;
 
-    const jump = document.createElement("button");
-    jump.className = "verdict-jump";
-    jump.textContent = "Show me → tracking chart";
-    jump.addEventListener("click", () => {
+    chip.addEventListener("click", () => {
       navigation.showScreen("viewer");
       setTimeout(() => {
         const chartId =
@@ -1240,17 +1245,12 @@ function renderFlightEvents(flightEvents) {
         }
       }, 250);
     });
-    row.appendChild(jump);
 
-    list.appendChild(row);
+    list.appendChild(chip);
   }
 
-  if (notable.length === 0 && flightEvents.events.length > 0) {
-    const allClean = document.createElement("p");
-    allClean.className = "chart-hint";
-    allClean.textContent =
-      "Every command tracked cleanly — nothing to single out.";
-    list.appendChild(allClean);
+  if (flightEvents.events.length === 0) {
+    list.innerHTML = "";
   }
 }
 
@@ -1268,25 +1268,26 @@ function renderVerdict(dataset) {
     : verdict.summary;
   verdictCards.innerHTML = "";
 
-  for (const card of verdict.cards) {
-    const cardElement = document.createElement("div");
-    cardElement.className = `verdict-item status-${card.status}`;
+  // A one-look dashboard: compact tiles side by side. Their
+  // whole job is a color, a sentence and a destination — the
+  // full story, action and evidence live on each lab page,
+  // one click away.
+  verdictCards.className = "verdict-grid";
 
-    cardElement.innerHTML = `
+  for (const card of verdict.cards) {
+    const tile = document.createElement("div");
+    tile.className = `verdict-tile status-${card.status}`;
+    tile.title = `${card.detail}${card.action ? ` What to do: ${card.action}` : ""}`;
+
+    tile.innerHTML = `
       <div class="verdict-item-top">
         <span class="status-dot"></span>
         <span class="verdict-item-title">${card.title}</span>
-        <span class="verdict-item-status">${STATUS_WORDS[card.status]}</span>
       </div>
-      <div class="verdict-item-headline">${card.headline}</div>
-      <div class="verdict-item-detail">${card.detail}</div>
-      ${card.action ? `<div class="verdict-item-action"><span>What to do:</span> ${card.action}</div>` : ""}
+      <div class="verdict-tile-headline">${card.headline}</div>
     `;
 
-    const button = document.createElement("button");
-    button.className = "verdict-jump";
-    button.textContent = `Show me → ${card.evidence}`;
-    button.addEventListener("click", () => {
+    tile.addEventListener("click", () => {
       navigation.showScreen(card.screen);
 
       if (card.focus) {
@@ -1306,8 +1307,7 @@ function renderVerdict(dataset) {
       }
     });
 
-    cardElement.appendChild(button);
-    verdictCards.appendChild(cardElement);
+    verdictCards.appendChild(tile);
   }
 }
 
