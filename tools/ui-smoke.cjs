@@ -289,6 +289,43 @@ const { mkdirSync } = require("node:fs");
   if (!droopChartOk) {
     throw new Error("droop context chart has no scaled data in advanced mode");
   }
+  // THE RULE: advanced folds are always present — closed in
+  // beginner mode, pre-opened by the advanced switch.
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle"); // back to beginner
+  await window.click('.nav-button[data-target="viewer"]');
+  await window.waitForTimeout(300);
+  const foldBeginner = await window.evaluate(() => {
+    const block = document.querySelector(
+      'section[data-screen="viewer"] details.advanced-block'
+    );
+    const summary = block?.querySelector("summary");
+    return {
+      summaryVisible: Boolean(summary && summary.offsetParent !== null),
+      open: block?.open ?? null
+    };
+  });
+  if (!foldBeginner.summaryVisible || foldBeginner.open !== false) {
+    throw new Error(
+      "advanced fold handle wrong in beginner mode: " +
+        JSON.stringify(foldBeginner)
+    );
+  }
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle"); // advanced again
+  const foldAdvanced = await window.evaluate(
+    () =>
+      document.querySelector(
+        'section[data-screen="viewer"] details.advanced-block'
+      ).open
+  );
+  if (!foldAdvanced) {
+    throw new Error("advanced mode did not pre-open the folds");
+  }
+  console.log("advanced folds ok: handle always visible, mode pre-opens");
+
   console.log(
     "advanced re-triage ok: beginner hides numbers, advanced reveals with live charts"
   );

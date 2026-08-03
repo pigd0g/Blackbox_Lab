@@ -204,6 +204,13 @@ el("sidebarVersion").textContent = `v${APP_VERSION}`;
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
   localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");
+
+  // Advanced blocks are always present; the mode only decides
+  // whether they start unfolded. Pilots can still open any
+  // fold by hand in beginner mode — that is the point.
+  document.querySelectorAll("details.advanced-block").forEach((block) => {
+    block.open = enabled;
+  });
 }
 
 advancedModeToggle.checked =
