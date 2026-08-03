@@ -6,9 +6,15 @@
 // ALLOWLIST design, same philosophy as contributionBuilder:
 // nothing survives unless a rule here names it.
 //
+// The line the allowlist draws: PERSONAL identity out,
+// HARDWARE context in. Board model and firmware identify
+// equipment, not people, and explain the data — they stay.
+// Names, serial numbers, MCU ids, usage statistics and
+// anything location- or credential-like never survive.
+//
 // Privacy properties (tested in test/dumpScrubber.test.mjs):
 //   - craft name never survives unless explicitly allowed
-//   - board identity, MCU id, serial numbers: never
+//   - MCU id, serial numbers, usage stats, timezone: never
 //   - serial-port config, resource mapping, RX binding,
 //     VTX config, anything password/token-like: never
 //   - unknown commands and unknown `set` keys are dropped
@@ -72,29 +78,46 @@ const ALLOWED_SET_PREFIXES = [
   "battery_", // cell count contextualizes sag numbers
   "dshot_", // RPM-telemetry provenance (rpm filter source)
   "ibata_", // current-meter calibration scale — data QA
-  "imu_" // attitude estimator gains
+  "imu_", // attitude estimator gains
+  // Verified against a real RF 4.6 `dump all` (2026-08):
+  "deadband", // roll/pitch RC deadband (yaw_ already covered)
+  "freq_input_", // RPM-sensor provenance for headspeed
+  "use_unsynced_pwm" // motor drive mode
 ];
 
 // Whole-line commands that carry setup information worth
-// keeping, verbatim.
+// keeping, verbatim. Board model lines identify hardware,
+// not people (owner ruling 2026-08-03) — they explain the
+// data and stay.
 const ALLOWED_LINE_COMMANDS = [
   /^profile\s+\d+$/,
   /^rateprofile\s+\d+$/,
   /^feature\s+-?[A-Z0-9_]+$/,
   /^mixer\s+/,
   /^servo\s+\d+\s/,
-  /^adjrange\s+/,
+  /^adjrange\s+/, // Betaflight-family name for the below
+  /^aux\s+\d+\s/, // mode-switch assignments
+  /^adjfunc\s+\d+\s/, // in-flight adjustment mappings
   /^# (Rotorflight|Betaflight|version)/i
+];
+
+// Board-model lines double as parsed keys so the payload
+// can be queried by hardware without text-scraping.
+const PARSED_LINE_COMMANDS = [
+  /^(board_name)\s+(.+)$/,
+  /^(board_design)\s+(.+)$/,
+  /^(manufacturer_id)\s+(.+)$/
 ];
 
 // Keys and commands that must never survive, even if a
 // future firmware nests them under an allowed prefix.
+// Deliberately absent: board_name / manufacturer_id — the
+// board MODEL identifies hardware, not a person, and is
+// explicitly allowlisted above.
 const DENY_PATTERNS = [
   /name/i,
-  /board/i,
   /mcu/i,
   /signature/i,
-  /manufacturer/i,
   /serial/i,
   /passwd|password|token|key|secret/i,
   /vtx/i,
@@ -102,6 +125,9 @@ const DENY_PATTERNS = [
   /rx_spi/i,
   /resource/i,
   /mac_|uid/i,
+  // Usage statistics are a fingerprint of one pilot's
+  // flying history — never tuning.
+  /^stats_/i,
   // Per-device calibration constants (e.g. acc_calibration)
   // are a stable fingerprint of one specific board with zero
   // tuning value — the opposite of what the dump is for.
@@ -167,6 +193,21 @@ export function scrubDump(rawText, options = {}) {
       continue;
     }
 
+    // Board-model lines: checked before the deny patterns
+    // (`board_name` would otherwise die on /name/). The
+    // board MODEL is hardware context, not personal
+    // identity — kept verbatim and parsed for querying.
+    const boardMatch = PARSED_LINE_COMMANDS
+      .map((pattern) => line.match(pattern))
+      .find(Boolean);
+
+    if (boardMatch) {
+      keptLines.push(line);
+      parsed[boardMatch[1].toLowerCase()] = boardMatch[2].trim();
+      kept += 1;
+      continue;
+    }
+
     // `set key = value` lines: allowlist on the key.
     const setMatch = line.match(/^set\s+([a-z0-9_]+)\s*=\s*(.*)$/i);
 
@@ -217,6 +258,27 @@ export function scrubDump(rawText, options = {}) {
     parsed,
     report,
     stats: { kept, dropped }
+  };
+}
+
+// What the pilot pasted, identified for REASSURANCE in the
+// UI only ("it read the right aircraft / I picked the right
+// file"). Reads the RAW text — the craft name shown here is
+// never what travels; the payload carries an anonymous
+// craft id instead.
+export function readDumpIdentity(rawText) {
+  const text = String(rawText ?? "");
+
+  const nameMatch =
+    text.match(/^set\s+(?:craft_)?name\s*=\s*(.+)$/im) ||
+    text.match(/^#\s*name:\s*(.+)$/im) ||
+    text.match(/^name\s+(.+)$/im);
+
+  const boardMatch = text.match(/^board_name\s+(.+)$/im);
+
+  return {
+    craftName: nameMatch ? nameMatch[1].trim() : null,
+    boardName: boardMatch ? boardMatch[1].trim() : null
   };
 }
 

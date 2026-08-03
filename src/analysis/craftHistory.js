@@ -215,9 +215,15 @@ export function getCraftCard(storage, craftName) {
 }
 
 // Allowlist on write, same philosophy as the payload:
-// only the five card fields survive, everything else is
+// only the card fields survive, everything else is
 // dropped. Unknown enum values fall back to null rather
 // than travelling on.
+//
+// `craft_id` is a stable anonymous identifier, minted on
+// first save and preserved across edits. It is what groups
+// this craft's contributions in the community bucket — the
+// craft NAME stays on this computer (owner ruling
+// 2026-08-03: local reassurance yes, upload no).
 export function saveCraftCard(storage, craftName, card) {
   const cards = loadCraftCards(storage);
 
@@ -232,6 +238,7 @@ export function saveCraftCard(storage, craftName, card) {
     allowed.includes(value) ? value : null;
 
   cards[craftName] = {
+    craft_id: cards[craftName]?.craft_id ?? crypto.randomUUID(),
     size_class: oneOf(card?.size_class, CRAFT_SIZE_CLASSES),
     blade_length_mm: numberOrNull(card?.blade_length_mm),
     power_type: oneOf(card?.power_type, CRAFT_POWER_TYPES),

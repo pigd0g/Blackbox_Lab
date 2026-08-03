@@ -5,9 +5,16 @@
 // "Share anonymized logs" uploads. Strict ALLOWLIST design:
 // nothing leaves the machine unless a rule here names it.
 //
+// The line the allowlist draws: PERSONAL identity out,
+// HARDWARE context in (owner ruling 2026-08-03). Board
+// model and firmware identify equipment, not people, and
+// explain the data — they travel. The craft NAME never
+// leaves the machine; a stable anonymous craft id groups
+// this craft's contributions instead.
+//
 // Privacy properties (tested in test/contribution.test.mjs):
-//   - no craft name unless the Setup category is enabled
-//   - no board information, no log date/time, ever
+//   - the craft name is never uploaded, under any consent
+//   - no log date/time, no serial numbers, ever
 //   - GPS is opt-in and RELATIVE only: track shape, speed
 //     and altitude survive; the pilot's location does not
 //   - unknown/unlisted fields are dropped, not forwarded
@@ -108,12 +115,14 @@ function buildSetupInfo(flight, includeSetup) {
   const sysConfig = flight.sysConfig ?? {};
   const info = {
     firmwareType: sysConfig.firmwareType ?? null,
-    firmwareRevision: sysConfig.firmwareRevision ?? null
+    firmwareRevision: sysConfig.firmwareRevision ?? null,
+    // The board MODEL, like the firmware, identifies
+    // hardware rather than a person — and explains the
+    // data (gyro hardware and board layout shape noise).
+    board: sysConfig.boardInformation ?? null
   };
 
   if (includeSetup) {
-    info.craftName = sysConfig.craftName ?? null;
-
     const tuning = {};
     if (flight.headers?.forEach) {
       flight.headers.forEach((value, key) => {
@@ -213,7 +222,8 @@ export async function computeContentHash(flight) {
 function buildAnonymizationReport(flight, payload, categories, dump) {
   const report = [
     "log date/time removed",
-    "board identity removed"
+    "serial numbers and device ids removed",
+    "craft name withheld — an anonymous craft id groups this craft"
   ];
 
   const droppedMain =
@@ -233,7 +243,7 @@ function buildAnonymizationReport(flight, payload, categories, dump) {
   }
 
   if (categories.setup !== true) {
-    report.push("craft name and tuning withheld (no Setup consent)");
+    report.push("tuning withheld (no Setup consent)");
   }
 
   if (payload.gps) {
@@ -302,16 +312,16 @@ export async function buildContributionV1(
     contribution_id: contributionId,
     content_hash: contentHash,
 
-    // Mirrors the existing category toggles one-to-one.
-    // The craft name travels with the Setup category today;
-    // its consent key reflects exactly that, unchanged.
+    // Mirrors the category toggles one-to-one. There is no
+    // craft-name consent: the name never uploads at all —
+    // the craft card's anonymous craft_id groups flights
+    // instead (owner ruling 2026-08-03).
     consent: {
       core_flight_data: true,
       power_telemetry: categories.power === true,
       setup_headers: categories.setup === true,
       cli_dump: includeDump,
-      gps_relative: categories.gps === true,
-      craft_name: categories.setup === true
+      gps_relative: categories.gps === true
     },
 
     anonymization_report: buildAnonymizationReport(
@@ -368,7 +378,7 @@ export function describeContribution(payload) {
     parts.push("GPS as relative track + speed (never your location)");
   }
   if (payload.categories.setup) {
-    parts.push("setup info (model + tuning values)");
+    parts.push("setup info (tuning values + board type, never your craft's name)");
   }
 
   return parts.join(" · ");

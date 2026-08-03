@@ -208,8 +208,8 @@ const { mkdirSync } = require("node:fs");
   );
   await window.waitForTimeout(200);
   const dumpStatus = await window.textContent("#dumpPasteStatus");
-  // 2 kept = the version banner line + gov_headspeed.
-  if (!dumpStatus.includes("2 settings kept")) {
+  // 3 kept = version banner + board model + gov_headspeed.
+  if (!dumpStatus.includes("3 settings kept")) {
     throw new Error("dump paste status unexpected: " + dumpStatus);
   }
   console.log("dump paste ok:", dumpStatus.trim());

@@ -16,7 +16,11 @@ import {
   describeContribution
 } from "./contribute/contributionBuilder.js";
 import { uploadContributionV1 } from "./contribute/uploader.js";
-import { scrubDump, looksLikeDump } from "./contribute/dumpScrubber.js";
+import {
+  scrubDump,
+  looksLikeDump,
+  readDumpIdentity
+} from "./contribute/dumpScrubber.js";
 import { buildFingerprint } from "./contribute/fingerprint.js";
 import {
   hasContributed,
@@ -3147,12 +3151,20 @@ if (dumpPasteArea) {
       return;
     }
 
-    const cats = loadContributeCats();
-    sessionScrubbedDump = scrubDump(text, {
-      includeCraftName: cats.setup === true
-    });
+    // The upload copy never carries the craft name; it is
+    // read from the RAW paste purely to reassure the pilot
+    // that the right file was pasted.
+    sessionScrubbedDump = scrubDump(text);
+    const identity = readDumpIdentity(text);
+
+    const readBack = identity.craftName
+      ? `Read: ${identity.craftName}${
+          identity.boardName ? ` on ${identity.boardName}` : ""
+        } — the name stays on this computer. `
+      : "";
 
     dumpPasteStatus.textContent =
+      readBack +
       `Scrubbed: ${sessionScrubbedDump.stats.kept} setting${
         sessionScrubbedDump.stats.kept === 1 ? "" : "s"
       } kept` +

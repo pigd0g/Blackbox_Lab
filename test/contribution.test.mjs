@@ -51,7 +51,7 @@ function makeFlight() {
       firmwareType: "Rotorflight",
       firmwareRevision: "4.6.0",
       craftName: "Vince's Goosky RS7",
-      boardInformation: "SERIAL-XYZ-123",
+      boardInformation: "VANTAC RF007",
       logStartDatetime: "2026-07-23T18:41:02.123+00:00"
     },
     mainFieldNames: [
@@ -87,15 +87,18 @@ function payloadText(payload) {
   return JSON.stringify(payload);
 }
 
-test("core payload never contains dates, board info, or unknown fields", () => {
+test("core payload never contains dates or unknown fields; board model is hardware context and ships", () => {
   const payload = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_ON, "0.3.0");
   const text = payloadText(payload);
 
   assert.ok(!text.includes("2026-07-23"), "log date leaked");
-  assert.ok(!text.includes("SERIAL-XYZ-123"), "board info leaked");
   assert.ok(!text.includes("secretExperimentalField"), "unlisted main field leaked");
   assert.ok(!text.includes("privateThing"), "unlisted slow field leaked");
   assert.ok(!text.includes("some_unknown_header"), "unlisted header leaked");
+
+  // Board model identifies hardware, not a person — it
+  // explains the data and travels with every payload.
+  assert.equal(payload.setup.board, "VANTAC RF007");
 });
 
 test("absolute GPS coordinates never appear, even with GPS enabled", () => {
@@ -131,17 +134,22 @@ test("GPS off means no gps section at all", () => {
   assert.equal(payload.gps, undefined);
 });
 
-test("craft name and tuning ship only with Setup enabled", () => {
+test("the craft name never ships, under any consent; tuning needs Setup", () => {
   const withSetup = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_ON, "0.3.0");
-  assert.equal(withSetup.setup.craftName, "Vince's Goosky RS7");
+  assert.ok(
+    !payloadText(withSetup).includes("Goosky"),
+    "craft name leaked even with all consents on"
+  );
   assert.equal(withSetup.setup.tuning.gov_headspeed, "1780");
 
   const withoutSetup = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_OFF, "0.3.0");
   const text = payloadText(withoutSetup);
   assert.ok(!text.includes("Goosky"), "craft name leaked with setup off");
   assert.ok(!text.includes("gov_headspeed"), "tuning leaked with setup off");
-  // firmware info is always fine — it identifies software, not people
+  // firmware and board info are always fine — they identify
+  // equipment, not people
   assert.equal(withoutSetup.setup.firmwareType, "Rotorflight");
+  assert.equal(withoutSetup.setup.board, "VANTAC RF007");
 });
 
 test("power fields ship only with Power enabled", () => {
@@ -181,6 +189,7 @@ const SAMPLE_DUMP = `
 set gov_headspeed = 2100
 set gear_ratio = 1090
 board_name SECRETBOARD
+mcu_id 003800233438510534383538
 `;
 
 test("v1 envelope carries schema version, tier, id and hash", async () => {
@@ -231,8 +240,7 @@ test("consent mirrors the category toggles", async () => {
     power_telemetry: true,
     setup_headers: true,
     cli_dump: true,
-    gps_relative: false,
-    craft_name: true
+    gps_relative: false
   });
 });
 
@@ -264,11 +272,9 @@ test("dump consent on: parsed dump in payload, scrubbed text separate, never raw
 
   assert.equal(payload.dump.parsed.gov_headspeed, "2100");
   assert.ok(dumpText.includes("set gear_ratio = 1090"));
-  assert.ok(!dumpText.includes("SECRETBOARD"), "board identity leaked into dump.txt");
-  assert.ok(
-    !JSON.stringify(payload).includes("SECRETBOARD"),
-    "board identity leaked into payload"
-  );
+  // Board model is hardware context — kept and queryable.
+  assert.equal(payload.dump.parsed.board_name, "SECRETBOARD");
+  assert.ok(dumpText.includes("board_name SECRETBOARD"));
 });
 
 test("two flights in one file produce two distinct content hashes", async () => {
@@ -298,7 +304,17 @@ test("anonymization report names the applied rules, including the dump's", async
 
   assert.ok(Array.isArray(payload.anonymization_report));
   assert.ok(payload.anonymization_report.includes("log date/time removed"));
-  assert.ok(payload.anonymization_report.includes("board identity removed"));
+  assert.ok(
+    payload.anonymization_report.includes(
+      "serial numbers and device ids removed"
+    )
+  );
+  assert.ok(
+    payload.anonymization_report.some((entry) =>
+      entry.includes("anonymous craft id")
+    ),
+    "craft-name rule missing from the report"
+  );
   assert.ok(
     payload.anonymization_report.some((entry) => entry.startsWith("dump:")),
     "dump scrub rules missing from the report"
@@ -344,13 +360,24 @@ test("craft card round-trips: confirm once, reused afterwards", () => {
   });
 
   const card = getCraftCard(storage, "Goosky RS7");
-  assert.deepEqual(card, {
-    size_class: "700",
-    blade_length_mm: 710,
-    power_type: "electric",
-    typical_headspeed_rpm: 2100,
-    drive: "torque_tube_tail"
-  });
+  assert.equal(card.size_class, "700");
+  assert.equal(card.blade_length_mm, 710);
+  assert.equal(card.power_type, "electric");
+  assert.equal(card.typical_headspeed_rpm, 2100);
+  assert.equal(card.drive, "torque_tube_tail");
+
+  // The anonymous craft id: minted on first save, a v4
+  // UUID, and STABLE across edits — it is what groups this
+  // craft's contributions without carrying its name.
+  assert.match(
+    card.craft_id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  );
+
+  saveCraftCard(storage, "Goosky RS7", { ...card, blade_length_mm: 715 });
+  const edited = getCraftCard(storage, "Goosky RS7");
+  assert.equal(edited.blade_length_mm, 715);
+  assert.equal(edited.craft_id, card.craft_id, "craft_id changed on edit");
 });
 
 test("craft card writes are allowlisted: unknown fields and values dropped", () => {

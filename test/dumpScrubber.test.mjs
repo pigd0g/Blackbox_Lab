@@ -16,7 +16,8 @@ import assert from "node:assert/strict";
 
 import {
   scrubDump,
-  looksLikeDump
+  looksLikeDump,
+  readDumpIdentity
 } from "../src/contribute/dumpScrubber.js";
 
 // A synthetic `dump all` containing everything we promise
@@ -68,16 +69,17 @@ set ibata_scale = 400
 set imu_dcm_kp = 25000
 set acc_trim_pitch = 12
 set acc_calibration = -42,18,344,1
+set deadband = 2
+set use_unsynced_pwm = ON
+set freq_input_pull = PULLUP
 set totally_unknown_future_thing = 42
 `;
 
-test("denied identity fields never survive", () => {
+test("personal identity never survives", () => {
   const { scrubbedText } = scrubDump(SYNTHETIC_DUMP);
 
   for (const leak of [
     "Vince Secret Heli",
-    "MYBOARD_V2",
-    "ACME",
     "003800233438510534383538",
     "0123456789abcdef",
     "hunter2",
@@ -92,6 +94,20 @@ test("denied identity fields never survive", () => {
       `scrubbed dump leaked: ${leak}`
     );
   }
+});
+
+test("hardware context survives: board model is kept and parsed", () => {
+  const { scrubbedText, parsed } = scrubDump(SYNTHETIC_DUMP);
+
+  assert.ok(scrubbedText.includes("board_name MYBOARD_V2"));
+  assert.ok(scrubbedText.includes("manufacturer_id ACME"));
+  assert.equal(parsed.board_name, "MYBOARD_V2");
+  assert.equal(parsed.manufacturer_id, "ACME");
+
+  // The neighbours on either side stay dead: MCU id and
+  // signature are per-device, not hardware model.
+  assert.ok(!scrubbedText.includes("mcu_id"));
+  assert.ok(!scrubbedText.includes("signature"));
 });
 
 test("tuning setup survives, verbatim and parsed", () => {
@@ -122,6 +138,9 @@ test("firmware-verified tuning families survive (2026-08-02 extension)", () => {
   assert.equal(parsed.dshot_bidir, "ON");
   assert.equal(parsed.ibata_scale, "400");
   assert.equal(parsed.imu_dcm_kp, "25000");
+  assert.equal(parsed.deadband, "2");
+  assert.equal(parsed.use_unsynced_pwm, "ON");
+  assert.equal(parsed.freq_input_pull, "PULLUP");
 });
 
 test("per-device calibration constants die; pilot trims survive", () => {
@@ -194,6 +213,8 @@ serial 20 1 115200 57600 0 115200
 servo 1 1440 -700 700 500 500 333 0 3
 mixer input SR -1000 1000 474
 mixer rule 10 set AUX3 S5 1000 0
+aux 1 37 2 950 2055 0 0
+adjfunc 0 1 255 1500 1500 1 945 2040 1500 1500 0 1 3
 map AETRC123
 
 set acc_calibration = 0,0,42,-12345
@@ -214,13 +235,10 @@ rateprofile 0
 batch end
 `;
 
-test("real-dump shapes: identity, stats and timezone never survive", () => {
+test("real-dump shapes: personal identity, stats and timezone never survive", () => {
   const { scrubbedText } = scrubDump(REAL_SHAPE_DUMP);
 
   for (const leak of [
-    "TESTBOARD_X1",
-    "F7B5",
-    "ACME",
     "secret test heli",
     "secret",
     "-12345",
@@ -239,6 +257,27 @@ test("real-dump shapes: identity, stats and timezone never survive", () => {
       `real-shape dump leaked: ${leak}`
     );
   }
+});
+
+test("real-dump shapes: board model, aux and adjfunc are hardware context and stay", () => {
+  const { scrubbedText, parsed } = scrubDump(REAL_SHAPE_DUMP);
+
+  assert.equal(parsed.board_name, "TESTBOARD_X1");
+  assert.equal(parsed.board_design, "F7B5");
+  assert.equal(parsed.manufacturer_id, "ACME");
+  assert.ok(scrubbedText.includes("aux 1 37 2"));
+  assert.ok(scrubbedText.includes("adjfunc 0 1 255"));
+});
+
+test("readDumpIdentity reads name and board from the raw paste, for the UI only", () => {
+  const identity = readDumpIdentity(REAL_SHAPE_DUMP);
+
+  assert.equal(identity.craftName, "secret test heli");
+  assert.equal(identity.boardName, "TESTBOARD_X1");
+
+  const empty = readDumpIdentity("hello world");
+  assert.equal(empty.craftName, null);
+  assert.equal(empty.boardName, null);
 });
 
 test("real-dump shapes: setup lines and multi-value settings survive", () => {
