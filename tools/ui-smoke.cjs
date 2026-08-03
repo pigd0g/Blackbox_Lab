@@ -10,6 +10,19 @@ const { mkdirSync } = require("node:fs");
 (async () => {
   mkdirSync("smoke-shots", { recursive: true });
 
+  // CSS brace balance — an unclosed rule silently swallows
+  // every rule after it (the v0.3.1 lesson). Fail loud.
+  const css = require("node:fs").readFileSync("src/index.css", "utf8");
+  const cssBalance = css.split("\n").reduce(
+    (depth, line) =>
+      depth + (line.split("{").length - 1) - (line.split("}").length - 1),
+    0
+  );
+  if (cssBalance !== 0) {
+    throw new Error(`index.css brace balance is ${cssBalance}, not 0`);
+  }
+  console.log("css brace balance ok");
+
   const app = await _electron.launch({ args: ["."], cwd: process.cwd() });
   const window = await app.firstWindow();
 

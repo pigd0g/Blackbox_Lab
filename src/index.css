@@ -1536,6 +1536,8 @@ body:not(.log-loaded) .loaded-only { display: none; }
   color: var(--ink);
   border-color: var(--accent);
   background: var(--card);
+}
+
 /* Health Record: model selector and its edit button share one
    line instead of colliding. */
 section[data-screen="history"] .flight-picker {
