@@ -211,6 +211,24 @@ const { mkdirSync } = require("node:fs");
   console.log("history note:", historyNote);
   await window.screenshot({ path: "smoke-shots/09-history.png" });
 
+  // ---- flight events: the PID Lab's beginner heart ----
+  await window.click('.nav-button[data-target="pid"]');
+  await window.waitForTimeout(300);
+  const eventsState = await window.evaluate(() => ({
+    visible:
+      document.getElementById("pidEventsCard").offsetParent !== null,
+    sentence: document.getElementById("pidEventsSummary").textContent
+  }));
+  if (!eventsState.visible || eventsState.sentence.length < 10) {
+    throw new Error(
+      "flight events card missing/empty: " + JSON.stringify(eventsState)
+    );
+  }
+  console.log("flight events ok:", eventsState.sentence.slice(0, 90));
+  await window.screenshot({ path: "smoke-shots/15-flight-events.png" });
+  await window.click('.nav-button[data-target="history"]');
+  await window.waitForTimeout(300);
+
   // ---- craft card: opens from the health record, saves ----
   await window.click("#editCraftCardButton");
   await window.waitForSelector("#craftCardAsk:not([hidden])", { timeout: 3000 });

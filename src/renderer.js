@@ -46,6 +46,7 @@ import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
 import { assessLogQuality } from "./analysis/logQuality.js";
+import { buildFlightEvents } from "./analysis/flightEvents.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
@@ -1165,6 +1166,93 @@ const STATUS_WORDS = {
   watch: "Worth watching",
   attention: "Needs attention"
 };
+
+// The Flight Events card: every stick command as one row,
+// worst first, each with a jump to the exact moment on the
+// matching tracking chart.
+const EVENT_CHART_BY_AXIS = {
+  roll: "chartTracking",
+  pitch: "chartTrackingPitch",
+  yaw: "chartTrackingYaw"
+};
+
+let currentFlightEvents = null;
+
+function renderFlightEvents(flightEvents) {
+  const card = el("pidEventsCard");
+  const summary = el("pidEventsSummary");
+  const list = el("pidEventsList");
+
+  if (!card) return;
+
+  currentFlightEvents = flightEvents;
+
+  if (!flightEvents) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  summary.textContent = flightEvents.summary.sentence;
+  list.innerHTML = "";
+
+  // Notable first: everything non-clean, then the cleanest
+  // stay countable but unlisted — the sentence covers them.
+  const notable = flightEvents.events
+    .filter((event) => event.verdict !== "clean")
+    .slice(0, 6);
+
+  for (const event of notable) {
+    const row = document.createElement("div");
+    row.className = `verdict-item status-${
+      event.verdict === "overshoot" ? "attention" : "watch"
+    }`;
+
+    const what =
+      event.verdict === "overshoot"
+        ? `overshot by ${event.overshoot_percent}%`
+        : `settled slowly (${event.settling_ms} ms)`;
+
+    row.innerHTML = `
+      <div class="verdict-item-top">
+        <span class="status-dot"></span>
+        <span class="verdict-item-title">${event.t?.toFixed(1) ?? "?"} s · ${event.axis}</span>
+        <span class="verdict-item-status">${event.verdict}</span>
+      </div>
+      <div class="verdict-item-detail">A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} command ${what}.</div>
+    `;
+
+    const jump = document.createElement("button");
+    jump.className = "verdict-jump";
+    jump.textContent = "Show me → tracking chart";
+    jump.addEventListener("click", () => {
+      navigation.showScreen("viewer");
+      setTimeout(() => {
+        const chartId =
+          EVENT_CHART_BY_AXIS[event.axis.toLowerCase()] ?? "chartTracking";
+        const chart = el(chartId)?.__blackboxLabChart;
+        if (chart && event.t !== null) {
+          el(chartId).scrollIntoView({ behavior: "smooth", block: "center" });
+          chart.setScale("x", {
+            min: Math.max(0, event.t - 2),
+            max: event.t + 3
+          });
+        }
+      }, 250);
+    });
+    row.appendChild(jump);
+
+    list.appendChild(row);
+  }
+
+  if (notable.length === 0 && flightEvents.events.length > 0) {
+    const allClean = document.createElement("p");
+    allClean.className = "chart-hint";
+    allClean.textContent =
+      "Every command tracked cleanly — nothing to single out.";
+    list.appendChild(allClean);
+  }
+}
 
 function renderVerdict(dataset) {
   const verdict = dataset?.verdict;
@@ -2414,6 +2502,14 @@ function analyzeFlight(flightIndex) {
 
   currentDataset = buildDataset(lines, pidAnalysis);
 
+  renderFlightEvents(
+    buildFlightEvents({
+      trackingAnalysis:
+        pidAnalysis?.detectedColumns?.trackingAnalysis,
+      timeSeconds: currentDataset?.timeSeconds
+    })
+  );
+
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);
   renderFilterAdvisor(currentDataset);
@@ -3039,7 +3135,8 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
         fingerprint: buildFingerprint({
           dataset: extras.dataset,
           pidAnalysis: extras.pidAnalysis
-        })
+        }),
+        flightEvents: currentFlightEvents
       }
     );
 

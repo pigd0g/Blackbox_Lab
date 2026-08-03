@@ -48,8 +48,10 @@ export async function uploadContribution(endpoint, payload) {
 // not introduce.
 // ------------------------------------------------------
 
+import { CONTRIBUTION_SCHEMA_VERSION } from "./contributionBuilder.js";
+
 export function contributionPaths(contentHash) {
-  const base = `contrib/1.0/${contentHash}`;
+  const base = `contrib/${CONTRIBUTION_SCHEMA_VERSION}/${contentHash}`;
 
   return {
     payload: `${base}/payload.json`,

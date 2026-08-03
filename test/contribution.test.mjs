@@ -199,7 +199,7 @@ test("v1 envelope carries schema version, tier, id and hash", async () => {
   const { payload, contentHash, contributionId } =
     await buildContributionV1(makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0");
 
-  assert.equal(payload.schema_version, "1.0");
+  assert.equal(payload.schema_version, "1.1");
   assert.equal(payload.tier, 1);
   assert.equal(payload.app_version, "0.4.0");
   assert.match(
@@ -523,12 +523,40 @@ test("fingerprint degrades to nulls when analyses are absent", () => {
   assert.equal(fingerprint.saturation, null);
 });
 
-test("bucket paths follow the v1 layout, keyed by content hash", () => {
+test("bucket paths follow the schema version, keyed by content hash", () => {
   const paths = contributionPaths("abc123");
 
-  assert.equal(paths.payload, "contrib/1.0/abc123/payload.json");
-  assert.equal(paths.frames, "contrib/1.0/abc123/frames.bin.gz");
-  assert.equal(paths.dump, "contrib/1.0/abc123/dump.txt");
+  assert.equal(paths.payload, "contrib/1.1/abc123/payload.json");
+  assert.equal(paths.frames, "contrib/1.1/abc123/frames.bin.gz");
+  assert.equal(paths.dump, "contrib/1.1/abc123/dump.txt");
+});
+
+test("schema 1.1: events travel compact and capped; absent stays honest", async () => {
+  const flightEvents = {
+    events: Array.from({ length: 350 }, (_, i) => ({
+      t: i, axis: "Roll", kind: "command", magnitude: 100,
+      direction: 1, overshoot_percent: null, settling_ms: 80,
+      verdict: "clean"
+    })),
+    summary: { total: 350, clean: 350, overshoot: 0, slow: 0, worst: null, sentence: "x" }
+  };
+
+  const withEvents = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.5.0",
+    { flightEvents }
+  );
+  assert.equal(withEvents.payload.events.length, 300, "events not capped");
+  assert.equal(withEvents.payload.events_summary.total, 350);
+  assert.ok(
+    !("sentence" in (withEvents.payload.events_summary ?? {})),
+    "UI sentence leaked into the payload summary"
+  );
+
+  const withoutEvents = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.5.0"
+  );
+  assert.deepEqual(withoutEvents.payload.events, []);
+  assert.equal(withoutEvents.payload.events_summary, null);
 });
 
 test("upload ledger: a confirmed hash is never offered twice", () => {

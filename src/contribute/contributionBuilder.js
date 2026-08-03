@@ -199,7 +199,10 @@ export function buildContribution(flight, fileType, categories, appVersion) {
 // guess payload generations apart.
 // ------------------------------------------------------
 
-export const CONTRIBUTION_SCHEMA_VERSION = "1.0";
+// 1.1 = 1.0 + the events array (the flight's stick-command
+// events, verdicts included) — schema generations stay
+// distinguishable forever.
+export const CONTRIBUTION_SCHEMA_VERSION = "1.1";
 
 // SHA-256 over the decoded main-frame values of THIS
 // flight — the dedup key. Hashed per flight, never per
@@ -274,7 +277,8 @@ function buildAnonymizationReport(flight, payload, categories, dump) {
  *     craftCard,      // confirmed craft card or null
  *     analysisContext,// buildAnalysisContext() snapshot or null
  *     logQuality,     // assessLogQuality() result or null
- *     fingerprint     // buildFingerprint() result or null
+ *     fingerprint,    // buildFingerprint() result or null
+ *     flightEvents    // buildFlightEvents() result or null
  *   }
  *
  * Returns { payload, frames, dumpText, contentHash,
@@ -350,7 +354,19 @@ export async function buildContributionV1(
     craft_card: extras.craftCard ?? null,
     analysis_context: extras.analysisContext ?? null,
     log_quality: extras.logQuality ?? null,
-    fingerprint: extras.fingerprint ?? null
+    fingerprint: extras.fingerprint ?? null,
+
+    // Schema 1.1: the flight's command events — capped so a
+    // pathological log can never balloon the payload.
+    events: (extras.flightEvents?.events ?? []).slice(0, 300),
+    events_summary: extras.flightEvents?.summary
+      ? {
+          total: extras.flightEvents.summary.total,
+          clean: extras.flightEvents.summary.clean,
+          overshoot: extras.flightEvents.summary.overshoot,
+          slow: extras.flightEvents.summary.slow
+        }
+      : null
   };
 
   if (includeDump) {
