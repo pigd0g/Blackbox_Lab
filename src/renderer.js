@@ -12,10 +12,20 @@ import {
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import {
-  buildContribution,
+  buildContributionV1,
   describeContribution
 } from "./contribute/contributionBuilder.js";
-import { uploadContribution } from "./contribute/uploader.js";
+import { uploadContributionV1 } from "./contribute/uploader.js";
+import {
+  scrubDump,
+  looksLikeDump,
+  readDumpIdentity
+} from "./contribute/dumpScrubber.js";
+import { buildFingerprint } from "./contribute/fingerprint.js";
+import {
+  hasContributed,
+  recordContributed
+} from "./contribute/uploadLedger.js";
 import {
   CONTRIBUTE_ENDPOINT,
   CONTRIBUTE_APP_VERSION
@@ -36,6 +46,7 @@ import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
 import { assessLogQuality } from "./analysis/logQuality.js";
+import { buildFlightEvents } from "./analysis/flightEvents.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
@@ -43,7 +54,13 @@ import {
   buildHistoryEntry,
   assessTrends,
   deleteFlight,
-  clearHistory
+  clearHistory,
+  getCraftCard,
+  saveCraftCard,
+  prefillCraftCard,
+  craftCardFromDump,
+  getCraftDump,
+  saveCraftDump
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import {
@@ -212,6 +229,17 @@ applyAdvancedMode(advancedModeToggle.checked);
 
 advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
+});
+
+// Maximize: any chart living in a grid cell can take the
+// full row width for a closer look — the ResizeObserver
+// machinery re-renders it at the new size automatically.
+document.querySelectorAll(".chart-max-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const cell = button.closest(".chart-cell");
+    const maximized = cell.classList.toggle("chart-max");
+    button.textContent = maximized ? "⤡" : "⤢";
+  });
 });
 
 // ======================================================
@@ -1114,16 +1142,29 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
 
   return chosen.map((peak) => {
     let name = `${peak.hz.toFixed(0)} Hz`;
+    let classification = "unclassified";
 
     if (headspeedRpm && headspeedRpm > 300) {
       const ratio = peak.hz / (headspeedRpm / 60);
 
-      if (Math.abs(ratio - 1) < 0.15) name = `main rotor 1/rev · ${name}`;
-      else if (Math.abs(ratio - 2) < 0.2) name = `main rotor 2/rev · ${name}`;
-      else if (ratio > 3.5 && ratio < 6.5) name = `tail region · ${name}`;
+      if (Math.abs(ratio - 1) < 0.15) {
+        name = `main rotor 1/rev · ${name}`;
+        classification = "main_rotor_1rev";
+      } else if (Math.abs(ratio - 2) < 0.2) {
+        name = `main rotor 2/rev · ${name}`;
+        classification = "main_rotor_2rev";
+      } else if (ratio > 3.5 && ratio < 6.5) {
+        name = `tail region · ${name}`;
+        classification = "tail_region";
+      }
     }
 
-    return { hz: peak.hz, label: name };
+    return {
+      hz: peak.hz,
+      label: name,
+      magnitude: peak.magnitude,
+      classification
+    };
   });
 }
 
@@ -1136,6 +1177,134 @@ const STATUS_WORDS = {
   watch: "Worth watching",
   attention: "Needs attention"
 };
+
+// The Flight Events card: every stick command as one row,
+// worst first, each with a jump to the exact moment on the
+// matching tracking chart.
+const EVENT_CHART_BY_AXIS = {
+  roll: "chartTracking",
+  pitch: "chartTrackingPitch",
+  yaw: "chartTrackingYaw"
+};
+
+let currentFlightEvents = null;
+
+function renderFlightEvents(flightEvents) {
+  const card = el("pidEventsCard");
+  const summary = el("pidEventsSummary");
+  const list = el("pidEventsList");
+
+  if (!card) return;
+
+  currentFlightEvents = flightEvents;
+
+  if (!flightEvents) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  summary.textContent = flightEvents.summary.sentence;
+  list.innerHTML = "";
+  list.className = "events-timeline";
+  hideEventDetail();
+
+  // Every event as a small card on the time axis — click one
+  // and its evidence unfolds RIGHT HERE: what happened, and
+  // the matching chart zoomed to the moment. No teleporting.
+  for (const event of flightEvents.events.slice(0, 60)) {
+    const chip = document.createElement("button");
+    chip.className = `event-card chip-${event.verdict}`;
+
+    const metric =
+      event.verdict === "overshoot"
+        ? `+${event.overshoot_percent}%`
+        : event.verdict === "slow"
+          ? `${event.settling_ms} ms`
+          : "clean";
+
+    chip.innerHTML = `
+      <span class="event-card-time">${event.t?.toFixed(1) ?? "?"} s</span>
+      <span class="event-card-axis">${event.axis}</span>
+      <span class="event-card-metric">${metric}</span>
+    `;
+
+    chip.addEventListener("click", () => {
+      const wasSelected = chip.classList.contains("selected");
+      list
+        .querySelectorAll(".event-card.selected")
+        .forEach((node) => node.classList.remove("selected"));
+
+      if (wasSelected) {
+        hideEventDetail();
+        return;
+      }
+
+      chip.classList.add("selected");
+      showEventDetail(event);
+    });
+
+    list.appendChild(chip);
+  }
+}
+
+const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
+
+function hideEventDetail() {
+  const detail = el("pidEventDetail");
+  if (detail) detail.hidden = true;
+}
+
+function showEventDetail(event) {
+  const detail = el("pidEventDetail");
+  const explain = el("pidEventExplain");
+  const chartElement = el("pidEventChart");
+  if (!detail || !currentDataset) return;
+
+  detail.hidden = false;
+
+  const asked = `At ${event.t?.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
+  explain.textContent =
+    event.verdict === "overshoot"
+      ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
+      : event.verdict === "slow"
+        ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
+        : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
+
+  // The evidence, right here: the same setpoint-vs-gyro chart
+  // the Tuning matrix draws, zoomed to this moment, with the
+  // command marked.
+  const axisIndex = AXIS_INDEX[event.axis.toLowerCase()] ?? 0;
+  const column = (base) =>
+    new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
+
+  renderPresetChart(
+    chartElement,
+    currentDataset,
+    [
+      { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint },
+      { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro }
+    ],
+    "deg/s",
+    {
+      height: 240,
+      markers:
+        event.t !== null ? [{ x: event.t, label: "command" }] : []
+    }
+  );
+
+  if (event.t !== null) {
+    const chart = chartElement.__blackboxLabChart;
+    if (chart) {
+      chart.setScale("x", {
+        min: Math.max(0, event.t - 2),
+        max: event.t + 3
+      });
+    }
+  }
+
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
 
 function renderVerdict(dataset) {
   const verdict = dataset?.verdict;
@@ -1151,25 +1320,27 @@ function renderVerdict(dataset) {
     : verdict.summary;
   verdictCards.innerHTML = "";
 
-  for (const card of verdict.cards) {
-    const cardElement = document.createElement("div");
-    cardElement.className = `verdict-item status-${card.status}`;
+  // A one-look dashboard: compact tiles side by side. Their
+  // whole job is a color, a sentence and a destination — the
+  // full story, action and evidence live on each lab page,
+  // one click away.
+  verdictCards.className = "verdict-grid";
 
-    cardElement.innerHTML = `
+  for (const card of verdict.cards) {
+    const tile = document.createElement("div");
+    tile.className = `verdict-tile status-${card.status}`;
+    tile.title = `${card.detail}${card.action ? ` What to do: ${card.action}` : ""}`;
+
+    tile.innerHTML = `
       <div class="verdict-item-top">
         <span class="status-dot"></span>
         <span class="verdict-item-title">${card.title}</span>
-        <span class="verdict-item-status">${STATUS_WORDS[card.status]}</span>
       </div>
-      <div class="verdict-item-headline">${card.headline}</div>
-      <div class="verdict-item-detail">${card.detail}</div>
-      ${card.action ? `<div class="verdict-item-action"><span>What to do:</span> ${card.action}</div>` : ""}
+      <div class="verdict-tile-headline">${card.headline}</div>
+      <div class="verdict-tile-evidence">Show me → ${card.evidence}</div>
     `;
 
-    const button = document.createElement("button");
-    button.className = "verdict-jump";
-    button.textContent = `Show me → ${card.evidence}`;
-    button.addEventListener("click", () => {
+    tile.addEventListener("click", () => {
       navigation.showScreen(card.screen);
 
       if (card.focus) {
@@ -1189,8 +1360,7 @@ function renderVerdict(dataset) {
       }
     });
 
-    cardElement.appendChild(button);
-    verdictCards.appendChild(cardElement);
+    verdictCards.appendChild(tile);
   }
 }
 
@@ -1321,7 +1491,7 @@ const PRESET_COLORS = {
   d: CHART_COLORS[4] // magenta — D-term
 };
 
-function renderPresetChart(element, dataset, entries, yLabel) {
+function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
   const series = [];
 
   for (const entry of entries) {
@@ -1348,7 +1518,8 @@ function renderPresetChart(element, dataset, entries, yLabel) {
     timeSeconds: decimate(dataset.timeSeconds),
     series,
     yLabel,
-    height: 220
+    height: options.height ?? 220,
+    markers: options.markers ?? []
   });
 }
 
@@ -2051,9 +2222,14 @@ function renderAllCharts(dataset) {
   renderEscEvidence(dataset);
 }
 
+// The latest quality-gate result, kept for the contribution
+// payload so it never has to be recomputed.
+let currentLogQuality = null;
+
 function renderQuality(dataset, flightStats) {
   if (!dataset) {
     qualityCard.hidden = true;
+    currentLogQuality = null;
     return;
   }
 
@@ -2067,6 +2243,8 @@ function renderQuality(dataset, flightStats) {
       : 0,
     ...dataset.columnPresence
   });
+
+  currentLogQuality = quality;
 
   qualityCard.hidden = false;
   qualitySummary.textContent = quality.summary;
@@ -2378,6 +2556,14 @@ function analyzeFlight(flightIndex) {
 
   currentDataset = buildDataset(lines, pidAnalysis);
 
+  renderFlightEvents(
+    buildFlightEvents({
+      trackingAnalysis:
+        pidAnalysis?.detectedColumns?.trackingAnalysis,
+      timeSeconds: currentDataset?.timeSeconds
+    })
+  );
+
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);
   renderFilterAdvisor(currentDataset);
@@ -2410,9 +2596,12 @@ function analyzeFlight(flightIndex) {
     : "Open a log first.";
 
   // ---- file this flight in the craft's health record ----
+  const rawCraftName = getMetadataValue(currentFlightLines, "Craft name");
+  const craftKeyName =
+    rawCraftName === "Not found" ? "Unknown craft" : rawCraftName;
+
   if (currentDataset) {
-   
-    const craftName = getMetadataValue(currentFlightLines, "Craft name");
+    const craftName = rawCraftName;
 
     const entry = buildHistoryEntry({
       fileName: file.name,
@@ -2436,6 +2625,20 @@ function analyzeFlight(flightIndex) {
     );
 
     refreshHistoryScreen(craftKey);
+
+    // First analysis of a new craft: offer the craft card,
+    // pre-filled from the log. Local model info first,
+    // contribution metadata second — independent of sharing.
+    // Bundled sample flights are not the pilot's craft, so
+    // they never prompt for one.
+    if (!file.name.startsWith("sample-")) {
+      maybeAskCraftCard(craftKey);
+    }
+    // The passive unlock card shows for samples too — trying
+    // the sample is how many pilots first meet the app, and the
+    // card is how they discover the unlock. Only the modal ask
+    // stays sample-suppressed.
+    setUnlockCraft(craftKey, false);
   }
 
   refreshCompareButtons();
@@ -2450,11 +2653,12 @@ function analyzeFlight(flightIndex) {
     // them, so contributing them would only fill the community
     // bucket with identical copies.
     if (!file.name.startsWith("sample-")) {
-      maybeContributeFlight(
-        flight.decoded,
-        fileType,
-        `${file.name}#${flightIndex}`
-      );
+      maybeContributeFlight(flight.decoded, fileType, `${file.name}#${flightIndex}`, {
+        dataset: currentDataset,
+        pidAnalysis,
+        logQuality: currentLogQuality,
+        craftName: craftKeyName
+      });
     }
   }
 
@@ -2890,8 +3094,12 @@ const contributeToggle = document.getElementById("contributeToggle");
 const contributePower = document.getElementById("contributePower");
 const contributeGps = document.getElementById("contributeGps");
 const contributeSetup = document.getElementById("contributeSetup");
+const contributeDump = document.getElementById("contributeDump");
 const contributeStatus = document.getElementById("contributeStatus");
 const contributeAsk = document.getElementById("contributeAsk");
+
+const dumpConsentRow = document.getElementById("dumpConsentRow");
+const dumpConsentInline = document.getElementById("dumpConsentInline");
 
 function contributionEnabled() {
   return (
@@ -2908,10 +3116,25 @@ function loadContributeCats() {
     return {
       power: stored.power === true,
       gps: stored.gps === true,
-      setup: stored.setup === true
+      setup: stored.setup === true,
+      dump: stored.dump === true
     };
   } catch {
-    return { power: true, gps: false, setup: true };
+    return { power: true, gps: false, setup: true, dump: false };
+  }
+}
+
+// The dump category arrived after the first installs
+// consented. Whether it was ever ANSWERED (either way) is
+// what decides if the one-time inline ask still shows.
+function dumpConsentAnswered() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
+    );
+    return typeof stored.dump === "boolean";
+  } catch {
+    return false;
   }
 }
 
@@ -2930,43 +3153,86 @@ function refreshContributeCard() {
   contributePower.checked = cats.power;
   contributeGps.checked = cats.gps;
   contributeSetup.checked = cats.setup;
+  contributeDump.checked = cats.dump;
 
   const disabled = !contributeToggle.checked;
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.disabled = disabled;
-  });
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.disabled = disabled;
+    }
+  );
 }
 
-function maybeContributeFlight(flight, fileType, key) {
+async function maybeContributeFlight(flight, fileType, key, extras = {}) {
   if (!contributionEnabled()) return;
   if (contributedThisSession.has(key)) return;
   contributedThisSession.add(key);
 
-  const payload = buildContribution(
-    flight,
-    fileType,
-    loadContributeCats(),
-    CONTRIBUTE_APP_VERSION
-  );
+  const cats = loadContributeCats();
 
-  if (contributeStatus) {
-    contributeStatus.textContent = `Sharing: ${describeContribution(payload)} …`;
-  }
-
-  uploadContribution(CONTRIBUTE_ENDPOINT, payload)
-    .then((result) => {
-      if (contributeStatus) {
-        contributeStatus.textContent = result.ok
-          ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
-          : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+  try {
+    const contribution = await buildContributionV1(
+      flight,
+      fileType,
+      cats,
+      CONTRIBUTE_APP_VERSION,
+      {
+        scrubbedDump:
+          cats.dump === true && extras.craftName
+            ? getCraftDump(localStorage, extras.craftName)
+            : null,
+        craftCard: extras.craftName
+          ? getCraftCard(localStorage, extras.craftName)
+          : null,
+        analysisContext: extras.pidAnalysis?.analysisContext ?? null,
+        logQuality: extras.logQuality ?? null,
+        fingerprint: buildFingerprint({
+          dataset: extras.dataset,
+          pidAnalysis: extras.pidAnalysis
+        }),
+        flightEvents: currentFlightEvents
       }
-    })
-    .catch(() => {
+    );
+
+    // Same flight already confirmed uploaded from this
+    // install — nothing new to say, skip entirely.
+    if (hasContributed(localStorage, contribution.contentHash)) {
       if (contributeStatus) {
         contributeStatus.textContent =
-          "Sharing failed (no connection) — the tool keeps working normally.";
+          "This flight was already shared earlier — not sent again.";
       }
-    });
+      return;
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = `Sharing: ${describeContribution({
+        fields: contribution.frames.fields,
+        frames: contribution.frames.frames,
+        gps: contribution.frames.gps,
+        categories: contribution.payload.categories
+      })} …`;
+    }
+
+    const result = await uploadContributionV1(
+      CONTRIBUTE_ENDPOINT,
+      contribution
+    );
+
+    if (result.ok) {
+      recordContributed(localStorage, contribution.contentHash);
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = result.ok
+        ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
+        : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+    }
+  } catch {
+    if (contributeStatus) {
+      contributeStatus.textContent =
+        "Sharing failed (no connection) — the tool keeps working normally.";
+    }
+  }
 }
 
 if (contributeToggle) {
@@ -2978,15 +3244,18 @@ if (contributeToggle) {
     refreshContributeCard();
   });
 
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.addEventListener("change", () => {
-      saveContributeCats({
-        power: contributePower.checked,
-        gps: contributeGps.checked,
-        setup: contributeSetup.checked
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.addEventListener("change", () => {
+        saveContributeCats({
+          power: contributePower.checked,
+          gps: contributeGps.checked,
+          setup: contributeSetup.checked,
+          dump: contributeDump.checked
+        });
       });
-    });
-  });
+    }
+  );
 }
 
 if (contributeAsk && CONTRIBUTE_ENDPOINT) {
@@ -3000,7 +3269,8 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
       saveContributeCats({
         power: document.getElementById("askPower").checked,
         gps: document.getElementById("askGps").checked,
-        setup: document.getElementById("askSetup").checked
+        setup: document.getElementById("askSetup").checked,
+        dump: document.getElementById("askDump").checked
       });
       contributeAsk.hidden = true;
       refreshContributeCard();
@@ -3014,7 +3284,355 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
   }
 }
 
+if (dumpConsentInline) {
+  dumpConsentInline.addEventListener("change", () => {
+    const cats = loadContributeCats();
+    saveContributeCats({ ...cats, dump: dumpConsentInline.checked });
+    refreshContributeCard();
+  });
+}
+
 refreshContributeCard();
+
+// ======================================================
+// Craft class card — confirmed once per craft, local
+// model info first, contribution metadata second.
+// ======================================================
+
+const craftCardAsk = document.getElementById("craftCardAsk");
+const craftCardTitle = document.getElementById("craftCardTitle");
+const craftCardSize = document.getElementById("craftCardSize");
+const craftCardBlade = document.getElementById("craftCardBlade");
+const craftCardPower = document.getElementById("craftCardPower");
+const craftCardHeadspeed = document.getElementById("craftCardHeadspeed");
+const craftCardDrive = document.getElementById("craftCardDrive");
+const craftCardSave = document.getElementById("craftCardSave");
+const craftCardLater = document.getElementById("craftCardLater");
+const editCraftCardButton = document.getElementById("editCraftCardButton");
+
+const craftDumpPaste = document.getElementById("craftDumpPaste");
+const craftDumpStatus = document.getElementById("craftDumpStatus");
+const craftDumpOpenButton = document.getElementById("craftDumpOpenButton");
+const craftDumpFileInput = document.getElementById("craftDumpFileInput");
+
+const craftCardSkippedThisSession = new Set();
+let craftCardTarget = null;
+
+// The scrubbed dump staged in the open panel — persisted
+// per craft on Save. Only ever the SCRUBBED result; the
+// raw paste is never kept.
+let stagedCraftDump = null;
+
+function openCraftCardPanel(craftName, prefill) {
+  if (!craftCardAsk) return;
+
+  craftCardTarget = craftName;
+  craftCardTitle.textContent = `About your ${craftName}`;
+
+  const card = getCraftCard(localStorage, craftName) ?? prefill ?? {};
+
+  craftCardSize.value = card.size_class ?? "";
+  craftCardBlade.value = card.blade_length_mm ?? "";
+  craftCardPower.value = card.power_type ?? "";
+  craftCardHeadspeed.value = card.typical_headspeed_rpm ?? "";
+  craftCardDrive.value = card.drive ?? "";
+
+  stagedCraftDump = null;
+  craftDumpPaste.value = "";
+
+  // The inline dump-consent checkbox exists for ONE moment:
+  // a pilot who consented to sharing before the dump category
+  // existed, at their first dump read. Once answered — there,
+  // or on the first-run ask card — it never appears again.
+  dumpConsentRow.hidden = !(
+    contributionEnabled() && !dumpConsentAnswered()
+  );
+
+  const existingDump = getCraftDump(localStorage, craftName);
+  if (existingDump) {
+    showDumpResult(
+      null,
+      "This model already has its settings on file.",
+      `${existingDump.stats.kept} settings kept — read a dump again only to replace them.`
+    );
+  } else {
+    craftDumpStatus.hidden = true;
+  }
+
+  craftCardAsk.hidden = false;
+}
+
+// A dump arriving for the open panel — from paste, file, or
+// the Read-configuration button. Scrubbed immediately; the
+// read-back is a verdict-style panel that cannot be missed,
+// and the fields the dump filled flash green.
+function showDumpResult(kind, headline, detail) {
+  craftDumpStatus.hidden = false;
+  craftDumpStatus.classList.remove("good", "warn");
+  if (kind) {
+    craftDumpStatus.classList.add(kind);
+  }
+
+  craftDumpStatus.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = headline;
+  craftDumpStatus.appendChild(strong);
+  if (detail) {
+    craftDumpStatus.appendChild(document.createElement("br"));
+    craftDumpStatus.appendChild(document.createTextNode(detail));
+  }
+}
+
+function flashField(input) {
+  input.classList.add("field-flash");
+  setTimeout(() => input.classList.remove("field-flash"), 1400);
+}
+
+function stageCraftDump(text) {
+  if (!text || text.trim().length === 0) {
+    stagedCraftDump = null;
+    craftDumpStatus.hidden = true;
+    return;
+  }
+
+  if (!looksLikeDump(text)) {
+    stagedCraftDump = null;
+    showDumpResult(
+      "warn",
+      "That doesn't look like a Rotorflight `dump all` yet.",
+      "Paste (or pick) the whole output of the `dump all` CLI command."
+    );
+    return;
+  }
+
+  stagedCraftDump = scrubDump(text);
+
+  // Read from the RAW text for reassurance only — the pilot
+  // should see "it read the right aircraft".
+  const identity = readDumpIdentity(text);
+  const who = identity.craftName
+    ? `${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""}`
+    : null;
+  const matches =
+    who &&
+    craftCardTarget &&
+    identity.craftName.trim().toLowerCase() ===
+      craftCardTarget.trim().toLowerCase();
+
+  // The dump is the authority on what it knows — its values
+  // go straight into the form.
+  const fromDump = craftCardFromDump(stagedCraftDump.parsed);
+  const filled = [];
+  if (fromDump.power_type) {
+    craftCardPower.value = fromDump.power_type;
+    flashField(craftCardPower);
+    filled.push("power");
+  }
+  if (fromDump.typical_headspeed_rpm) {
+    craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
+    flashField(craftCardHeadspeed);
+    filled.push("headspeed");
+  }
+
+  const detail =
+    `${stagedCraftDump.stats.kept} settings kept, ` +
+    `${stagedCraftDump.stats.dropped} scrubbed away` +
+    (stagedCraftDump.report.length > 0
+      ? ` (${stagedCraftDump.report.join(", ")})`
+      : "") +
+    "." +
+    (filled.length > 0
+      ? ` Filled in: ${filled.join(" + ")}.`
+      : "") +
+    " Now check the values above and add what's missing — Save model closes the card.";
+
+  if (who && !matches) {
+    showDumpResult(
+      "warn",
+      `✓ Configuration read — but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
+      detail
+    );
+  } else {
+    showDumpResult(
+      "good",
+      who
+        ? `✓ Configuration read: ${who} — that's this model.`
+        : "✓ Configuration read.",
+      detail
+    );
+
+    // Reading is not the end: the pilot reviews and completes
+    // the card, and SAVE is the closing action. Steer there —
+    // scroll the fields back into view and focus the first one
+    // the dump could not know.
+    const nextField =
+      [craftCardSize, craftCardBlade, craftCardPower, craftCardHeadspeed, craftCardDrive]
+        .find((field) => !field.value) ?? craftCardSize;
+    nextField.scrollIntoView({ behavior: "smooth", block: "center" });
+    nextField.focus({ preventScroll: true });
+  }
+
+  // Users who consented to sharing before the dump category
+  // existed answer it once, right here: the pre-checked
+  // checkbox appears, its shown state stored immediately.
+  if (contributionEnabled() && !dumpConsentAnswered() && dumpConsentRow) {
+    dumpConsentRow.hidden = false;
+    saveContributeCats({
+      ...loadContributeCats(),
+      dump: dumpConsentInline.checked
+    });
+    refreshContributeCard();
+  }
+}
+
+const craftDumpReadButton = document.getElementById("craftDumpReadButton");
+
+if (craftDumpReadButton) {
+  craftDumpReadButton.addEventListener("click", () => {
+    if (craftDumpPaste.value.trim().length === 0) {
+      showDumpResult(
+        "warn",
+        "Nothing to read yet.",
+        "Paste your `dump all` above, or use the file button."
+      );
+      return;
+    }
+    stageCraftDump(craftDumpPaste.value);
+  });
+}
+
+if (craftDumpPaste) {
+  craftDumpPaste.addEventListener("input", () => {
+    stageCraftDump(craftDumpPaste.value);
+  });
+}
+
+if (craftDumpOpenButton) {
+  craftDumpOpenButton.addEventListener("click", () => {
+    craftDumpFileInput.click();
+  });
+
+  craftDumpFileInput.addEventListener("change", async () => {
+    const file = craftDumpFileInput.files[0];
+    if (file) {
+      stageCraftDump(await file.text());
+    }
+    craftDumpFileInput.value = "";
+  });
+}
+
+function maybeAskCraftCard(craftName) {
+  if (!craftCardAsk) return;
+  // Never stack on top of the sharing ask — the card
+  // simply waits for a later analysis of this craft.
+  if (contributeAsk && !contributeAsk.hidden) return;
+  if (craftName === "Unknown craft") return;
+  if (getCraftCard(localStorage, craftName)) return;
+  if (craftCardSkippedThisSession.has(craftName)) return;
+
+  openCraftCardPanel(
+    craftName,
+    prefillCraftCard({
+      medianHeadspeedRpm:
+        currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+      hasElectricalTelemetry:
+        currentDataset?.columnPresence?.hasVbat === true
+    })
+  );
+}
+
+if (craftCardSave) {
+  craftCardSave.addEventListener("click", () => {
+    if (craftCardTarget) {
+      saveCraftCard(localStorage, craftCardTarget, {
+        size_class: craftCardSize.value || null,
+        blade_length_mm: craftCardBlade.value,
+        power_type: craftCardPower.value || null,
+        typical_headspeed_rpm: craftCardHeadspeed.value,
+        drive: craftCardDrive.value || null
+      });
+
+      if (stagedCraftDump) {
+        saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
+      }
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+    stagedCraftDump = null;
+    refreshUnlockCard();
+  });
+}
+
+if (craftCardLater) {
+  craftCardLater.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+  });
+}
+
+if (editCraftCardButton) {
+  editCraftCardButton.addEventListener("click", () => {
+    const craft = historyCraftSelect.value;
+    if (craft) {
+      openCraftCardPanel(craft, prefillCraftCard({}));
+    }
+  });
+}
+
+// ---- the unlock nudge on Home ----
+// Visible while the analyzed craft has no CLI dump on
+// file; one click opens the craft panel. Sample flights
+// never nag — they are not the pilot's craft.
+const unlockDumpCard = document.getElementById("unlockDumpCard");
+const unlockDumpButton = document.getElementById("unlockDumpButton");
+let unlockCraftTarget = null;
+
+function refreshUnlockCard() {
+  if (!unlockDumpCard) return;
+  unlockDumpCard.hidden =
+    !unlockCraftTarget ||
+    Boolean(getCraftDump(localStorage, unlockCraftTarget));
+}
+
+function setUnlockCraft(craftName, isSample) {
+  unlockCraftTarget =
+    !isSample && craftName && craftName !== "Unknown craft"
+      ? craftName
+      : null;
+  refreshUnlockCard();
+}
+
+const craftCardClose = document.getElementById("craftCardClose");
+
+if (craftCardClose) {
+  craftCardClose.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+    stagedCraftDump = null;
+  });
+}
+
+if (unlockDumpButton) {
+  unlockDumpButton.addEventListener("click", () => {
+    if (unlockCraftTarget) {
+      openCraftCardPanel(
+        unlockCraftTarget,
+        prefillCraftCard({
+          medianHeadspeedRpm:
+            currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+          hasElectricalTelemetry:
+            currentDataset?.columnPresence?.hasVbat === true
+        })
+      );
+    }
+  });
+}
 
 // ======================================================
 // Welcome hero (empty state): extra open/sample buttons,

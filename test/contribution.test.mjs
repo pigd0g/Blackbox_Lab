@@ -15,8 +15,25 @@ import assert from "node:assert/strict";
 
 import {
   buildContribution,
+  buildContributionV1,
+  computeContentHash,
   describeContribution
 } from "../src/contribute/contributionBuilder.js";
+import { scrubDump } from "../src/contribute/dumpScrubber.js";
+import { buildFingerprint } from "../src/contribute/fingerprint.js";
+import {
+  getCraftCard,
+  saveCraftCard,
+  prefillCraftCard,
+  craftCardFromDump,
+  getCraftDump,
+  saveCraftDump
+} from "../src/analysis/craftHistory.js";
+import { contributionPaths } from "../src/contribute/uploader.js";
+import {
+  hasContributed,
+  recordContributed
+} from "../src/contribute/uploadLedger.js";
 
 // Synthetic decoded flight in the bblDecoder shape.
 // Home position: Vienna city center — must NEVER appear
@@ -37,7 +54,7 @@ function makeFlight() {
       firmwareType: "Rotorflight",
       firmwareRevision: "4.6.0",
       craftName: "Vince's Goosky RS7",
-      boardInformation: "SERIAL-XYZ-123",
+      boardInformation: "VANTAC RF007",
       logStartDatetime: "2026-07-23T18:41:02.123+00:00"
     },
     mainFieldNames: [
@@ -73,15 +90,18 @@ function payloadText(payload) {
   return JSON.stringify(payload);
 }
 
-test("core payload never contains dates, board info, or unknown fields", () => {
+test("core payload never contains dates or unknown fields; board model is hardware context and ships", () => {
   const payload = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_ON, "0.3.0");
   const text = payloadText(payload);
 
   assert.ok(!text.includes("2026-07-23"), "log date leaked");
-  assert.ok(!text.includes("SERIAL-XYZ-123"), "board info leaked");
   assert.ok(!text.includes("secretExperimentalField"), "unlisted main field leaked");
   assert.ok(!text.includes("privateThing"), "unlisted slow field leaked");
   assert.ok(!text.includes("some_unknown_header"), "unlisted header leaked");
+
+  // Board model identifies hardware, not a person — it
+  // explains the data and travels with every payload.
+  assert.equal(payload.setup.board, "VANTAC RF007");
 });
 
 test("absolute GPS coordinates never appear, even with GPS enabled", () => {
@@ -117,17 +137,22 @@ test("GPS off means no gps section at all", () => {
   assert.equal(payload.gps, undefined);
 });
 
-test("craft name and tuning ship only with Setup enabled", () => {
+test("the craft name never ships, under any consent; tuning needs Setup", () => {
   const withSetup = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_ON, "0.3.0");
-  assert.equal(withSetup.setup.craftName, "Vince's Goosky RS7");
+  assert.ok(
+    !payloadText(withSetup).includes("Goosky"),
+    "craft name leaked even with all consents on"
+  );
   assert.equal(withSetup.setup.tuning.gov_headspeed, "1780");
 
   const withoutSetup = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_OFF, "0.3.0");
   const text = payloadText(withoutSetup);
   assert.ok(!text.includes("Goosky"), "craft name leaked with setup off");
   assert.ok(!text.includes("gov_headspeed"), "tuning leaked with setup off");
-  // firmware info is always fine — it identifies software, not people
+  // firmware and board info are always fine — they identify
+  // equipment, not people
   assert.equal(withoutSetup.setup.firmwareType, "Rotorflight");
+  assert.equal(withoutSetup.setup.board, "VANTAC RF007");
 });
 
 test("power fields ship only with Power enabled", () => {
@@ -153,4 +178,392 @@ test("summary text mentions gps privacy when gps is shared", () => {
   const payload = buildContribution(makeFlight(), "Blackbox BBL Log", ALL_ON, "0.3.0");
   const summary = describeContribution(payload);
   assert.ok(summary.includes("never your location"));
+});
+
+// ======================================================
+// Schema v1 — envelope, content hash, consent sections
+// ======================================================
+
+const V1_ALL_ON = { power: true, gps: true, setup: true, dump: true };
+const V1_ALL_OFF = { power: false, gps: false, setup: false, dump: false };
+
+const SAMPLE_DUMP = `
+# Rotorflight 4.4.0
+set gov_headspeed = 2100
+set gear_ratio = 1090
+board_name SECRETBOARD
+mcu_id 003800233438510534383538
+`;
+
+test("v1 envelope carries schema version, tier, id and hash", async () => {
+  const { payload, contentHash, contributionId } =
+    await buildContributionV1(makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0");
+
+  assert.equal(payload.schema_version, "1.1");
+  assert.equal(payload.tier, 1);
+  assert.equal(payload.app_version, "0.4.0");
+  assert.match(
+    payload.contribution_id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    "contribution_id should be a v4 UUID"
+  );
+  assert.equal(payload.contribution_id, contributionId);
+  assert.match(contentHash, /^[0-9a-f]{64}$/, "content hash should be sha-256 hex");
+  assert.equal(payload.content_hash, contentHash);
+});
+
+test("reserved Tier 2 fields are present and null", async () => {
+  const { payload } = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0"
+  );
+
+  for (const field of [
+    "intent",
+    "reference_contribution_id",
+    "declared_change",
+    "pilot_verdict"
+  ]) {
+    assert.ok(field in payload, `reserved field ${field} missing`);
+    assert.equal(payload[field], null, `reserved field ${field} not null`);
+  }
+});
+
+test("consent mirrors the category toggles", async () => {
+  const scrubbedDump = scrubDump(SAMPLE_DUMP);
+  const { payload } = await buildContributionV1(
+    makeFlight(),
+    "Blackbox BBL Log",
+    { power: true, gps: false, setup: true, dump: true },
+    "0.4.0",
+    { scrubbedDump }
+  );
+
+  assert.deepEqual(payload.consent, {
+    core_flight_data: true,
+    power_telemetry: true,
+    setup_headers: true,
+    cli_dump: true,
+    gps_relative: false
+  });
+});
+
+test("consent-off categories produce no corresponding payload sections", async () => {
+  const scrubbedDump = scrubDump(SAMPLE_DUMP);
+  const { payload, frames, dumpText } = await buildContributionV1(
+    makeFlight(),
+    "Blackbox BBL Log",
+    V1_ALL_OFF,
+    "0.4.0",
+    { scrubbedDump }
+  );
+
+  assert.equal(payload.dump, undefined, "dump section despite dump consent off");
+  assert.equal(dumpText, null, "dump text despite dump consent off");
+  assert.equal(frames.gps, undefined, "gps frames despite gps consent off");
+
+  const text = JSON.stringify(payload) + JSON.stringify(frames);
+  assert.ok(!text.includes("Goosky"), "craft name leaked with setup off");
+  assert.ok(!text.includes("Vbat"), "power field leaked with power off");
+});
+
+test("dump consent on: parsed dump in payload, scrubbed text separate, never raw", async () => {
+  const scrubbedDump = scrubDump(SAMPLE_DUMP);
+  const { payload, dumpText } = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0",
+    { scrubbedDump }
+  );
+
+  assert.equal(payload.dump.parsed.gov_headspeed, "2100");
+  assert.ok(dumpText.includes("set gear_ratio = 1090"));
+  // Board model is hardware context — kept and queryable.
+  assert.equal(payload.dump.parsed.board_name, "SECRETBOARD");
+  assert.ok(dumpText.includes("board_name SECRETBOARD"));
+});
+
+test("two flights in one file produce two distinct content hashes", async () => {
+  const first = makeFlight();
+
+  const second = makeFlight();
+  second.mainFrames = [
+    [1000, 5, 0, 120, 0, 2333, 42],
+    [2000, 8, 2, 131, 501, 2330, 44]
+  ];
+
+  const firstHash = await computeContentHash(first);
+  const secondHash = await computeContentHash(second);
+
+  assert.notEqual(firstHash, secondHash);
+
+  // Same flight decoded again → same hash (the dedup key).
+  assert.equal(firstHash, await computeContentHash(makeFlight()));
+});
+
+test("anonymization report names the applied rules, including the dump's", async () => {
+  const scrubbedDump = scrubDump(SAMPLE_DUMP);
+  const { payload } = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0",
+    { scrubbedDump }
+  );
+
+  assert.ok(Array.isArray(payload.anonymization_report));
+  assert.ok(payload.anonymization_report.includes("log date/time removed"));
+  assert.ok(
+    payload.anonymization_report.includes(
+      "serial numbers and device ids removed"
+    )
+  );
+  assert.ok(
+    payload.anonymization_report.some((entry) =>
+      entry.includes("anonymous craft id")
+    ),
+    "craft-name rule missing from the report"
+  );
+  assert.ok(
+    payload.anonymization_report.some((entry) => entry.startsWith("dump:")),
+    "dump scrub rules missing from the report"
+  );
+});
+
+test("frame rows live in frames.bin, not in payload.json", async () => {
+  const { payload, frames } = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0"
+  );
+
+  assert.equal(payload.frames, undefined, "frame rows duplicated into payload.json");
+  assert.ok(frames.frames.length > 0);
+  assert.equal(frames.frames[0].length, frames.fields.length);
+  assert.deepEqual(payload.fields, frames.fields);
+});
+
+// ======================================================
+// Schema v1 — craft card, fingerprint, paths, ledger
+// ======================================================
+
+function memoryStorage() {
+  const map = new Map();
+
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => map.set(key, String(value)),
+    removeItem: (key) => map.delete(key)
+  };
+}
+
+test("craft card round-trips: confirm once, reused afterwards", () => {
+  const storage = memoryStorage();
+
+  assert.equal(getCraftCard(storage, "Goosky RS7"), null);
+
+  saveCraftCard(storage, "Goosky RS7", {
+    size_class: "700",
+    blade_length_mm: "710",
+    power_type: "electric",
+    typical_headspeed_rpm: 2100,
+    drive: "torque_tube_tail"
+  });
+
+  const card = getCraftCard(storage, "Goosky RS7");
+  assert.equal(card.size_class, "700");
+  assert.equal(card.blade_length_mm, 710);
+  assert.equal(card.power_type, "electric");
+  assert.equal(card.typical_headspeed_rpm, 2100);
+  assert.equal(card.drive, "torque_tube_tail");
+
+  // The anonymous craft id: minted on first save, a v4
+  // UUID, and STABLE across edits — it is what groups this
+  // craft's contributions without carrying its name.
+  assert.match(
+    card.craft_id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+  );
+
+  saveCraftCard(storage, "Goosky RS7", { ...card, blade_length_mm: 715 });
+  const edited = getCraftCard(storage, "Goosky RS7");
+  assert.equal(edited.blade_length_mm, 715);
+  assert.equal(edited.craft_id, card.craft_id, "craft_id changed on edit");
+});
+
+test("craft card writes are allowlisted: unknown fields and values dropped", () => {
+  const storage = memoryStorage();
+
+  saveCraftCard(storage, "Test Heli", {
+    size_class: "731",
+    power_type: "warp_drive",
+    drive: "belt",
+    pilot_email: "vince@example.com"
+  });
+
+  const card = getCraftCard(storage, "Test Heli");
+  assert.equal(card.size_class, null, "unknown size class survived");
+  assert.equal(card.power_type, null, "unknown power type survived");
+  assert.equal(card.drive, "belt");
+  assert.ok(
+    !JSON.stringify(card).includes("example.com"),
+    "unlisted field survived into the card"
+  );
+});
+
+test("craft dump round-trips scrubbed-only, per craft", () => {
+  const storage = memoryStorage();
+
+  assert.equal(getCraftDump(storage, "Goosky RS7"), null);
+
+  const scrubbed = scrubDump(SAMPLE_DUMP);
+  saveCraftDump(storage, "Goosky RS7", scrubbed);
+
+  const stored = getCraftDump(storage, "Goosky RS7");
+  assert.equal(stored.parsed.gov_headspeed, "2100");
+  assert.ok(stored.scrubbedText.includes("set gear_ratio = 1090"));
+  assert.ok(Number.isFinite(stored.savedAtMs));
+  assert.ok(
+    !JSON.stringify(stored).includes("003800233438510534383538"),
+    "device id survived into the stored craft dump"
+  );
+
+  assert.equal(getCraftDump(storage, "Other Heli"), null);
+});
+
+test("the dump fills the craft card's numbers and power type", () => {
+  const fromDump = craftCardFromDump({
+    gov_mode: "ELECTRIC",
+    gov_headspeed: "1830"
+  });
+
+  assert.equal(fromDump.power_type, "electric");
+  assert.equal(fromDump.typical_headspeed_rpm, 1830);
+  assert.equal(fromDump.size_class, null, "size class invented from nothing");
+
+  const nitro = craftCardFromDump({ gov_mode: "NITRO" });
+  assert.equal(nitro.power_type, "nitro");
+  assert.equal(nitro.typical_headspeed_rpm, null);
+
+  const empty = craftCardFromDump({});
+  assert.equal(empty.power_type, null);
+});
+
+test("craft card pre-fill suggests, never invents", () => {
+  const fromLog = prefillCraftCard({
+    medianHeadspeedRpm: 2087,
+    hasElectricalTelemetry: true
+  });
+
+  assert.equal(fromLog.typical_headspeed_rpm, 2090);
+  assert.equal(fromLog.power_type, "electric");
+  assert.equal(fromLog.size_class, null);
+  assert.equal(fromLog.blade_length_mm, null);
+
+  const empty = prefillCraftCard({});
+  assert.equal(empty.typical_headspeed_rpm, null);
+  assert.equal(empty.power_type, null);
+});
+
+test("fingerprint reuses computed outputs and is versioned", () => {
+  const fingerprint = buildFingerprint({
+    dataset: {
+      markers: [
+        {
+          hz: 34.8,
+          label: "main rotor 1/rev · 35 Hz",
+          magnitude: 12.34,
+          classification: "main_rotor_1rev"
+        }
+      ],
+      labs: {
+        governor: {
+          droopRpm: 48.2,
+          droopPercent: 2.31,
+          averageHeadspeed: 2085
+        },
+        esc: { saturationPercent: 1.27 }
+      }
+    },
+    pidAnalysis: {
+      score: "87",
+      detectedColumns: {
+        trackingAnalysis: {
+          averageAbsoluteAxisError: [
+            { axis: "Roll", averageAbsoluteError: 3.456 }
+          ],
+          averageAbsoluteAxisResponse: [
+            { axis: "Roll", averageAbsoluteResponse: 41.2 }
+          ],
+          instantaneousExceedanceAnalysis: [
+            { axis: "Roll", exceedancePercent: 4.567 }
+          ]
+        }
+      }
+    }
+  });
+
+  assert.equal(fingerprint.fingerprint_version, 1);
+  assert.equal(fingerprint.tracking_score, 87);
+  assert.deepEqual(fingerprint.tracking, [
+    {
+      axis: "Roll",
+      average_absolute_error: 3.46,
+      average_absolute_response: 41.2,
+      exceedance_percent: 4.57
+    }
+  ]);
+  assert.deepEqual(fingerprint.noise_peaks, [
+    { hz: 34.8, magnitude: 12.3, classification: "main_rotor_1rev" }
+  ]);
+  assert.equal(fingerprint.governor.droop_rpm, 48.2);
+  assert.equal(fingerprint.saturation.esc_throttle_percent, 1.27);
+});
+
+test("fingerprint degrades to nulls when analyses are absent", () => {
+  const fingerprint = buildFingerprint({ dataset: null, pidAnalysis: null });
+
+  assert.equal(fingerprint.fingerprint_version, 1);
+  assert.equal(fingerprint.tracking_score, null);
+  assert.deepEqual(fingerprint.tracking, []);
+  assert.deepEqual(fingerprint.noise_peaks, []);
+  assert.equal(fingerprint.governor, null);
+  assert.equal(fingerprint.saturation, null);
+});
+
+test("bucket paths follow the schema version, keyed by content hash", () => {
+  const paths = contributionPaths("abc123");
+
+  assert.equal(paths.payload, "contrib/1.1/abc123/payload.json");
+  assert.equal(paths.frames, "contrib/1.1/abc123/frames.bin.gz");
+  assert.equal(paths.dump, "contrib/1.1/abc123/dump.txt");
+});
+
+test("schema 1.1: events travel compact and capped; absent stays honest", async () => {
+  const flightEvents = {
+    events: Array.from({ length: 350 }, (_, i) => ({
+      t: i, axis: "Roll", kind: "command", magnitude: 100,
+      direction: 1, overshoot_percent: null, settling_ms: 80,
+      verdict: "clean"
+    })),
+    summary: { total: 350, clean: 350, overshoot: 0, slow: 0, worst: null, sentence: "x" }
+  };
+
+  const withEvents = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.5.0",
+    { flightEvents }
+  );
+  assert.equal(withEvents.payload.events.length, 300, "events not capped");
+  assert.equal(withEvents.payload.events_summary.total, 350);
+  assert.ok(
+    !("sentence" in (withEvents.payload.events_summary ?? {})),
+    "UI sentence leaked into the payload summary"
+  );
+
+  const withoutEvents = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.5.0"
+  );
+  assert.deepEqual(withoutEvents.payload.events, []);
+  assert.equal(withoutEvents.payload.events_summary, null);
+});
+
+test("upload ledger: a confirmed hash is never offered twice", () => {
+  const storage = memoryStorage();
+
+  assert.equal(hasContributed(storage, "hash-a"), false);
+  recordContributed(storage, "hash-a");
+  assert.equal(hasContributed(storage, "hash-a"), true);
+  assert.equal(hasContributed(storage, "hash-b"), false);
 });

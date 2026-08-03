@@ -171,6 +171,22 @@
           <div id="verdictCards"></div>
         </section>
 
+        <!-- The unlock nudge: shown while this craft has no CLI
+             dump attached yet. One click opens the craft panel. -->
+        <section class="card unlock-card" id="unlockDumpCard" hidden>
+          <div class="unlock-card-text">
+            <h3>Unlock setup-aware insights</h3>
+            <p>
+              Add this model's CLI settings (<code>dump all</code>)
+              once — the analysis learns your exact setup, and your
+              model card fills itself in.
+            </p>
+          </div>
+          <button class="primary-button" id="unlockDumpButton">
+            Add CLI settings
+          </button>
+        </section>
+
         <section class="card" id="qualityCard" hidden>
           <h3>What This Log Can Tell Us</h3>
           <p id="qualitySummary"></p>
@@ -297,7 +313,7 @@
             Flights</strong>: before vs after, and one sentence per
             topic tells you whether your change helped. Meanwhile the
             <strong>Health Record</strong> quietly tracks every
-            analyzed flight per craft and warns you when vibration or
+            analyzed flight per model and warns you when vibration or
             droop trends the wrong way across sessions.
           </p>
         </section>
@@ -345,76 +361,91 @@
         </section>
 
         <section class="card">
-          <h3>Roll Tuning</h3>
+          <h3>Tuning — Roll · Pitch · Yaw</h3>
           <p class="chart-hint">
-            What you asked for versus what you got — the heart of tuning.
-            The closer the lines hug, the better the tune.
+            What you asked for versus what you got, all three axes
+            side by side — the closer the lines hug, the better the
+            tune. The ⤢ button on any chart makes it full width.
           </p>
-          <div class="chart-container" id="chartTracking">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
-          <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
-            <p class="chart-hint">
-              Feedforward check — if the gyro follows the target while
-              the I-term stays near zero, feedforward is carrying the
-              maneuver, exactly as Rotorflight intends.
-            </p>
-            <div class="chart-container" id="chartFfRoll">
-              <p class="chart-empty">Open a log to see this chart.</p>
+          <div class="matrix-row">
+            <div class="chart-cell">
+              <h4>Roll</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTracking">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
             </div>
+            <div class="chart-cell">
+              <h4>Pitch</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTrackingPitch">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
+            </div>
+            <div class="chart-cell">
+              <h4>Yaw</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTrackingYaw">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
+            </div>
+          </div>
+
+          <details class="advanced-block" open>
+            <summary>Advanced: feedforward check</summary>
             <p class="chart-hint">
-              Term balance — which controller term is doing the work.
-              Watch for I wind-up, D-term buzz, and whether term
-              activity lines up with your commands.
+              If the gyro follows the target while the I-term stays
+              near zero, feedforward is carrying the maneuver —
+              exactly as Rotorflight intends.
             </p>
-            <div class="chart-container" id="chartTermsRoll">
-              <p class="chart-empty">Open a log to see this chart.</p>
+            <div class="matrix-row">
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfRoll">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfPitch">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfYaw">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
             </div>
           </details>
-        </section>
 
-        <section class="card">
-          <h3>Pitch Tuning</h3>
-          <p class="chart-hint">
-            Target versus response on the pitch axis.
-          </p>
-          <div class="chart-container" id="chartTrackingPitch">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
           <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
+            <summary>Advanced: term balance</summary>
             <p class="chart-hint">
-              Feedforward check and term balance, pitch axis.
+              Which controller term is doing the work — watch for I
+              wind-up, D-term buzz, and whether term activity lines
+              up with your commands.
             </p>
-            <div class="chart-container" id="chartFfPitch">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-            <div class="chart-container" id="chartTermsPitch">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-          </details>
-        </section>
-
-        <section class="card">
-          <h3>Yaw Tuning</h3>
-          <p class="chart-hint">
-            Target versus response on the tail — the axis that shows
-            mechanical and tune problems first.
-          </p>
-          <div class="chart-container" id="chartTrackingYaw">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
-          <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
-            <p class="chart-hint">
-              Feedforward check and term balance, yaw axis.
-            </p>
-            <div class="chart-container" id="chartFfYaw">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-            <div class="chart-container" id="chartTermsYaw">
-              <p class="chart-empty">Open a log to see this chart.</p>
+            <div class="matrix-row">
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsRoll">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsPitch">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsYaw">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
             </div>
           </details>
         </section>
@@ -542,6 +573,16 @@
             <table class="history-table" id="pidProfileTable"></table>
           </div>
           <p class="chart-hint" id="pidProfileNote"></p>
+        </section>
+
+        <section class="card" id="pidEventsCard" hidden>
+          <h3>Flight Events</h3>
+          <p class="lab-story" id="pidEventsSummary"></p>
+          <div id="pidEventsList"></div>
+          <div id="pidEventDetail" hidden>
+            <p class="event-detail-explain" id="pidEventExplain"></p>
+            <div class="chart-container" id="pidEventChart"></div>
+          </div>
         </section>
 
         <section class="card" id="pidLabSection">
@@ -781,14 +822,18 @@ current demand; the steady downward slope is normal discharge.
         </section>
 
         <section class="card">
-          <h3>Craft</h3>
+          <h3>Model</h3>
           <p>
             Every flight you analyze is filed automatically under its
-            craft name (from the log). Everything stays on this
+            model name (from the log). Everything stays on this
             computer.
           </p>
           <div class="flight-picker">
             <select id="historyCraftSelect"></select>
+            <button class="secondary-button" id="editCraftCardButton"
+              title="Size class, blades, power, headspeed, drive">
+              Edit model
+            </button>
           </div>
           <p class="lab-story" id="historyNote" style="margin-top:14px;">No flights recorded yet.</p>
           <div id="historyFindings"></div>
@@ -887,10 +932,18 @@ current demand; the steady downward slope is normal discharge.
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="contributeSetup" />
-              <span>Model &amp; tuning info — craft model and setup
-                values, so logs can be grouped by setup type.</span>
+              <span>Setup &amp; tuning info — tuning values and board
+                type, so logs can be grouped by setup. Your model's
+                name never leaves this computer.</span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="contributeDump" />
+              <span>CLI settings (<code>dump</code>) — scrubbed of
+                anything identifying; your settings help us improve
+                recommendations for your specific model.</span>
             </label>
           </div>
+
           <p class="contribute-status" id="contributeStatus"></p>
         </section>
 
@@ -934,6 +987,105 @@ current demand; the steady downward slope is normal discharge.
     </div>
   </div>
 
+  <!-- Craft class card: confirmed once per craft on first
+       analysis, editable later from the Health Record.
+       Local model info first, contribution metadata second. -->
+  <div class="overlay" id="craftCardAsk" hidden>
+    <div class="overlay-dialog">
+      <button class="overlay-close" id="craftCardClose"
+        title="Close">✕</button>
+      <h3 id="craftCardTitle">About your model</h3>
+      <p>
+        A few facts about this model make its flights comparable —
+        in your Health Record, and (only if you share logs) for
+        everyone's recommendations. Confirm once; edit any time
+        from the Health Record screen.
+      </p>
+      <label class="craft-card-row">
+        <span>Size class</span>
+        <select id="craftCardSize">
+          <option value="">—</option>
+          <option value="450">450</option>
+          <option value="500">500</option>
+          <option value="550">550</option>
+          <option value="600">600</option>
+          <option value="700">700</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Main blade length (mm)</span>
+        <input type="number" id="craftCardBlade" min="100" max="1200" />
+      </label>
+      <label class="craft-card-row">
+        <span>Power</span>
+        <select id="craftCardPower">
+          <option value="">—</option>
+          <option value="electric">electric</option>
+          <option value="nitro">nitro</option>
+          <option value="gasoline">gasoline</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Typical headspeed (rpm)</span>
+        <input type="number" id="craftCardHeadspeed" min="500" max="4000" />
+      </label>
+      <label class="craft-card-row">
+        <span>Tail drive</span>
+        <select id="craftCardDrive">
+          <option value="">—</option>
+          <option value="direct">direct</option>
+          <option value="belt">belt</option>
+          <option value="torque_tube_tail">torque tube</option>
+        </select>
+      </label>
+
+      <!-- The unlock step: the craft's CLI dump fills the card
+           automatically and makes recommendations setup-aware. -->
+      <div class="craft-card-dump">
+        <p>
+          <strong>Go further:</strong> add this model's CLI settings
+          (<code>dump all</code>) — it fills the model card in
+          automatically and unlocks recommendations tuned to your
+          exact setup. Names, serials and anything identifying are
+          removed on the spot.
+        </p>
+        <textarea
+          id="craftDumpPaste"
+          rows="3"
+          spellcheck="false"
+          placeholder="# paste your Rotorflight `dump all` here…"
+        ></textarea>
+        <div class="button-row">
+          <button class="secondary-button" id="craftDumpReadButton">
+            Read configuration
+          </button>
+          <button class="secondary-button" id="craftDumpOpenButton">
+            …or read from a file
+          </button>
+        </div>
+        <input type="file" id="craftDumpFileInput" accept=".txt,.dump,.cli"
+          hidden />
+        <div class="craft-dump-result" id="craftDumpStatus" hidden></div>
+        <label class="toggle-row" id="dumpConsentRow" hidden>
+          <input type="checkbox" id="dumpConsentInline" checked />
+          <span>Share these scrubbed settings with my flights —
+            your settings help us improve recommendations for
+            your specific model.</span>
+        </label>
+      </div>
+
+      <div class="overlay-actions">
+        <button class="overlay-link" id="craftCardLater">Not now</button>
+        <button class="overlay-primary" id="craftCardSave">Save model</button>
+      </div>
+      <p class="overlay-footnote">
+        Pre-filled from your log where possible — please correct
+        anything that's off.
+      </p>
+    </div>
+  </div>
+
   <div class="overlay" id="contributeAsk" hidden>
     <div class="overlay-dialog">
       <h3>Help improve Blackbox Lab?</h3>
@@ -957,11 +1109,17 @@ current demand; the steady downward slope is normal discharge.
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askSetup" checked />
-        <span>Model &amp; tuning info</span>
+        <span>Setup &amp; tuning info — never your model's name</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="askDump" checked />
+        <span>Your CLI settings (<code>dump</code>), scrubbed of
+          anything identifying — your settings help us improve
+          recommendations for your specific model</span>
       </label>
       <div class="overlay-actions">
+        <button class="overlay-link" id="askNo">No thanks</button>
         <button class="overlay-primary" id="askYes">Yes, share anonymized logs</button>
-        <button class="overlay-secondary" id="askNo">No thanks</button>
       </div>
       <p class="overlay-footnote">
         You can change this anytime in Settings.
