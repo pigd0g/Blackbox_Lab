@@ -806,6 +806,9 @@ body.advanced-mode details.advanced-block {
 .overlay-dialog {
   position: relative;
   width: min(520px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1155,11 +1158,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
   background: rgba(111, 178, 255, 0.12);
 }
 
-/* A real close control for dialogs, top-right. */
+/* A real close control for dialogs, top-right — sticky so
+   it stays reachable while a tall dialog scrolls. */
 .overlay-close {
-  position: absolute;
-  top: 12px;
-  right: 14px;
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: -8px -8px 0 0;
   background: none;
   border: none;
   color: var(--ink-muted);
@@ -1419,4 +1424,21 @@ body:not(.log-loaded) .loaded-only { display: none; }
   color: var(--ink);
   border-color: var(--accent);
   background: var(--card);
+/* Health Record: model selector and its edit button share one
+   line instead of colliding. */
+section[data-screen="history"] .flight-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+section[data-screen="history"] .flight-picker select {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+}
+
+section[data-screen="history"] .flight-picker .secondary-button {
+  flex: none;
+  white-space: nowrap;
 }
