@@ -378,7 +378,7 @@ export function describeContribution(payload) {
     parts.push("GPS as relative track + speed (never your location)");
   }
   if (payload.categories.setup) {
-    parts.push("setup info (tuning values + board type, never your craft's name)");
+    parts.push("setup info (tuning values + board type, never your model's name)");
   }
 
   return parts.join(" · ");

@@ -3186,7 +3186,7 @@ function openCraftCardPanel(craftName, prefill) {
   craftDumpPaste.value = "";
   const existingDump = getCraftDump(localStorage, craftName);
   craftDumpStatus.textContent = existingDump
-    ? `This craft already has its settings on file (${existingDump.stats.kept} kept) — paste again only to replace them.`
+    ? `This model already has its settings on file (${existingDump.stats.kept} kept) — paste again only to replace them.`
     : "";
 
   craftCardAsk.hidden = false;
@@ -3221,9 +3221,28 @@ function stageCraftDump(text) {
       identity.craftName.trim().toLowerCase() ===
         craftCardTarget.trim().toLowerCase();
     readBack = matches
-      ? `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — that's this craft. `
+      ? `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — that's this model. `
       : `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — this panel is about "${craftCardTarget}"; is this the right dump? `;
   }
+
+  // The dump is the authority on what it knows — its values
+  // go straight into the form, and the status says which
+  // fields it filled and which still need the pilot.
+  const fromDump = craftCardFromDump(stagedCraftDump.parsed);
+  const filled = [];
+  if (fromDump.power_type) {
+    craftCardPower.value = fromDump.power_type;
+    filled.push("power");
+  }
+  if (fromDump.typical_headspeed_rpm) {
+    craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
+    filled.push("headspeed");
+  }
+
+  const fillNote =
+    filled.length > 0
+      ? ` Filled in: ${filled.join(" + ")} — size class, blades and tail drive still need you.`
+      : "";
 
   craftDumpStatus.textContent =
     readBack +
@@ -3233,17 +3252,7 @@ function stageCraftDump(text) {
     (stagedCraftDump.report.length > 0
       ? ` · ${stagedCraftDump.report.join(" · ")}`
       : "") +
-    ". Saved with the card.";
-
-  // What the dump knows fills empty card fields — the
-  // pilot confirms instead of typing.
-  const fromDump = craftCardFromDump(stagedCraftDump.parsed);
-  if (!craftCardPower.value && fromDump.power_type) {
-    craftCardPower.value = fromDump.power_type;
-  }
-  if (!craftCardHeadspeed.value && fromDump.typical_headspeed_rpm) {
-    craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
-  }
+    `. Saved with the card.${fillNote}`;
 
   // Users who consented to sharing before the dump category
   // existed answer it once, right here: the pre-checked

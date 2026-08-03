@@ -177,9 +177,9 @@
           <div class="unlock-card-text">
             <h3>Unlock setup-aware insights</h3>
             <p>
-              Add this craft's CLI settings (<code>dump all</code>)
+              Add this model's CLI settings (<code>dump all</code>)
               once — the analysis learns your exact setup, and your
-              craft card fills itself in.
+              model card fills itself in.
             </p>
           </div>
           <button class="primary-button" id="unlockDumpButton">
@@ -313,7 +313,7 @@
             Flights</strong>: before vs after, and one sentence per
             topic tells you whether your change helped. Meanwhile the
             <strong>Health Record</strong> quietly tracks every
-            analyzed flight per craft and warns you when vibration or
+            analyzed flight per model and warns you when vibration or
             droop trends the wrong way across sessions.
           </p>
         </section>
@@ -797,17 +797,17 @@ current demand; the steady downward slope is normal discharge.
         </section>
 
         <section class="card">
-          <h3>Craft</h3>
+          <h3>Model</h3>
           <p>
             Every flight you analyze is filed automatically under its
-            craft name (from the log). Everything stays on this
+            model name (from the log). Everything stays on this
             computer.
           </p>
           <div class="flight-picker">
             <select id="historyCraftSelect"></select>
             <button class="secondary-button" id="editCraftCardButton"
               title="Size class, blades, power, headspeed, drive">
-              Edit craft card
+              Edit model
             </button>
           </div>
           <p class="lab-story" id="historyNote" style="margin-top:14px;">No flights recorded yet.</p>
@@ -908,7 +908,7 @@ current demand; the steady downward slope is normal discharge.
             <label class="toggle-row">
               <input type="checkbox" id="contributeSetup" />
               <span>Setup &amp; tuning info — tuning values and board
-                type, so logs can be grouped by setup. Your craft's
+                type, so logs can be grouped by setup. Your model's
                 name never leaves this computer.</span>
             </label>
             <label class="toggle-row">
@@ -1017,8 +1017,8 @@ current demand; the steady downward slope is normal discharge.
            automatically and makes recommendations setup-aware. -->
       <div class="craft-card-dump">
         <p>
-          <strong>Go further:</strong> add this craft's CLI settings
-          (<code>dump all</code>) — it fills the card in
+          <strong>Go further:</strong> add this model's CLI settings
+          (<code>dump all</code>) — it fills the model card in
           automatically and unlocks recommendations tuned to your
           exact setup. Names, serials and anything identifying are
           removed on the spot.
@@ -1046,8 +1046,8 @@ current demand; the steady downward slope is normal discharge.
       </div>
 
       <div class="overlay-actions">
-        <button class="overlay-primary" id="craftCardSave">Save craft card</button>
-        <button class="overlay-secondary" id="craftCardLater">Not now</button>
+        <button class="overlay-link" id="craftCardLater">Not now</button>
+        <button class="overlay-primary" id="craftCardSave">Save model</button>
       </div>
       <p class="overlay-footnote">
         Pre-filled from your log where possible — please correct
@@ -1079,7 +1079,7 @@ current demand; the steady downward slope is normal discharge.
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askSetup" checked />
-        <span>Setup &amp; tuning info — never your craft's name</span>
+        <span>Setup &amp; tuning info — never your model's name</span>
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askDump" checked />
@@ -1088,8 +1088,8 @@ current demand; the steady downward slope is normal discharge.
           recommendations for your specific model</span>
       </label>
       <div class="overlay-actions">
+        <button class="overlay-link" id="askNo">No thanks</button>
         <button class="overlay-primary" id="askYes">Yes, share anonymized logs</button>
-        <button class="overlay-secondary" id="askNo">No thanks</button>
       </div>
       <p class="overlay-footnote">
         You can change this anytime in Settings.

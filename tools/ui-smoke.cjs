@@ -27,6 +27,18 @@ const { mkdirSync } = require("node:fs");
     console.log("consent ask shown and dismissed");
   }
 
+  // Before any log: the unlock card must be INVISIBLE by
+  // computed style, not just carry the hidden attribute —
+  // a class with its own display value can defeat [hidden].
+  const unlockPreLog = await window.evaluate(() => {
+    const node = document.getElementById("unlockDumpCard");
+    return node ? node.offsetParent !== null : null;
+  });
+  if (unlockPreLog !== false) {
+    throw new Error("unlock card visible before any log: " + unlockPreLog);
+  }
+  console.log("unlock card ok: invisible before a log");
+
   await window.click("#welcomeSampleButton");
   // The sample is a real 134k-frame flight now — give the
   // decoder time before asserting.
@@ -233,14 +245,50 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("craft dump ok:", dumpStatus.trim().slice(0, 80), "| persisted");
 
-  // Sample flights never show the unlock nudge.
-  const unlockHidden = await window.evaluate(
-    () => document.getElementById("unlockDumpCard").hidden
-  );
+  // Sample flights never show the unlock nudge — by
+  // computed visibility, not just the attribute.
+  const unlockHidden = await window.evaluate(() => {
+    const node = document.getElementById("unlockDumpCard");
+    return node.offsetParent === null;
+  });
   if (!unlockHidden) {
     throw new Error("unlock card visible for a sample flight");
   }
   console.log("unlock card ok: hidden for samples");
+
+  // ---- craft dump via FILE: realistic export (BOM, CRLF,
+  // master/profile split) must fill the form fields ----
+  const dumpFilePath = require("node:path").join(
+    require("node:os").tmpdir(),
+    "bbl-smoke-dump.txt"
+  );
+  require("node:fs").writeFileSync(
+    dumpFilePath,
+    "﻿# dump\r\n# version\r\n# Rotorflight / STM32F7X2 (S7X2) 4.6.0\r\n" +
+      "batch start\r\nboard_name TESTBOARD\r\n" +
+      "set gov_mode = NITRO\r\nset motor_poles = 10,0,0,0\r\n" +
+      "profile 0\r\nset gov_headspeed = 1750\r\n" +
+      "rateprofile 0\r\nbatch end\r\n"
+  );
+  await window.click("#editCraftCardButton");
+  await window.waitForSelector("#craftCardAsk:not([hidden])", { timeout: 3000 });
+  await window.setInputFiles("#craftDumpFileInput", dumpFilePath);
+  await window.waitForTimeout(400);
+  const fileFill = await window.evaluate(() => ({
+    power: document.getElementById("craftCardPower").value,
+    headspeed: document.getElementById("craftCardHeadspeed").value,
+    status: document.getElementById("craftDumpStatus").textContent
+  }));
+  if (fileFill.power !== "nitro" || fileFill.headspeed !== "1750") {
+    throw new Error(
+      "dump FILE did not fill the form: " + JSON.stringify(fileFill)
+    );
+  }
+  if (!fileFill.status.includes("Filled in:")) {
+    throw new Error("fill note missing from status: " + fileFill.status);
+  }
+  console.log("craft dump file ok: form filled from file (nitro @ 1750)");
+  await window.click("#craftCardLater");
 
   if (errors.length) {
     console.log("\n==== ERRORS ====");
