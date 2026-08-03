@@ -1193,3 +1193,22 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .overlay-link:hover {
   color: var(--ink-soft);
 }
+
+/* Health Record: model selector and its edit button share one
+   line instead of colliding. */
+section[data-screen="history"] .flight-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+section[data-screen="history"] .flight-picker select {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+}
+
+section[data-screen="history"] .flight-picker .secondary-button {
+  flex: none;
+  white-space: nowrap;
+}
