@@ -3188,6 +3188,15 @@ function openCraftCardPanel(craftName, prefill) {
 
   stagedCraftDump = null;
   craftDumpPaste.value = "";
+
+  // The inline dump-consent checkbox exists for ONE moment:
+  // a pilot who consented to sharing before the dump category
+  // existed, at their first dump read. Once answered — there,
+  // or on the first-run ask card — it never appears again.
+  dumpConsentRow.hidden = !(
+    contributionEnabled() && !dumpConsentAnswered()
+  );
+
   const existingDump = getCraftDump(localStorage, craftName);
   if (existingDump) {
     showDumpResult(
