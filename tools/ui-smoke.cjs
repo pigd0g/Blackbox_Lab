@@ -212,8 +212,10 @@ const { mkdirSync } = require("node:fs");
   await window.click('.nav-button[data-target="governor"]');
   await window.waitForTimeout(300);
   const beginnerState = await gateProbe();
+  // Metric grids are beginner content again (owner round 3);
+  // evidence views and findings stay advanced.
   if (
-    beginnerState.governorMetrics ||
+    !beginnerState.governorMetrics ||
     beginnerState.droopContext ||
     beginnerState.pidFindings
   ) {
@@ -232,7 +234,7 @@ const { mkdirSync } = require("node:fs");
   await window.click('.nav-button[data-target="governor"]');
   await window.waitForTimeout(300);
   const advancedState = await gateProbe();
-  if (!advancedState.governorMetrics || !advancedState.droopContext) {
+  if (!advancedState.droopContext || !advancedState.loadEvents) {
     throw new Error(
       "advanced content missing in advanced mode: " +
         JSON.stringify(advancedState)
