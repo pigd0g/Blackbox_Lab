@@ -183,6 +183,25 @@ const { mkdirSync } = require("node:fs");
   console.log("history note:", historyNote);
   await window.screenshot({ path: "smoke-shots/09-history.png" });
 
+  // ---- every lab page opens with its verdict ----
+  const labVerdicts = await window.evaluate(() => ({
+    filter: document.getElementById("filterVerdictStory").textContent,
+    pid: document.getElementById("pidVerdictStory").textContent,
+    homePower: Array.from(
+      document.querySelectorAll(".verdict-item-title")
+    ).some((node) => node.textContent === "Power & ESC")
+  }));
+  if (
+    labVerdicts.filter.startsWith("Open a log") ||
+    labVerdicts.pid.startsWith("Open a log") ||
+    !labVerdicts.homePower
+  ) {
+    throw new Error(
+      "lab verdict symmetry broken: " + JSON.stringify(labVerdicts)
+    );
+  }
+  console.log("lab verdicts ok: filter + pid filled, power card on Home");
+
   // ---- advanced re-triage: numbers hidden for beginners ----
   const gateProbe = () =>
     window.evaluate(() => {

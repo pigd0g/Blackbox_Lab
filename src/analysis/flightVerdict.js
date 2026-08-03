@@ -477,6 +477,40 @@ function batteryVerdictFromLab(batteryLab) {
   };
 }
 // ------------------------------------------------------
+// Power verdict — motor output headroom, from the ESC Lab
+// ------------------------------------------------------
+function powerVerdictFromLab(escLab) {
+  if (!escLab || escLab.status === "insufficient") {
+    return null;
+  }
+
+  const headline =
+    escLab.status === "attention"
+      ? "The power system ran out of headroom"
+      : escLab.status === "watch"
+        ? "Power headroom is getting thin"
+        : "Plenty of power in reserve";
+
+  const action =
+    escLab.status === "attention"
+      ? "Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the exact moments."
+      : escLab.status === "watch"
+        ? "Fine for now — worth remembering before asking the machine for more."
+        : "Nothing to do.";
+
+  return {
+    key: "power",
+    title: "Power & ESC",
+    status: escLab.status,
+    headline,
+    detail: escLab.story,
+    action,
+    screen: "esc",
+    evidence: "Throttle Output chart, ESC Lab"
+  };
+}
+
+// ------------------------------------------------------
 // buildFlightVerdict — the one call the renderer makes
 // ------------------------------------------------------
 export function buildFlightVerdict({
@@ -495,6 +529,7 @@ export function buildFlightVerdict({
   vibrationVerdict(spectra, governedHeadspeed),
   rotorSpeedVerdictFromLab(labs?.governor),
   tuningVerdict(pidAnalysis),
+  powerVerdictFromLab(labs?.esc),
   batteryVerdictFromLab(labs?.battery)
 ].filter(Boolean);
 

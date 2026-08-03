@@ -1156,8 +1156,28 @@ const STATUS_WORDS = {
   attention: "Needs attention"
 };
 
+// The Filter and PID pages open with the SAME verdict Home
+// shows for them — one engine, one sentence, no page left
+// without its verdict.
+function renderLabVerdictStories(verdict) {
+  const stories = [
+    { key: "vibration", element: el("filterVerdictStory") },
+    { key: "tuning", element: el("pidVerdictStory") }
+  ];
+
+  for (const { key, element } of stories) {
+    if (!element) continue;
+    const card = verdict?.cards.find((entry) => entry.key === key);
+    if (card) {
+      element.textContent = `${card.headline}. ${card.detail}`;
+    }
+  }
+}
+
 function renderVerdict(dataset) {
   const verdict = dataset?.verdict;
+
+  renderLabVerdictStories(verdict);
 
   if (!verdict || verdict.cards.length === 0) {
     verdictCard.hidden = true;
