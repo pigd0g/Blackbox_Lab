@@ -183,6 +183,74 @@ const { mkdirSync } = require("node:fs");
   console.log("history note:", historyNote);
   await window.screenshot({ path: "smoke-shots/09-history.png" });
 
+  // ---- advanced re-triage: numbers hidden for beginners ----
+  const gateProbe = () =>
+    window.evaluate(() => {
+      const visible = (id) => {
+        const node = document.getElementById(id);
+        return Boolean(node && node.offsetParent !== null);
+      };
+      return {
+        advanced: document.body.classList.contains("advanced-mode"),
+        governorMetrics: visible("governorMetrics"),
+        escMetrics: visible("escMetrics"),
+        droopContext: visible("droopContextCard"),
+        loadEvents: visible("loadEventsCard"),
+        pidFindings: visible("pidAnalysisFindings")
+      };
+    });
+
+  // Force beginner mode via the Settings checkbox.
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  const advancedNow = await window.evaluate(() =>
+    document.body.classList.contains("advanced-mode")
+  );
+  if (advancedNow) {
+    await window.click("#advancedModeToggle");
+  }
+  await window.click('.nav-button[data-target="governor"]');
+  await window.waitForTimeout(300);
+  const beginnerState = await gateProbe();
+  if (
+    beginnerState.governorMetrics ||
+    beginnerState.droopContext ||
+    beginnerState.pidFindings
+  ) {
+    throw new Error(
+      "advanced-only content visible in beginner mode: " +
+        JSON.stringify(beginnerState)
+    );
+  }
+  await window.screenshot({ path: "smoke-shots/13-governor-beginner.png" });
+
+  // Advanced mode reveals them, with live chart data in the
+  // evidence views (the zero-width guard must have held).
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle");
+  await window.click('.nav-button[data-target="governor"]');
+  await window.waitForTimeout(300);
+  const advancedState = await gateProbe();
+  if (!advancedState.governorMetrics || !advancedState.droopContext) {
+    throw new Error(
+      "advanced content missing in advanced mode: " +
+        JSON.stringify(advancedState)
+    );
+  }
+  const droopChartOk = await window.evaluate(() => {
+    const el = document.getElementById("chartDroopRpm");
+    const u = el && el.__blackboxLabChart;
+    return Boolean(u && u.scales.x.min != null && u.scales.x.max > u.scales.x.min);
+  });
+  if (!droopChartOk) {
+    throw new Error("droop context chart has no scaled data in advanced mode");
+  }
+  console.log(
+    "advanced re-triage ok: beginner hides numbers, advanced reveals with live charts"
+  );
+  await window.screenshot({ path: "smoke-shots/14-governor-advanced.png" });
+
   if (errors.length) {
     console.log("\n==== ERRORS ====");
     for (const error of errors) console.log(error);

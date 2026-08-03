@@ -450,6 +450,15 @@ body.advanced-mode details.advanced-block {
   display: block;
 }
 
+/* Numbers, tables, evidence views and per-bank detail are
+   advanced-mode territory; beginners keep verdicts, stories,
+   recommendations and the main charts. Hidden via :not() so
+   elements keep their natural display (grid, table…) when
+   advanced mode reveals them. */
+body:not(.advanced-mode) .advanced-only {
+  display: none !important;
+}
+
 /* ---------------- settings ---------------- */
 
 .toggle-row {
