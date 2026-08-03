@@ -1032,19 +1032,22 @@ current demand; the steady downward slope is normal discharge.
           placeholder="# paste your Rotorflight `dump all` here…"
         ></textarea>
         <div class="button-row">
+          <button class="secondary-button" id="craftDumpReadButton">
+            Read configuration
+          </button>
           <button class="secondary-button" id="craftDumpOpenButton">
-            …or open a saved dump file
+            …or read from a file
           </button>
         </div>
         <input type="file" id="craftDumpFileInput" accept=".txt,.dump,.cli"
           hidden />
+        <div class="craft-dump-result" id="craftDumpStatus" hidden></div>
         <label class="toggle-row" id="dumpConsentRow" hidden>
           <input type="checkbox" id="dumpConsentInline" checked />
           <span>Share these scrubbed settings with my flights —
             your settings help us improve recommendations for
             your specific model.</span>
         </label>
-        <p class="contribute-status" id="craftDumpStatus"></p>
       </div>
 
       <div class="overlay-actions">

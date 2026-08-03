@@ -674,6 +674,37 @@ body.advanced-mode details.advanced-block {
   margin: 8px 0 0 0;
 }
 
+/* The read-back panel: the moment the dump is read must be
+   unmissable — a verdict-style panel, never muted footnote
+   text. */
+.craft-dump-result {
+  margin-top: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  background: rgba(111, 178, 255, 0.07);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+}
+
+.craft-dump-result strong {
+  color: var(--ink);
+}
+
+.craft-dump-result.good {
+  border-left-color: var(--good);
+}
+
+.craft-dump-result.warn {
+  border-left-color: var(--watch);
+}
+
+/* Fields the dump just filled flash green for a moment. */
+.field-flash {
+  background: rgba(62, 207, 142, 0.28) !important;
+  transition: background 1.2s ease;
+}
+
 .unlock-card[hidden] {
   display: none;
 }

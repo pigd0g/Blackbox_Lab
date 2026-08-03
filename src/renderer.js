@@ -3189,74 +3189,128 @@ function openCraftCardPanel(craftName, prefill) {
   stagedCraftDump = null;
   craftDumpPaste.value = "";
   const existingDump = getCraftDump(localStorage, craftName);
-  craftDumpStatus.textContent = existingDump
-    ? `This model already has its settings on file (${existingDump.stats.kept} kept) — paste again only to replace them.`
-    : "";
+  if (existingDump) {
+    showDumpResult(
+      null,
+      "This model already has its settings on file.",
+      `${existingDump.stats.kept} settings kept — read a dump again only to replace them.`
+    );
+  } else {
+    craftDumpStatus.hidden = true;
+  }
 
   craftCardAsk.hidden = false;
 }
 
-// A dump arriving for the open panel — from paste or file.
-// Scrubbed immediately; card fields it knows fill in; the
-// pilot sees what was read and what was removed.
+// A dump arriving for the open panel — from paste, file, or
+// the Read-configuration button. Scrubbed immediately; the
+// read-back is a verdict-style panel that cannot be missed,
+// and the fields the dump filled flash green.
+function showDumpResult(kind, headline, detail) {
+  craftDumpStatus.hidden = false;
+  craftDumpStatus.classList.remove("good", "warn");
+  if (kind) {
+    craftDumpStatus.classList.add(kind);
+  }
+
+  craftDumpStatus.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = headline;
+  craftDumpStatus.appendChild(strong);
+  if (detail) {
+    craftDumpStatus.appendChild(document.createElement("br"));
+    craftDumpStatus.appendChild(document.createTextNode(detail));
+  }
+}
+
+function flashField(input) {
+  input.classList.add("field-flash");
+  setTimeout(() => input.classList.remove("field-flash"), 1400);
+}
+
 function stageCraftDump(text) {
   if (!text || text.trim().length === 0) {
     stagedCraftDump = null;
-    craftDumpStatus.textContent = "";
+    craftDumpStatus.hidden = true;
     return;
   }
 
   if (!looksLikeDump(text)) {
     stagedCraftDump = null;
-    craftDumpStatus.textContent =
-      "This doesn't look like a Rotorflight `dump all` yet — paste (or pick) the whole output.";
+    showDumpResult(
+      "warn",
+      "That doesn't look like a Rotorflight `dump all` yet.",
+      "Paste (or pick) the whole output of the `dump all` CLI command."
+    );
     return;
   }
 
   stagedCraftDump = scrubDump(text);
 
-  // Read from the RAW text for reassurance only — the
-  // pilot should see "it read the right aircraft".
+  // Read from the RAW text for reassurance only — the pilot
+  // should see "it read the right aircraft".
   const identity = readDumpIdentity(text);
-  let readBack = "";
-  if (identity.craftName) {
-    const matches =
-      craftCardTarget &&
-      identity.craftName.trim().toLowerCase() ===
-        craftCardTarget.trim().toLowerCase();
-    readBack = matches
-      ? `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — that's this model. `
-      : `Read: ${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""} — this panel is about "${craftCardTarget}"; is this the right dump? `;
-  }
+  const who = identity.craftName
+    ? `${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""}`
+    : null;
+  const matches =
+    who &&
+    craftCardTarget &&
+    identity.craftName.trim().toLowerCase() ===
+      craftCardTarget.trim().toLowerCase();
 
   // The dump is the authority on what it knows — its values
-  // go straight into the form, and the status says which
-  // fields it filled and which still need the pilot.
+  // go straight into the form.
   const fromDump = craftCardFromDump(stagedCraftDump.parsed);
   const filled = [];
   if (fromDump.power_type) {
     craftCardPower.value = fromDump.power_type;
+    flashField(craftCardPower);
     filled.push("power");
   }
   if (fromDump.typical_headspeed_rpm) {
     craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
+    flashField(craftCardHeadspeed);
     filled.push("headspeed");
   }
 
-  const fillNote =
-    filled.length > 0
-      ? ` Filled in: ${filled.join(" + ")} — size class, blades and tail drive still need you.`
-      : "";
-
-  craftDumpStatus.textContent =
-    readBack +
-    `Scrubbed: ${stagedCraftDump.stats.kept} setting${
-      stagedCraftDump.stats.kept === 1 ? "" : "s"
-    } kept` +
+  const detail =
+    `${stagedCraftDump.stats.kept} settings kept, ` +
+    `${stagedCraftDump.stats.dropped} scrubbed away` +
     (stagedCraftDump.report.length > 0
-      ? ` · ${stagedCraftDump.report.join(" · ")}`
+      ? ` (${stagedCraftDump.report.join(", ")})`
       : "") +
-    `. Saved with the card.${fillNote}`;
+    "." +
+    (filled.length > 0
+      ? ` Filled in: ${filled.join(" + ")}.`
+      : "") +
+    " Now check the values above and add what's missing — Save model closes the card.";
+
+  if (who && !matches) {
+    showDumpResult(
+      "warn",
+      `✓ Configuration read — but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
+      detail
+    );
+  } else {
+    showDumpResult(
+      "good",
+      who
+        ? `✓ Configuration read: ${who} — that's this model.`
+        : "✓ Configuration read.",
+      detail
+    );
+
+    // Reading is not the end: the pilot reviews and completes
+    // the card, and SAVE is the closing action. Steer there —
+    // scroll the fields back into view and focus the first one
+    // the dump could not know.
+    const nextField =
+      [craftCardSize, craftCardBlade, craftCardPower, craftCardHeadspeed, craftCardDrive]
+        .find((field) => !field.value) ?? craftCardSize;
+    nextField.scrollIntoView({ behavior: "smooth", block: "center" });
+    nextField.focus({ preventScroll: true });
+  }
 
   // Users who consented to sharing before the dump category
   // existed answer it once, right here: the pre-checked
@@ -3269,6 +3323,22 @@ function stageCraftDump(text) {
     });
     refreshContributeCard();
   }
+}
+
+const craftDumpReadButton = document.getElementById("craftDumpReadButton");
+
+if (craftDumpReadButton) {
+  craftDumpReadButton.addEventListener("click", () => {
+    if (craftDumpPaste.value.trim().length === 0) {
+      showDumpResult(
+        "warn",
+        "Nothing to read yet.",
+        "Paste your `dump all` above, or use the file button."
+      );
+      return;
+    }
+    stageCraftDump(craftDumpPaste.value);
+  });
 }
 
 if (craftDumpPaste) {
