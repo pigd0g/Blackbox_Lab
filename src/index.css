@@ -1217,6 +1217,23 @@ body:not(.log-loaded) .loaded-only { display: none; }
   transform: translateY(-1px);
 }
 
+/* The whole card carries its verdict — a quiet wash of the
+   status color, dot kept for redundancy. */
+.verdict-tile.status-good {
+  background: linear-gradient(180deg, rgba(62, 207, 142, 0.09), var(--card-soft) 65%);
+  border-color: rgba(62, 207, 142, 0.28);
+}
+
+.verdict-tile.status-watch {
+  background: linear-gradient(180deg, rgba(242, 193, 78, 0.10), var(--card-soft) 65%);
+  border-color: rgba(242, 193, 78, 0.32);
+}
+
+.verdict-tile.status-attention {
+  background: linear-gradient(180deg, rgba(255, 138, 107, 0.12), var(--card-soft) 65%);
+  border-color: rgba(255, 138, 107, 0.38);
+}
+
 .verdict-tile .verdict-item-top {
   margin-bottom: 4px;
 }
