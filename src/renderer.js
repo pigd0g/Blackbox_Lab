@@ -1170,6 +1170,8 @@ function renderLabVerdictStories(verdict) {
     const card = verdict?.cards.find((entry) => entry.key === key);
     if (card) {
       element.textContent = `${card.headline}. ${card.detail}`;
+      // Same status treatment as every other lab verdict.
+      element.className = `lab-story status-text-${card.status}`;
     }
   }
 }
