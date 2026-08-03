@@ -226,6 +226,28 @@ const { mkdirSync } = require("node:fs");
   }
   await window.screenshot({ path: "smoke-shots/13-governor-beginner.png" });
 
+  // Peek: reveals this page's advanced content in beginner
+  // mode, shows the teaching note, and toggles back off.
+  await window.click('section[data-screen="governor"] .peek-advanced-link');
+  const peekState = await window.evaluate(() => ({
+    droop: document.getElementById("droopContextCard").offsetParent !== null,
+    note: document.querySelector(
+      'section[data-screen="governor"] .peek-advanced-note'
+    ).hidden
+  }));
+  if (!peekState.droop || peekState.note) {
+    throw new Error("peek did not reveal advanced data: " + JSON.stringify(peekState));
+  }
+  await window.screenshot({ path: "smoke-shots/13b-governor-peek.png" });
+  await window.click('section[data-screen="governor"] .peek-advanced-link');
+  const peekOff = await window.evaluate(
+    () => document.getElementById("droopContextCard").offsetParent === null
+  );
+  if (!peekOff) {
+    throw new Error("peek did not toggle back off");
+  }
+  console.log("peek ok: reveals, teaches, hides again");
+
   // Advanced mode reveals them, with live chart data in the
   // evidence views (the zero-width guard must have held).
   await window.click('.nav-button[data-target="settings"]');

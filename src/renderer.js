@@ -214,6 +214,25 @@ advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
 });
 
+// Peek: the link under a page's verdict reveals THAT page's
+// advanced content without leaving beginner mode — every
+// verdict is backed by data, and this is where it lives.
+document.querySelectorAll(".peek-advanced-link").forEach((link) => {
+  link.addEventListener("click", () => {
+    const screen = link.closest("[data-screen]");
+    const peeking = screen.classList.toggle("peek-advanced");
+
+    link.textContent = peeking
+      ? "Hide the advanced data again"
+      : "Show the advanced data behind this page";
+
+    const note = link.parentElement.querySelector(".peek-advanced-note");
+    if (note) {
+      note.hidden = !peeking;
+    }
+  });
+});
+
 // ======================================================
 // 03. FILE PICKER + SAMPLE FLIGHT
 // ======================================================
