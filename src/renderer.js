@@ -201,17 +201,26 @@ const navigation = initNavigation();
 // One source of truth: the same constant the update check uses.
 el("sidebarVersion").textContent = `v${APP_VERSION}`;
 
+// Two controls, one state: the always-visible sidebar
+// switch and the Settings checkbox both go through here,
+// so they can never disagree.
+const sidebarAdvancedToggle = el("sidebarAdvancedToggle");
+
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
   localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");
+  advancedModeToggle.checked = enabled;
+  sidebarAdvancedToggle.setAttribute("aria-pressed", String(enabled));
 }
 
-advancedModeToggle.checked =
-  localStorage.getItem("blackboxLabAdvanced") === "1";
-applyAdvancedMode(advancedModeToggle.checked);
+applyAdvancedMode(localStorage.getItem("blackboxLabAdvanced") === "1");
 
 advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
+});
+
+sidebarAdvancedToggle.addEventListener("click", () => {
+  applyAdvancedMode(!document.body.classList.contains("advanced-mode"));
 });
 
 // ======================================================

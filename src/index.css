@@ -53,8 +53,68 @@ body {
   flex-direction: column;
 }
 
-.sidebar-footer {
+/* Always-visible advanced-mode switch: same state as the
+   Settings checkbox, driven by body.advanced-mode. */
+.sidebar-advanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
   margin-top: auto;
+  margin-bottom: 4px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sidebar-advanced:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.sidebar-advanced-switch {
+  flex: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.sidebar-advanced-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+body.advanced-mode .sidebar-advanced {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+body.advanced-mode .sidebar-advanced-switch {
+  background: var(--accent-strong);
+}
+
+body.advanced-mode .sidebar-advanced-switch::after {
+  transform: translateX(14px);
+  background: var(--ink);
+}
+
+.sidebar-footer {
+  margin-top: 14px;
   padding-top: 22px;
   border-top: 1px solid var(--line-soft);
   display: flex;
