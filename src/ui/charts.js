@@ -304,7 +304,7 @@ export function renderTimeSeriesChart(element, options) {
             ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
             ctx.fillStyle = "#dce8ff";
             ctx.setLineDash([4, 4]);
-            ctx.font = "12px sans-serif";
+            ctx.font = "13px sans-serif";
             ctx.textAlign = "center";
 
             for (const marker of markers) {
@@ -405,7 +405,7 @@ export function renderSpectrumChart(element, spectra, options = {}) {
             ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
             ctx.fillStyle = "#dce8ff";
             ctx.setLineDash([4, 4]);
-            ctx.font = "12px sans-serif";
+            ctx.font = "13px sans-serif";
             ctx.textAlign = "center";
 
             let labelRow = 0;

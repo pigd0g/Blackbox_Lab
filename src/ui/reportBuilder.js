@@ -148,7 +148,7 @@ export function buildReportHtml({
     font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
     color: #1c2733;
     line-height: 1.55;
-    font-size: 15px;
+    font-size: 16px;
   }
   .page { max-width: 880px; margin: 0 auto; padding: 26px 18px 60px 18px; }
   .masthead {
@@ -159,21 +159,21 @@ export function buildReportHtml({
     box-shadow: 0 10px 30px rgba(13, 21, 36, 0.25);
   }
   .masthead h1 { margin: 0; font-size: 26px; letter-spacing: 0.2px; }
-  .masthead .sub { color: #9cc3f5; margin-top: 3px; font-size: 14px; }
+  .masthead .sub { color: #9cc3f5; margin-top: 3px; font-size: 15px; }
   .meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 14px;
     margin-top: 20px;
   }
-  .meta-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #8fb3dd; }
-  .meta-value { font-weight: 600; font-size: 15px; margin-top: 2px; color: #ffffff; overflow-wrap: anywhere; }
+  .meta-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8fb3dd; }
+  .meta-value { font-weight: 600; font-size: 16px; margin-top: 2px; color: #ffffff; overflow-wrap: anywhere; }
 
   h2 {
-    font-size: 15px; letter-spacing: 1.6px; text-transform: uppercase;
+    font-size: 16px; letter-spacing: 1.6px; text-transform: uppercase;
     color: #5a6b80; margin: 34px 4px 12px 4px;
   }
-  .summary { font-size: 17px; margin: 0 4px 14px 4px; color: #1c2733; }
+  .summary { font-size: 18px; margin: 0 4px 14px 4px; color: #1c2733; }
 
   .verdict {
     background: #ffffff; border: 1px solid #e3e8ef; border-left: 6px solid;
@@ -182,11 +182,11 @@ export function buildReportHtml({
   }
   .verdict-top { display: flex; align-items: baseline; }
   .verdict-title { font-weight: 700; }
-  .verdict-status { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-  .verdict-headline { font-size: 16.5px; font-weight: 650; margin-top: 4px; }
-  .verdict-detail { color: #46586d; margin-top: 3px; font-size: 14px; }
+  .verdict-status { margin-left: auto; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .verdict-headline { font-size: 17.5px; font-weight: 650; margin-top: 4px; }
+  .verdict-detail { color: #46586d; margin-top: 3px; font-size: 15px; }
   .verdict-action {
-    margin-top: 9px; font-size: 13.5px; color: #2c3e50;
+    margin-top: 9px; font-size: 14.5px; color: #2c3e50;
     background: rgba(255, 255, 255, 0.75); border-radius: 8px; padding: 8px 12px;
   }
 
@@ -196,24 +196,24 @@ export function buildReportHtml({
     box-shadow: 0 2px 8px rgba(13, 21, 36, 0.05);
   }
   .lab-head { display: flex; align-items: baseline; }
-  .lab-name { font-weight: 700; font-size: 16px; }
-  .lab-status { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .lab-name { font-weight: 700; font-size: 17px; }
+  .lab-status { margin-left: auto; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   .lab-story { border-left: 3px solid; padding-left: 12px; margin: 10px 0 12px 0; color: #2c3e50; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .tile { background: #f4f7fb; border: 1px solid #e3e8ef; border-radius: 9px; padding: 9px 12px; }
-  .tile-label { font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
-  .tile-value { font-weight: 650; margin-top: 2px; font-size: 14.5px; }
+  .tile-label { font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
+  .tile-value { font-weight: 650; margin-top: 2px; font-size: 15.5px; }
 
   .chart-panel {
     background: #101a2c; border-radius: 14px; padding: 14px 14px 8px 14px;
     margin: 12px 0; box-shadow: 0 6px 18px rgba(13, 21, 36, 0.18);
   }
-  .chart-title { color: #b9c9e6; font-size: 13px; font-weight: 600; letter-spacing: 0.4px; margin: 0 4px 10px 4px; }
+  .chart-title { color: #b9c9e6; font-size: 14px; font-weight: 600; letter-spacing: 0.4px; margin: 0 4px 10px 4px; }
   .chart-panel img { width: 100%; display: block; border-radius: 8px; }
 
   .footer {
     margin-top: 40px; padding-top: 14px; border-top: 1px solid #d7dee8;
-    color: #7c8da1; font-size: 12px;
+    color: #7c8da1; font-size: 13px;
   }
   @media print {
     body { background: #ffffff; }
