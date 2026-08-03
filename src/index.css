@@ -1200,9 +1200,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
 }
 
 .verdict-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 160px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: var(--card-soft);
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.1s ease;
@@ -1223,45 +1227,125 @@ body:not(.log-loaded) .loaded-only { display: none; }
   line-height: 1.4;
 }
 
-/* Events on a timeline: time is the natural axis. */
+/* Events on a timeline: time is the natural axis. A visible
+   track with connector dots makes it read as a timeline, not
+   a scrollbar; the cards stand portrait like playing cards. */
 .events-timeline {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   overflow-x: auto;
-  padding: 6px 2px 10px 2px;
+  padding: 8px 4px 26px 4px;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent calc(100% - 13px),
+      var(--line-soft) calc(100% - 13px),
+      var(--line-soft) calc(100% - 11px),
+      transparent calc(100% - 11px)
+    );
 }
 
-.event-chip {
+.event-card {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  min-height: 118px;
+  padding: 12px 8px;
   border: 1px solid var(--line-soft);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 12px;
   background: var(--card-soft);
-  font-size: 12.5px;
   color: var(--ink-soft);
   cursor: pointer;
-  white-space: nowrap;
+  position: relative;
+  transition: border-color 0.15s ease, transform 0.1s ease;
 }
 
-.event-chip:hover {
+.event-card::after {
+  /* connector dot down to the timeline track */
+  content: "";
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.event-card:hover {
   border-color: var(--line);
+  transform: translateY(-2px);
 }
 
-.event-chip strong {
+.event-card.selected {
+  border-color: var(--accent);
+}
+
+.event-card-time {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.event-card-axis {
+  font-size: 15px;
+  font-weight: 650;
   color: var(--ink);
-  font-size: 13px;
 }
 
-.event-chip.chip-overshoot {
+.event-card-metric {
+  font-size: 13px;
+  margin-top: auto;
+}
+
+.event-card.chip-overshoot {
   border-color: var(--attention);
 }
 
-.event-chip.chip-slow {
+.event-card.chip-overshoot .event-card-metric,
+.event-card.chip-overshoot::after {
+  color: var(--attention);
+  background: var(--attention);
+}
+
+.event-card.chip-overshoot .event-card-metric {
+  background: none;
+}
+
+.event-card.chip-slow {
   border-color: var(--watch);
 }
 
-.event-chip.chip-clean {
-  opacity: 0.75;
+.event-card.chip-slow .event-card-metric {
+  color: var(--watch);
+}
+
+.event-card.chip-slow::after {
+  background: var(--watch);
+}
+
+.event-card.chip-clean {
+  opacity: 0.8;
+}
+
+.event-card.chip-clean .event-card-metric {
+  color: var(--good);
+}
+
+.event-detail-explain {
+  margin: 14px 0 10px 0;
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  background: rgba(111, 178, 255, 0.05);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
 }
 
 /* The tuning matrix and its expandable cells. */
@@ -1287,19 +1371,21 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .chart-max-btn {
   position: absolute;
-  top: 2px;
-  right: 4px;
+  top: 4px;
+  right: 6px;
   z-index: 5;
-  background: var(--card);
-  border: 1px solid var(--line-soft);
+  background: var(--card-soft);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  color: var(--ink-muted);
-  font-size: 12px;
-  padding: 2px 7px;
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1;
+  padding: 5px 10px;
   cursor: pointer;
 }
 
 .chart-max-btn:hover {
   color: var(--ink);
-  border-color: var(--line);
+  border-color: var(--accent);
+  background: var(--card);
 }

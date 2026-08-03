@@ -1207,51 +1207,103 @@ function renderFlightEvents(flightEvents) {
   summary.textContent = flightEvents.summary.sentence;
   list.innerHTML = "";
   list.className = "events-timeline";
+  hideEventDetail();
 
-  // Every event as a chip on the time axis — clean ones
-  // muted, notable ones colored. Click = zoom the matching
-  // tracking chart to that exact moment.
+  // Every event as a small card on the time axis — click one
+  // and its evidence unfolds RIGHT HERE: what happened, and
+  // the matching chart zoomed to the moment. No teleporting.
   for (const event of flightEvents.events.slice(0, 60)) {
     const chip = document.createElement("button");
-    chip.className = `event-chip chip-${event.verdict}`;
+    chip.className = `event-card chip-${event.verdict}`;
 
-    const what =
+    const metric =
       event.verdict === "overshoot"
-        ? ` · +${event.overshoot_percent}%`
+        ? `+${event.overshoot_percent}%`
         : event.verdict === "slow"
-          ? ` · ${event.settling_ms} ms`
-          : "";
+          ? `${event.settling_ms} ms`
+          : "clean";
 
-    chip.innerHTML = `<strong>${event.t?.toFixed(1) ?? "?"} s</strong> ${event.axis}${what}`;
-    chip.title =
-      event.verdict === "clean"
-        ? `${event.axis} command (${event.magnitude ?? "?"}°/s) tracked cleanly`
-        : event.verdict === "overshoot"
-          ? `${event.axis} command overshot by ${event.overshoot_percent}%`
-          : `${event.axis} command settled slowly (${event.settling_ms} ms)`;
+    chip.innerHTML = `
+      <span class="event-card-time">${event.t?.toFixed(1) ?? "?"} s</span>
+      <span class="event-card-axis">${event.axis}</span>
+      <span class="event-card-metric">${metric}</span>
+    `;
 
     chip.addEventListener("click", () => {
-      navigation.showScreen("viewer");
-      setTimeout(() => {
-        const chartId =
-          EVENT_CHART_BY_AXIS[event.axis.toLowerCase()] ?? "chartTracking";
-        const chart = el(chartId)?.__blackboxLabChart;
-        if (chart && event.t !== null) {
-          el(chartId).scrollIntoView({ behavior: "smooth", block: "center" });
-          chart.setScale("x", {
-            min: Math.max(0, event.t - 2),
-            max: event.t + 3
-          });
-        }
-      }, 250);
+      const wasSelected = chip.classList.contains("selected");
+      list
+        .querySelectorAll(".event-card.selected")
+        .forEach((node) => node.classList.remove("selected"));
+
+      if (wasSelected) {
+        hideEventDetail();
+        return;
+      }
+
+      chip.classList.add("selected");
+      showEventDetail(event);
     });
 
     list.appendChild(chip);
   }
+}
 
-  if (flightEvents.events.length === 0) {
-    list.innerHTML = "";
+const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
+
+function hideEventDetail() {
+  const detail = el("pidEventDetail");
+  if (detail) detail.hidden = true;
+}
+
+function showEventDetail(event) {
+  const detail = el("pidEventDetail");
+  const explain = el("pidEventExplain");
+  const chartElement = el("pidEventChart");
+  if (!detail || !currentDataset) return;
+
+  detail.hidden = false;
+
+  const asked = `At ${event.t?.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
+  explain.textContent =
+    event.verdict === "overshoot"
+      ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
+      : event.verdict === "slow"
+        ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
+        : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
+
+  // The evidence, right here: the same setpoint-vs-gyro chart
+  // the Tuning matrix draws, zoomed to this moment, with the
+  // command marked.
+  const axisIndex = AXIS_INDEX[event.axis.toLowerCase()] ?? 0;
+  const column = (base) =>
+    new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
+
+  renderPresetChart(
+    chartElement,
+    currentDataset,
+    [
+      { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint },
+      { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro }
+    ],
+    "deg/s",
+    {
+      height: 240,
+      markers:
+        event.t !== null ? [{ x: event.t, label: "command" }] : []
+    }
+  );
+
+  if (event.t !== null) {
+    const chart = chartElement.__blackboxLabChart;
+    if (chart) {
+      chart.setScale("x", {
+        min: Math.max(0, event.t - 2),
+        max: event.t + 3
+      });
+    }
   }
+
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function renderVerdict(dataset) {
@@ -1438,7 +1490,7 @@ const PRESET_COLORS = {
   d: CHART_COLORS[4] // magenta — D-term
 };
 
-function renderPresetChart(element, dataset, entries, yLabel) {
+function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
   const series = [];
 
   for (const entry of entries) {
@@ -1465,7 +1517,8 @@ function renderPresetChart(element, dataset, entries, yLabel) {
     timeSeconds: decimate(dataset.timeSeconds),
     series,
     yLabel,
-    height: 220
+    height: options.height ?? 220,
+    markers: options.markers ?? []
   });
 }
 

@@ -246,6 +246,36 @@ const { mkdirSync } = require("node:fs");
     );
   }
   console.log("flight events ok:", eventsState.sentence.slice(0, 90));
+
+  // Click an event card: evidence unfolds IN PLACE (no screen
+  // change), with a zoomed chart carrying real data.
+  await window.click(".event-card");
+  await window.waitForTimeout(600);
+  const detailState = await window.evaluate(() => {
+    const chart = document.getElementById("pidEventChart").__blackboxLabChart;
+    return {
+      screen: document.querySelector("[data-screen].screen-active")?.dataset
+        .screen,
+      detailVisible:
+        document.getElementById("pidEventDetail").offsetParent !== null,
+      explain: document
+        .getElementById("pidEventExplain")
+        .textContent.slice(0, 40),
+      chartScaled: Boolean(
+        chart && chart.scales.x.min != null && chart.scales.x.max > chart.scales.x.min
+      )
+    };
+  });
+  if (
+    detailState.screen !== "pid" ||
+    !detailState.detailVisible ||
+    !detailState.chartScaled
+  ) {
+    throw new Error(
+      "in-place event detail misbehaved: " + JSON.stringify(detailState)
+    );
+  }
+  console.log("event detail ok: in place, chart scaled —", detailState.explain);
   await window.screenshot({ path: "smoke-shots/15-flight-events.png" });
   await window.click('.nav-button[data-target="history"]');
   await window.waitForTimeout(300);
