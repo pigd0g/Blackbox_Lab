@@ -234,7 +234,7 @@ const { mkdirSync } = require("node:fs");
   await window.click('.nav-button[data-target="governor"]');
   await window.waitForTimeout(300);
   const advancedState = await gateProbe();
-  if (!advancedState.droopContext || !advancedState.loadEvents) {
+  if (!advancedState.droopContext || !advancedState.governorMetrics) {
     throw new Error(
       "advanced content missing in advanced mode: " +
         JSON.stringify(advancedState)
