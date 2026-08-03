@@ -491,6 +491,12 @@
         </section>
 
         <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="filterVerdictStory">Open a log
+            with gyro data to analyze vibration.</p>
+        </section>
+
+        <section class="card">
           <h3>Noise Spectrum</h3>
           <p class="chart-hint">
             Vibration sorted by frequency. Sharp peaks are mechanical —
@@ -505,13 +511,20 @@
         <section class="card" id="filterAdvisorCard" hidden>
           <h3>Filter Advisor</h3>
           <p class="lab-story" id="filterAdvisorStory"></p>
-          <div class="table-scroll">
+          <div class="table-scroll advanced-only">
             <table class="history-table" id="filterAdvisorTable"></table>
           </div>
           <div id="filterAdvisorRecommendations"></div>
         </section>
 
-        <section class="card" id="filterProfileCard" hidden>
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
+        <section class="card advanced-only" id="filterProfileCard" hidden>
           <h3>Noise By Headspeed Profile</h3>
           <p class="chart-hint">
             Rotor harmonics move with rpm — a filter setup that is
@@ -562,7 +575,20 @@
           <p>How faithfully your helicopter follows your hands.</p>
         </section>
 
-        <section class="card" id="pidProfileCard" hidden>
+        <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="pidVerdictStory">Open a log with
+            setpoint and gyro data to analyze tracking.</p>
+        </section>
+
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
+        <section class="card advanced-only" id="pidProfileCard" hidden>
           <h3>Tracking By Headspeed Profile</h3>
           <p class="chart-hint">
             Helicopters behave differently at different headspeeds.
@@ -606,7 +632,7 @@
             </div>
           </div>
 
-          <div id="pidAnalysisFindings">
+          <div id="pidAnalysisFindings" class="advanced-only">
             No PID analysis loaded.
           </div>
 
@@ -632,6 +658,13 @@
           <div class="metric-grid" id="governorMetrics"></div>
         </section>
 
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
         <section class="card">
           <h3>Headspeed vs Target</h3>
           <p class="chart-hint">
@@ -643,7 +676,7 @@
           </div>
         </section>
 
-        <section class="card" id="droopContextCard" hidden>
+        <section class="card advanced-only" id="droopContextCard" hidden>
           <h3>The Worst Droop, In Context</h3>
           <p class="chart-hint" id="droopContextHint">
             The seconds around the biggest dip, lined up on one
@@ -682,6 +715,13 @@
           <div class="metric-grid" id="escMetrics"></div>
         </section>
 
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
         <section class="card">
           <h3>Throttle Output</h3>
           <p class="chart-hint">
@@ -693,7 +733,7 @@
           </div>
         </section>
 
-        <section class="card" id="loadEventsCard" hidden>
+        <section class="card advanced-only" id="loadEventsCard" hidden>
           <h3>Highest-Load Moments</h3>
           <p class="chart-hint">
             The hardest-working seconds of the flight, and why the
@@ -720,7 +760,7 @@
           </div>
         </section>
 
-        <section class="card" id="escProfileCard" hidden>
+        <section class="card advanced-only" id="escProfileCard" hidden>
           <h3>By Headspeed Profile</h3>
           <p class="chart-hint">
             Stable-flight averages per governor bank — how much
@@ -748,6 +788,13 @@
             treat them as a story, not a lab instrument.
           </p>
         </section>
+
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
 
         <section class="card">
           <h3>Voltage Over the Flight</h3>

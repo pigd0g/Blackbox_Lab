@@ -370,6 +370,153 @@ const { mkdirSync } = require("node:fs");
     throw new Error("X did not close the model panel");
   }
   console.log("model panel X close ok");
+  // ---- every lab page opens with its verdict ----
+  const labVerdicts = await window.evaluate(() => ({
+    filter: document.getElementById("filterVerdictStory").textContent,
+    pid: document.getElementById("pidVerdictStory").textContent,
+    homePower: Array.from(
+      document.querySelectorAll(".verdict-item-title")
+    ).some((node) => node.textContent === "Power & ESC")
+  }));
+  if (
+    labVerdicts.filter.startsWith("Open a log") ||
+    labVerdicts.pid.startsWith("Open a log") ||
+    !labVerdicts.homePower
+  ) {
+    throw new Error(
+      "lab verdict symmetry broken: " + JSON.stringify(labVerdicts)
+    );
+  }
+  console.log("lab verdicts ok: filter + pid filled, power card on Home");
+
+  // ---- advanced re-triage: numbers hidden for beginners ----
+  const gateProbe = () =>
+    window.evaluate(() => {
+      const visible = (id) => {
+        const node = document.getElementById(id);
+        return Boolean(node && node.offsetParent !== null);
+      };
+      return {
+        advanced: document.body.classList.contains("advanced-mode"),
+        governorMetrics: visible("governorMetrics"),
+        escMetrics: visible("escMetrics"),
+        droopContext: visible("droopContextCard"),
+        loadEvents: visible("loadEventsCard"),
+        pidFindings: visible("pidAnalysisFindings")
+      };
+    });
+
+  // Force beginner mode via the Settings checkbox.
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  const advancedNow = await window.evaluate(() =>
+    document.body.classList.contains("advanced-mode")
+  );
+  if (advancedNow) {
+    await window.click("#advancedModeToggle");
+  }
+  await window.click('.nav-button[data-target="governor"]');
+  await window.waitForTimeout(300);
+  const beginnerState = await gateProbe();
+  // Metric grids are beginner content again (owner round 3);
+  // evidence views and findings stay advanced.
+  if (
+    !beginnerState.governorMetrics ||
+    beginnerState.droopContext ||
+    beginnerState.pidFindings
+  ) {
+    throw new Error(
+      "advanced-only content visible in beginner mode: " +
+        JSON.stringify(beginnerState)
+    );
+  }
+  await window.screenshot({ path: "smoke-shots/13-governor-beginner.png" });
+
+  // Peek: reveals this page's advanced content in beginner
+  // mode, shows the teaching note, and toggles back off.
+  await window.click('section[data-screen="governor"] .peek-advanced-link');
+  const peekState = await window.evaluate(() => ({
+    droop: document.getElementById("droopContextCard").offsetParent !== null,
+    note: document.querySelector(
+      'section[data-screen="governor"] .peek-advanced-note'
+    ).hidden
+  }));
+  if (!peekState.droop || peekState.note) {
+    throw new Error("peek did not reveal advanced data: " + JSON.stringify(peekState));
+  }
+  await window.screenshot({ path: "smoke-shots/13b-governor-peek.png" });
+  await window.click('section[data-screen="governor"] .peek-advanced-link');
+  const peekOff = await window.evaluate(
+    () => document.getElementById("droopContextCard").offsetParent === null
+  );
+  if (!peekOff) {
+    throw new Error("peek did not toggle back off");
+  }
+  console.log("peek ok: reveals, teaches, hides again");
+
+  // Advanced mode reveals them, with live chart data in the
+  // evidence views (the zero-width guard must have held).
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle");
+  await window.click('.nav-button[data-target="governor"]');
+  await window.waitForTimeout(300);
+  const advancedState = await gateProbe();
+  if (!advancedState.droopContext || !advancedState.governorMetrics) {
+    throw new Error(
+      "advanced content missing in advanced mode: " +
+        JSON.stringify(advancedState)
+    );
+  }
+  const droopChartOk = await window.evaluate(() => {
+    const el = document.getElementById("chartDroopRpm");
+    const u = el && el.__blackboxLabChart;
+    return Boolean(u && u.scales.x.min != null && u.scales.x.max > u.scales.x.min);
+  });
+  if (!droopChartOk) {
+    throw new Error("droop context chart has no scaled data in advanced mode");
+  }
+  // THE RULE: advanced folds are always present — closed in
+  // beginner mode, pre-opened by the advanced switch.
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle"); // back to beginner
+  await window.click('.nav-button[data-target="viewer"]');
+  await window.waitForTimeout(300);
+  const foldBeginner = await window.evaluate(() => {
+    const block = document.querySelector(
+      'section[data-screen="viewer"] details.advanced-block'
+    );
+    const summary = block?.querySelector("summary");
+    return {
+      summaryVisible: Boolean(summary && summary.offsetParent !== null),
+      open: block?.open ?? null
+    };
+  });
+  if (!foldBeginner.summaryVisible || foldBeginner.open !== false) {
+    throw new Error(
+      "advanced fold handle wrong in beginner mode: " +
+        JSON.stringify(foldBeginner)
+    );
+  }
+  await window.click('.nav-button[data-target="settings"]');
+  await window.waitForTimeout(200);
+  await window.click("#advancedModeToggle"); // advanced again
+  const foldAdvanced = await window.evaluate(
+    () =>
+      document.querySelector(
+        'section[data-screen="viewer"] details.advanced-block'
+      ).open
+  );
+  if (!foldAdvanced) {
+    throw new Error("advanced mode did not pre-open the folds");
+  }
+  console.log("advanced folds ok: handle always visible, mode pre-opens");
+
+  console.log(
+    "advanced re-triage ok: beginner hides numbers, advanced reveals with live charts"
+  );
+  await window.screenshot({ path: "smoke-shots/14-governor-advanced.png" });
 
   if (errors.length) {
     console.log("\n==== ERRORS ====");

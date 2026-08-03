@@ -221,6 +221,13 @@ el("sidebarVersion").textContent = `v${APP_VERSION}`;
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
   localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");
+
+  // Advanced blocks are always present; the mode only decides
+  // whether they start unfolded. Pilots can still open any
+  // fold by hand in beginner mode — that is the point.
+  document.querySelectorAll("details.advanced-block").forEach((block) => {
+    block.open = enabled;
+  });
 }
 
 advancedModeToggle.checked =
@@ -239,6 +246,25 @@ document.querySelectorAll(".chart-max-btn").forEach((button) => {
     const cell = button.closest(".chart-cell");
     const maximized = cell.classList.toggle("chart-max");
     button.textContent = maximized ? "⤡" : "⤢";
+  });
+});
+
+// Peek: the link under a page's verdict reveals THAT page's
+// advanced content without leaving beginner mode — every
+// verdict is backed by data, and this is where it lives.
+document.querySelectorAll(".peek-advanced-link").forEach((link) => {
+  link.addEventListener("click", () => {
+    const screen = link.closest("[data-screen]");
+    const peeking = screen.classList.toggle("peek-advanced");
+
+    link.textContent = peeking
+      ? "Hide the advanced data again"
+      : "Show the advanced data behind this page";
+
+    const note = link.parentElement.querySelector(".peek-advanced-note");
+    if (note) {
+      note.hidden = !peeking;
+    }
   });
 });
 
@@ -1306,8 +1332,30 @@ function showEventDetail(event) {
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+// The Filter and PID pages open with the SAME verdict Home
+// shows for them — one engine, one sentence, no page left
+// without its verdict.
+function renderLabVerdictStories(verdict) {
+  const stories = [
+    { key: "vibration", element: el("filterVerdictStory") },
+    { key: "tuning", element: el("pidVerdictStory") }
+  ];
+
+  for (const { key, element } of stories) {
+    if (!element) continue;
+    const card = verdict?.cards.find((entry) => entry.key === key);
+    if (card) {
+      element.textContent = `${card.headline}. ${card.detail}`;
+      // Same status treatment as every other lab verdict.
+      element.className = `lab-story status-text-${card.status}`;
+    }
+  }
+}
+
 function renderVerdict(dataset) {
   const verdict = dataset?.verdict;
+
+  renderLabVerdictStories(verdict);
 
   if (!verdict || verdict.cards.length === 0) {
     verdictCard.hidden = true;

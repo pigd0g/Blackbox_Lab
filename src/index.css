@@ -442,12 +442,64 @@ details.advanced-block[open] summary {
   margin-bottom: 12px;
 }
 
+/* THE RULE: advanced data never disappears without a trace.
+   Advanced blocks are ALWAYS present — folded to their summary
+   for beginners (the visible handle), pre-opened when Advanced
+   mode is on. */
 details.advanced-block {
-  display: none;
+  display: block;
 }
 
-body.advanced-mode details.advanced-block {
+details.advanced-block > summary {
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+}
+
+details.advanced-block > summary:hover {
+  text-decoration: underline;
+}
+
+/* Numbers, tables, evidence views and per-bank detail are
+   advanced-mode territory; beginners keep verdicts, stories,
+   recommendations and the main charts. Hidden via :not() so
+   elements keep their natural display (grid, table…) when
+   advanced mode reveals them. */
+body:not(.advanced-mode) [data-screen]:not(.peek-advanced) .advanced-only {
+  display: none !important;
+}
+
+/* Peek: one page at a time, the link under the verdict
+   reveals this screen's advanced content without leaving
+   beginner mode — and teaches where the permanent switch
+   lives. Pointless while advanced mode is on. */
+[data-screen].peek-advanced details.advanced-block,
+[data-screen].peek-advanced details.drilldown {
   display: block;
+}
+
+.peek-advanced-row {
+  margin: -6px 0 18px 2px;
+  font-size: 13px;
+}
+
+.peek-advanced-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.peek-advanced-note {
+  color: var(--ink-muted);
+  margin-left: 8px;
+}
+
+body.advanced-mode .peek-advanced-row {
+  display: none;
 }
 
 /* ---------------- settings ---------------- */
