@@ -773,6 +773,7 @@ body.advanced-mode details.advanced-block {
 }
 
 .overlay-dialog {
+  position: relative;
   width: min(520px, 92vw);
   background: var(--card);
   border: 1px solid var(--line);
@@ -1121,6 +1122,24 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .nav-lock:hover {
   background: rgba(111, 178, 255, 0.12);
+}
+
+/* A real close control for dialogs, top-right. */
+.overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.overlay-close:hover {
+  color: var(--ink);
 }
 
 /* Decline/defer actions are quiet text links on the left;

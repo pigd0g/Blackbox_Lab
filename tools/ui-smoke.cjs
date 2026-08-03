@@ -27,6 +27,11 @@ const { mkdirSync } = require("node:fs");
     console.log("consent ask shown and dismissed");
   }
 
+  await window.evaluate(() => {
+    localStorage.removeItem("blackboxLabCraftCards");
+    localStorage.removeItem("blackboxLabCraftDumps");
+  });
+
   // Before any log: the unlock card must be INVISIBLE by
   // computed style, not just carry the hidden attribute —
   // a class with its own display value can defeat [hidden].
@@ -48,6 +53,17 @@ const { mkdirSync } = require("node:fs");
     () => document.querySelectorAll(".verdict-item").length
   );
   console.log("verdict cards:", verdictCount);
+
+  // After an analysis with no dump on file, the unlock card is
+  // the discoverable entry point — visible for samples too.
+  const unlockPostAnalysis = await window.evaluate(() => {
+    const node = document.getElementById("unlockDumpCard");
+    return node.offsetParent !== null;
+  });
+  if (!unlockPostAnalysis) {
+    throw new Error("unlock card not visible after first analysis");
+  }
+  console.log("unlock card ok: visible after analysis, pre-dump");
   await window.screenshot({ path: "smoke-shots/01-verdict.png" });
 
   // ---- evidence zoom: click the vibration card's jump ----
@@ -245,17 +261,6 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("craft dump ok:", dumpStatus.trim().slice(0, 80), "| persisted");
 
-  // Sample flights never show the unlock nudge — by
-  // computed visibility, not just the attribute.
-  const unlockHidden = await window.evaluate(() => {
-    const node = document.getElementById("unlockDumpCard");
-    return node.offsetParent === null;
-  });
-  if (!unlockHidden) {
-    throw new Error("unlock card visible for a sample flight");
-  }
-  console.log("unlock card ok: hidden for samples");
-
   // ---- craft dump via FILE: realistic export (BOM, CRLF,
   // master/profile split) must fill the form fields ----
   const dumpFilePath = require("node:path").join(
@@ -288,7 +293,14 @@ const { mkdirSync } = require("node:fs");
     throw new Error("fill note missing from status: " + fileFill.status);
   }
   console.log("craft dump file ok: form filled from file (nitro @ 1750)");
-  await window.click("#craftCardLater");
+  await window.click("#craftCardClose");
+  const panelClosed = await window.evaluate(
+    () => document.getElementById("craftCardAsk").hidden
+  );
+  if (!panelClosed) {
+    throw new Error("X did not close the model panel");
+  }
+  console.log("model panel X close ok");
 
   if (errors.length) {
     console.log("\n==== ERRORS ====");

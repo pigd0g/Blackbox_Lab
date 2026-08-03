@@ -2484,7 +2484,11 @@ function analyzeFlight(flightIndex) {
     if (!file.name.startsWith("sample-")) {
       maybeAskCraftCard(craftKey);
     }
-    setUnlockCraft(craftKey, file.name.startsWith("sample-"));
+    // The passive unlock card shows for samples too — trying
+    // the sample is how many pilots first meet the app, and the
+    // card is how they discover the unlock. Only the modal ask
+    // stays sample-suppressed.
+    setUnlockCraft(craftKey, false);
   }
 
   refreshCompareButtons();
@@ -3369,6 +3373,19 @@ function setUnlockCraft(craftName, isSample) {
       ? craftName
       : null;
   refreshUnlockCard();
+}
+
+const craftCardClose = document.getElementById("craftCardClose");
+
+if (craftCardClose) {
+  craftCardClose.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+    stagedCraftDump = null;
+  });
 }
 
 if (unlockDumpButton) {
