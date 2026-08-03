@@ -412,7 +412,7 @@ pre {
 
 .chart-container .u-legend {
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .chart-empty {
@@ -1238,6 +1238,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
   margin-bottom: 4px;
 }
 
+.verdict-tile-evidence {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
 .verdict-tile-headline {
   color: var(--ink-soft);
   font-size: 14px;
@@ -1369,8 +1376,15 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .matrix-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 10px;
+  gap: 22px;
+  margin-top: 12px;
+}
+
+.chart-cell {
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(18, 32, 58, 0.45);
 }
 
 .chart-cell {

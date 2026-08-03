@@ -29,7 +29,12 @@ export const CHART_COLORS = [
 const AXIS_STYLE = {
   stroke: "#8ea6cc",
   grid: { stroke: "rgba(127, 183, 255, 0.08)", width: 1 },
-  ticks: { stroke: "rgba(127, 183, 255, 0.18)", width: 1 }
+  ticks: { stroke: "rgba(127, 183, 255, 0.18)", width: 1 },
+  // uPlot's default is a small 12px — the axes are where the
+  // reading actually happens, so they follow the app's type
+  // scale.
+  font: "13.5px 'Segoe UI', system-ui, sans-serif",
+  labelFont: "14px 'Segoe UI', system-ui, sans-serif"
 };
 
 function destroyExistingChart(element) {

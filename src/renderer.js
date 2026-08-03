@@ -1337,6 +1337,7 @@ function renderVerdict(dataset) {
         <span class="verdict-item-title">${card.title}</span>
       </div>
       <div class="verdict-tile-headline">${card.headline}</div>
+      <div class="verdict-tile-evidence">Show me → ${card.evidence}</div>
     `;
 
     tile.addEventListener("click", () => {
