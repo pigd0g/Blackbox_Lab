@@ -703,3 +703,46 @@ export function selectStableValues(
 
   return selectedValues;
 }
+
+// ------------------------------------------------------
+// detectInFlightSamples — every sample where the rotor is
+// carrying the machine, hard maneuvers included.
+//
+// The stable phase deliberately drops spool-up, profile
+// transitions and heavy-load excursions — right for
+// averages, wrong for questions like "did the power
+// system ever run out". A hard load event pulls the rotor
+// off its plateau, so it removes itself from the stable
+// set at exactly the moment the question matters. This
+// mask keeps those moments: smoothed rotor speed above
+// 70% of its own 95th percentile.
+// ------------------------------------------------------
+export function detectInFlightSamples({ timeSeconds, headspeed }) {
+  if (!hasUsableRotorSpeed(headspeed)) {
+    return null;
+  }
+
+  const sampleRate = estimateSampleRate(timeSeconds) ?? 100;
+  const windowSamples = Math.max(3, Math.round(sampleRate * 2));
+
+  const smoothed = buildRollingMean(headspeed, windowSamples);
+  const p95 = getPercentile(smoothed, 0.95);
+
+  if (!Number.isFinite(p95) || p95 < 500) {
+    return null;
+  }
+
+  const threshold = p95 * 0.7;
+  const inFlightIndexes = [];
+
+  for (let index = 0; index < smoothed.length; index += 1) {
+    if (
+      Number.isFinite(smoothed[index]) &&
+      smoothed[index] >= threshold
+    ) {
+      inFlightIndexes.push(index);
+    }
+  }
+
+  return inFlightIndexes.length >= 100 ? inFlightIndexes : null;
+}

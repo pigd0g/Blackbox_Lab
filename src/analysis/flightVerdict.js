@@ -437,7 +437,7 @@ function batteryVerdictFromLab(batteryLab) {
       title: "Battery",
       status: "attention",
       headline: "Low voltage observed during stable flight",
-      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+      detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
         2
       )} V per cell.`,
       action:
@@ -453,7 +453,7 @@ function batteryVerdictFromLab(batteryLab) {
       title: "Battery",
       status: "watch",
       headline: "Loaded voltage is worth reviewing",
-      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+      detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
         2
       )} V per cell. This alone does not prove the pack is weak.`,
       action:
@@ -468,7 +468,7 @@ function batteryVerdictFromLab(batteryLab) {
     title: "Battery",
     status: "good",
     headline: "Battery held up well",
-    detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+    detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
       2
     )} V per cell. No clear evidence of a weak or tired pack.`,
     action: "Nothing to change from this result.",

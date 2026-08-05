@@ -11,7 +11,8 @@
 // ======================================================
 
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  detectInFlightSamples
 } from "./flightPhase.js";
 
 function statsOf(values) {
@@ -209,6 +210,42 @@ export function analyzeEscLab({
   const saturationPercent =
     (saturatedSamples / stableMotor.length) * 100;
 
+  // Saturation is judged over the whole flight, not only the
+  // stable phase. A hard climb pulls the rotor off its plateau,
+  // so the seconds with the throttle against the stop drop out
+  // of the stable set at exactly the moment that decides whether
+  // the power system kept up.
+  const inFlightIndexes = detectInFlightSamples({
+    timeSeconds: alignedTime,
+    headspeed: alignedHeadspeed
+  });
+
+  let flightSaturationPercent = saturationPercent;
+
+  if (inFlightIndexes) {
+    let flightSaturated = 0;
+    let flightCounted = 0;
+
+    for (const index of inFlightIndexes) {
+      const value = Number(alignedMotor[index]);
+
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+
+      flightCounted += 1;
+
+      if (value >= fullScale * 0.97) {
+        flightSaturated += 1;
+      }
+    }
+
+    if (flightCounted >= 100) {
+      flightSaturationPercent =
+        (flightSaturated / flightCounted) * 100;
+    }
+  }
+
   let ampsStats = null;
 
   if (alignedAmperage) {
@@ -329,7 +366,7 @@ export function analyzeEscLab({
   }
 
   const status =
-    saturationPercent > 2
+    flightSaturationPercent > 2
       ? "attention"
       : headroomPercent < 12
         ? "watch"
@@ -337,20 +374,20 @@ export function analyzeEscLab({
 
   const story =
     status === "good"
-      ? `Healthy stable-flight headroom: motor output averages ${averagePercent.toFixed(
+      ? `Healthy headroom: stable-flight motor output averages ${averagePercent.toFixed(
           1
         )}% with ${headroomPercent.toFixed(
           1
-        )}% average reserve.`
+        )}% average reserve, and the output stayed clear of its ceiling across the whole flight.`
       : status === "watch"
         ? `Stable-flight motor output averages ${averagePercent.toFixed(
             1
           )}%, leaving ${headroomPercent.toFixed(
             1
           )}% average reserve. Review the highest-load events before changing gearing or headspeed.`
-        : `ESC-reported throttle remained at or above 97% for ${saturationPercent.toFixed(
+        : `ESC-reported throttle sat at or above 97% for ${flightSaturationPercent.toFixed(
             1
-          )}% of stable flight. The governor had little remaining output authority during those periods.`;
+          )}% of the flight. During those moments the governor had no remaining output authority — lower the headspeed, take some pitch out, or step up the power system.`;
 
   const metrics = [
     {
@@ -362,8 +399,8 @@ export function analyzeEscLab({
       value: `${headroomPercent.toFixed(1)}%`
     },
     {
-      label: "Stable time near ceiling",
-      value: `${saturationPercent.toFixed(1)}%`
+      label: "Flight time near ceiling",
+      value: `${flightSaturationPercent.toFixed(1)}%`
     },
     {
       label: "Stable samples used",
@@ -402,6 +439,9 @@ export function analyzeEscLab({
       Math.round(headroomPercent * 10) / 10,
 
     saturationPercent:
+      Math.round(flightSaturationPercent * 100) / 100,
+
+    stableSaturationPercent:
       Math.round(saturationPercent * 100) / 100,
 
     stableSampleCount:

@@ -14,7 +14,8 @@
 // ======================================================
 
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  detectInFlightSamples
 } from "./flightPhase.js";
 
 function averageOf(values) {
@@ -239,8 +240,43 @@ export function analyzeBatteryLab({
   const endPerCell =
     endVolts / cellCount;
 
+  // The lowest voltage is read across the whole flight, not
+  // only the stable phase. The deepest dips ride the hardest
+  // load events, and those events pull the rotor off its
+  // plateau — which drops them out of the stable set at
+  // exactly the moment the pack is answering for itself.
+  const flightMinVolts = (() => {
+    const inFlightIndexes = detectInFlightSamples({
+      timeSeconds: alignedTime,
+      headspeed: alignedHeadspeed
+    });
+
+    if (!inFlightIndexes) {
+      return minVolts;
+    }
+
+    let lowest = Infinity;
+    let counted = 0;
+
+    for (const index of inFlightIndexes) {
+      const value = volts[index];
+
+      if (Number.isFinite(value) && value > 0) {
+        counted += 1;
+
+        if (value < lowest) {
+          lowest = value;
+        }
+      }
+    }
+
+    return counted >= 100 && lowest < Infinity
+      ? Math.min(lowest, minVolts)
+      : minVolts;
+  })();
+
   const minimumPerCell =
-    minVolts / cellCount;
+    flightMinVolts / cellCount;
 
   const flightVoltageDropPercent =
     ((startVolts - endVolts) / startVolts) * 100;
@@ -370,18 +406,18 @@ export function analyzeBatteryLab({
           1
         )} V and ended near ${endVolts.toFixed(
           1
-        )} V. Lowest stable-flight voltage was ${minVolts.toFixed(
+        )} V. Lowest in-flight voltage was ${flightMinVolts.toFixed(
           1
         )} V (${minimumPerCell.toFixed(
           2
         )} V per cell). No clear evidence of a weak or tired pack.`
       : status === "watch"
-        ? `The lowest stable-flight voltage was ${minVolts.toFixed(
+        ? `The lowest in-flight voltage was ${flightMinVolts.toFixed(
             1
           )} V (${minimumPerCell.toFixed(
             2
           )} V per cell). Review the matching current and throttle event, but this dip alone does not prove the pack is tired.`
-        : `Stable-flight voltage reached ${minVolts.toFixed(
+        : `In-flight voltage reached ${flightMinVolts.toFixed(
             1
           )} V (${minimumPerCell.toFixed(
             2
@@ -399,8 +435,8 @@ export function analyzeBatteryLab({
       )} → ${endVolts.toFixed(1)} V (est.)`
     },
     {
-      label: "Lowest stable-flight voltage",
-      value: `${minVolts.toFixed(
+      label: "Lowest in-flight voltage",
+      value: `${flightMinVolts.toFixed(
         1
       )} V (${minimumPerCell.toFixed(
         2
