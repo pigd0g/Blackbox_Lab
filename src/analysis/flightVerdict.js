@@ -233,6 +233,24 @@ function tuningVerdict(pidAnalysis) {
     };
   }
 
+  // The card and the PID Lab must tell the same story: when the
+  // Lab's own status says "Review", the Home card cannot say
+  // "crisp" — whatever the score. One source of truth.
+  if (overallStatus === "Review") {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: `Tracking score ${score}/100 — with items to review`,
+      detail:
+        "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
+      action:
+        "Open the PID Lab and read its review items — they say exactly where to look.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
+  }
+
   if (score < 75) {
     return {
       key: "tuning",
