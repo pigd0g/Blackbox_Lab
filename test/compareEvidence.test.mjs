@@ -1,0 +1,121 @@
+// ======================================================
+// COMPARING FLIGHTS — SUBTRACT LIKE FROM LIKE
+// ======================================================
+//
+// A tracking score is measured from clean command
+// responses. A flight that recorded almost none still
+// produces a score, so subtracting it from a well-flown
+// one yields a confident-looking figure that describes the
+// evidence gap rather than the flying.
+//
+// "Consider reverting it" tells a pilot to undo work, so
+// it has to rest on something measured on both sides.
+//
+// ======================================================
+
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  compareFlights,
+  comparableEvidence
+} from "../src/analysis/compareFlights.js";
+
+const solid = { level: "High", score: 100 };
+const thin = { level: "Low", score: 5 };
+const none = { level: "Insufficient", score: 0 };
+
+function flight({ score, confidence }) {
+  return {
+    pidScore: score,
+    pidConfidence: confidence,
+    spectra: [],
+    labs: {},
+    batterySagPercent: null
+  };
+}
+
+test("two well-evidenced flights compare normally", () => {
+  const result = compareFlights(
+    flight({ score: 78, confidence: solid }),
+    flight({ score: 98, confidence: solid })
+  );
+
+  const tracking = result.rows.find((row) => row.title === "Tracking");
+
+  assert.equal(tracking.direction, "better");
+  assert.match(result.summary, /helped|keeper/i);
+});
+
+test("a thin later flight is not called worse", () => {
+  const result = compareFlights(
+    flight({ score: 98, confidence: solid }),
+    flight({ score: 68, confidence: thin })
+  );
+
+  const tracking = result.rows.find((row) => row.title === "Tracking");
+
+  assert.equal(
+    tracking.direction,
+    "unknown",
+    "a score built on almost no evidence cannot be ranked against one that is"
+  );
+  assert.match(tracking.sentence, /cannot be compared/i);
+});
+
+test("both scores are still shown when they cannot be compared", () => {
+  const result = compareFlights(
+    flight({ score: 98, confidence: solid }),
+    flight({ score: 68, confidence: thin })
+  );
+
+  const tracking = result.rows.find((row) => row.title === "Tracking");
+
+  assert.match(tracking.before, /98/);
+  assert.match(tracking.after, /68/);
+});
+
+test("reverting is never advised on an uncomparable pair", () => {
+  const result = compareFlights(
+    flight({ score: 98, confidence: solid }),
+    flight({ score: 40, confidence: none })
+  );
+
+  assert.doesNotMatch(
+    result.summary,
+    /revert/i,
+    "undoing work must not be advised from an evidence gap"
+  );
+  assert.match(result.summary, /cannot be compared/i);
+});
+
+test("a genuinely worse flight is still called worse", () => {
+  const result = compareFlights(
+    flight({ score: 95, confidence: solid }),
+    flight({ score: 60, confidence: solid })
+  );
+
+  assert.match(result.summary, /wrong way|revert/i);
+});
+
+test("the reason names which side was thin", () => {
+  assert.match(
+    comparableEvidence(thin, solid).reason,
+    /earlier/i
+  );
+  assert.match(
+    comparableEvidence(solid, thin).reason,
+    /later/i
+  );
+  assert.match(
+    comparableEvidence(thin, thin).reason,
+    /neither/i
+  );
+  assert.equal(comparableEvidence(solid, solid).comparable, true);
+});
+
+test("a missing confidence is not treated as thin", () => {
+  // Older datasets carry no confidence at all; absence of the field
+  // must not silently stop every comparison from working.
+  assert.equal(comparableEvidence(null, null).comparable, true);
+});

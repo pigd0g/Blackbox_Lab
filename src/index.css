@@ -622,6 +622,7 @@ body.advanced-mode .peek-advanced-row {
 .direction-better .compare-row-delta { color: var(--good); }
 .direction-worse .compare-row-delta { color: var(--attention); }
 .direction-same .compare-row-delta { color: var(--ink-muted); }
+.direction-unknown .compare-row-delta { color: var(--ink-muted); font-style: italic; }
 
 .compare-row-sentence {
   color: var(--ink-soft);

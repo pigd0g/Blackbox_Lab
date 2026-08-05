@@ -1101,6 +1101,10 @@ if (
 
   return {
     pidScore: Number.isFinite(pidAnalysis?.score) ? pidAnalysis.score : null,
+    // Carried so a comparison can say how much each side's score rests
+    // on. Two tracking numbers are only worth subtracting when both
+    // were measured from enough clean responses to mean anything.
+    pidConfidence: pidAnalysis?.confidence ?? null,
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     filterAdvice,
     sampleRateHz: sampleRate,
@@ -2920,7 +2924,9 @@ function renderComparison(comparisonDataset, comparisonName) {
             ? "improved"
             : row.direction === "worse"
               ? "got worse"
-              : "unchanged"
+              : row.direction === "unknown"
+                ? "not comparable"
+                : "unchanged"
         }</span>
       </div>
       <div class="compare-row-sentence">${row.sentence}</div>

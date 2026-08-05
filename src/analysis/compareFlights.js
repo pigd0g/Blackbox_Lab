@@ -62,6 +62,40 @@ function describeChange(change, lowerIsBetter, absoluteDelta, minimumDelta) {
   };
 }
 
+/**
+ * Whether two tracking scores rest on enough evidence to be subtracted
+ * from one another.
+ *
+ * A flight with almost no clean command responses still produces a
+ * score; comparing it with a well-flown one measures how much each was
+ * measured, not how each flew.
+ */
+export function comparableEvidence(beforeConfidence, afterConfidence) {
+  const thin = (confidence) =>
+    confidence?.level === "Low" || confidence?.level === "Insufficient";
+
+  const beforeThin = thin(beforeConfidence);
+  const afterThin = thin(afterConfidence);
+
+  if (!beforeThin && !afterThin) {
+    return { comparable: true, reason: "" };
+  }
+
+  if (beforeThin && afterThin) {
+    return {
+      comparable: false,
+      reason: "neither flight recorded enough clean stick movements to measure tracking from."
+    };
+  }
+
+  return {
+    comparable: false,
+    reason: beforeThin
+      ? "the earlier flight did not record enough clean stick movements to measure tracking from."
+      : "the later flight did not record enough clean stick movements to measure tracking from."
+  };
+}
+
 export function compareFlights(baseline, comparison) {
   const rows = [];
 
@@ -122,24 +156,45 @@ export function compareFlights(baseline, comparison) {
   const scoreAfter = comparison.pidScore;
 
   if (Number.isFinite(scoreBefore) && Number.isFinite(scoreAfter)) {
-    const change = percentChange(scoreBefore, scoreAfter);
-    const described = describeChange(
-      change,
-      false,
-      scoreAfter - scoreBefore,
-      5
+    // A tracking score is only as solid as the clean command responses
+    // it was measured from. Subtracting a well-evidenced score from a
+    // barely-evidenced one produces a confident-looking number that
+    // describes the evidence gap, not the flying — so where either
+    // side is thin, the difference is reported and left uncounted
+    // rather than called better or worse.
+    const evidence = comparableEvidence(
+      baseline.pidConfidence,
+      comparison.pidConfidence
     );
 
-    rows.push({
-      title: "Tracking",
-      direction: described.direction,
-      before: `${scoreBefore}/100`,
-      after: `${scoreAfter}/100`,
-      sentence:
-        described.direction === "same"
-          ? `Stick tracking is about the same (${scoreAfter}/100).`
-          : `Stick tracking got ${described.word}: ${scoreBefore} → ${scoreAfter} points.`
-    });
+    if (evidence.comparable) {
+      const change = percentChange(scoreBefore, scoreAfter);
+      const described = describeChange(
+        change,
+        false,
+        scoreAfter - scoreBefore,
+        5
+      );
+
+      rows.push({
+        title: "Tracking",
+        direction: described.direction,
+        before: `${scoreBefore}/100`,
+        after: `${scoreAfter}/100`,
+        sentence:
+          described.direction === "same"
+            ? `Stick tracking is about the same (${scoreAfter}/100).`
+            : `Stick tracking got ${described.word}: ${scoreBefore} → ${scoreAfter} points.`
+      });
+    } else {
+      rows.push({
+        title: "Tracking",
+        direction: "unknown",
+        before: `${scoreBefore}/100`,
+        after: `${scoreAfter}/100`,
+        sentence: `Tracking cannot be compared here: ${evidence.reason} Both numbers are shown, but the difference between them would not mean anything.`
+      });
+    }
   }
 
   // ---- battery sag ----
@@ -169,17 +224,28 @@ export function compareFlights(baseline, comparison) {
 
   const better = rows.filter((row) => row.direction === "better").length;
   const worse = rows.filter((row) => row.direction === "worse").length;
+  const uncomparable = rows.filter(
+    (row) => row.direction === "unknown"
+  ).length;
+
+  // "Consider reverting it" tells a pilot to undo work. It has to rest
+  // on something measured on both sides — with nothing comparable to
+  // count, the honest answer is that this pair does not answer the
+  // question, not a direction to act on.
+  const comparedRows = better + worse;
 
   const summary =
     rows.length === 0
       ? "Not enough shared data between the two flights to compare."
-      : worse === 0 && better > 0
-        ? "Your change helped — nothing got worse. That's a keeper."
-        : better === 0 && worse > 0
-          ? "This change went the wrong way — consider reverting it."
-          : better > 0 && worse > 0
-            ? "Mixed result: some things improved, others got worse. Trade-off territory."
-            : "No meaningful change between these two flights.";
+      : comparedRows === 0
+        ? uncomparable > 0
+          ? "These two flights cannot be compared usefully — see the rows below for what was missing."
+          : "No meaningful change between these two flights."
+        : worse === 0 && better > 0
+          ? "Your change helped — nothing got worse. That's a keeper."
+          : better === 0 && worse > 0
+            ? "This change went the wrong way — consider reverting it."
+            : "Mixed result: some things improved, others got worse. Trade-off territory.";
 
-  return { rows, summary, better, worse };
+  return { rows, summary, better, worse, uncomparable };
 }
