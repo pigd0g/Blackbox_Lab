@@ -62,6 +62,11 @@ export function buildHistoryEntry({
     flightDateMs,
     durationSeconds:
       Math.round((durationSeconds ?? 0) * 10) / 10,
+    // How many samples the flight holds. Part of what identifies a
+    // flight regardless of what its file is called.
+    sampleCount: Array.isArray(dataset.timeSeconds)
+      ? dataset.timeSeconds.length
+      : null,
     vibrationPeak: peak ? Math.round(peak.magnitude * 10) / 10 : null,
     vibrationHz: peak ? Math.round(peak.hz * 10) / 10 : null,
     droopRpm: dataset.labs?.governor?.droopRpm ?? null,
@@ -72,6 +77,52 @@ export function buildHistoryEntry({
     batterySagPercent: dataset.batterySagPercent ?? null,
     internalResistance: dataset.labs?.battery?.internalResistance ?? null
   };
+}
+
+/**
+ * What identifies a flight, independent of its file name.
+ *
+ * A pilot who copies, renames or re-exports a log is holding the same
+ * flight, and the record should say so rather than showing it twice
+ * and counting it twice towards a trend. The properties used are the
+ * ones a rename cannot touch: when the flight started, how long it
+ * ran, and how many samples it holds.
+ *
+ * Returns null when too little is known to identify the flight
+ * safely — better to keep a duplicate than to merge two real flights.
+ */
+export function flightFingerprint(entry) {
+  if (!entry) {
+    return null;
+  }
+
+  const duration = Number(entry.durationSeconds);
+
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return null;
+  }
+
+  const started =
+    entry.flightDateMs === null || entry.flightDateMs === undefined
+      ? null
+      : Number(entry.flightDateMs);
+
+  const samples = Number(entry.sampleCount);
+
+  const hasStart = Number.isFinite(started);
+  const hasSamples = Number.isFinite(samples) && samples > 0;
+
+  // Duration alone is too weak: two hovers can run the same length.
+  // One further stable property has to agree.
+  if (!hasStart && !hasSamples) {
+    return null;
+  }
+
+  return [
+    hasStart ? started : "no-start",
+    duration.toFixed(1),
+    hasSamples ? samples : "no-samples"
+  ].join("|");
 }
 
 export function recordFlight(storage, craftName, entry) {
@@ -118,18 +169,39 @@ if (craftKey === "Unknown craft") {
     history[craftKey] = [];
   }
 
-  const duplicate = history[craftKey].find(
-    (existing) =>
+  // The same flight under a second name is still one flight. Identity
+  // comes from the flight itself where it can be established, and from
+  // the file name only where it cannot — which also keeps records
+  // written before flights carried a fingerprint working.
+  const incomingFingerprint = flightFingerprint(entry);
+
+  const duplicate = history[craftKey].find((existing) => {
+    if (incomingFingerprint) {
+      const existingFingerprint = flightFingerprint(existing);
+
+      if (existingFingerprint) {
+        return existingFingerprint === incomingFingerprint;
+      }
+    }
+
+    return (
       normalizeFileName(existing.fileName) ===
       normalizeFileName(entry.fileName)
-  );
+    );
+  });
 
   if (duplicate) {
+    // Keep the name the flight was first filed under: the record reads
+    // as one flight, not as whichever copy was opened last.
+    const firstKnownName = duplicate.fileName;
+
     for (const [key, value] of Object.entries(entry)) {
       if (value !== null && value !== undefined) {
         duplicate[key] = value;
       }
     }
+
+    duplicate.fileName = firstKnownName;
   } else {
     history[craftKey].push(entry);
     // Flights with no trustworthy date keep their arrival order at
@@ -172,8 +244,52 @@ if (craftKey === "Unknown craft") {
     }
   }
 
+  // Records written before a flight could be identified may hold the
+  // same flight twice under two names. Once both have been read again
+  // they describe themselves identically, so the record folds them
+  // together here rather than carrying the pair forever — a duplicate
+  // counts towards the flights a trend needs, and would draw a trend
+  // line through one flight plotted twice.
+  history[craftKey] = collapseDuplicateFlights(history[craftKey]);
+
   saveHistory(storage, history);
   return craftKey;
+}
+
+export function collapseDuplicateFlights(flights = []) {
+  const byFingerprint = new Map();
+  const collapsed = [];
+
+  for (const flight of flights) {
+    const fingerprint = flightFingerprint(flight);
+
+    if (!fingerprint) {
+      collapsed.push(flight);
+      continue;
+    }
+
+    const existing = byFingerprint.get(fingerprint);
+
+    if (!existing) {
+      byFingerprint.set(fingerprint, flight);
+      collapsed.push(flight);
+      continue;
+    }
+
+    // Same flight: keep the entry already in the record and fill any
+    // gaps from the copy, so nothing measured is lost in the merge.
+    for (const [key, value] of Object.entries(flight)) {
+      if (
+        (existing[key] === null || existing[key] === undefined) &&
+        value !== null &&
+        value !== undefined
+      ) {
+        existing[key] = value;
+      }
+    }
+  }
+
+  return collapsed;
 }
 
 export function deleteFlight(storage, craftName, fileName) {
