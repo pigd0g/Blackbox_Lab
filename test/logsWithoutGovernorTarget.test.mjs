@@ -117,17 +117,26 @@ test("the Battery Lab reads a log that carries no governor target", () => {
   );
 });
 
-test("governor scoring still waits for a governor target", () => {
+test("governor scoring waits for a target; the hold story does not", () => {
   const result = analyzeGovernorLab({
     timeSeconds: flight.timeSeconds,
     headspeed: flight.headspeed,
     governorTarget: null
   });
 
-  assert.equal(
+  assert.ok(
     result,
+    "an ungoverned model still gets a rotor-speed result"
+  );
+  assert.equal(
+    result.mode,
+    "headspeed-hold",
+    "without a target the result is the trend-hold story"
+  );
+  assert.equal(
+    result.score,
     null,
-    "tracking error and droop are measured against a target"
+    "tracking error and droop are only SCORED against a stated target"
   );
 });
 

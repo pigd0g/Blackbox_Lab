@@ -28,37 +28,25 @@ export function analyzeGovernorLab({
   if (
     !Array.isArray(timeSeconds) ||
     !Array.isArray(headspeed) ||
-    !Array.isArray(governorTarget) ||
     headspeed.length < 100
   ) {
     return null;
   }
-if (
-  !Array.isArray(timeSeconds) ||
-  !Array.isArray(headspeed) ||
-  headspeed.length < 100
-) {
-  return null;
-}
 
-if (
-  !Array.isArray(governorTarget) ||
-  governorTarget.length < 100
-) {
-  return {
-    score: null,
-    status: "Target Unavailable",
-    story:
-      "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed stability can be viewed, but governor tracking and droop cannot be scored.",
-    droopRpm: null,
-    droopPercent: null,
-    droopTimeSeconds: null,
-    averageHeadspeed: null,
-    stableSampleCount: 0,
-    stableSegments: [],
-    metrics: []
-  };
-}
+  // A model on an ESC or external governor logs rotor speed with
+  // no target to compare it against. That is not "no result" —
+  // the rotor still answers for how steadily it held. With no
+  // stated target the reference is the headspeed's own slow
+  // trend: deviation from it is short-term instability, while
+  // deliberate throttle-curve changes move the trend itself and
+  // are not charged against the hold.
+  const hasUsableTarget =
+    Array.isArray(governorTarget) &&
+    governorTarget.some((value) => Number(value) > 300);
+
+  if (!hasUsableTarget) {
+    return analyzeHeadspeedHold({ timeSeconds, headspeed });
+  }
   const flightPhase = detectStableFlightPhase({
     timeSeconds,
     headspeed,
@@ -430,6 +418,150 @@ if (
       {
         label: "Stable samples used",
         value: validSampleCount.toLocaleString()
+      }
+    ]
+  };
+}
+// ------------------------------------------------------
+// analyzeHeadspeedHold — the rotor story for models that
+// state no governor target.
+//
+// The reference is the headspeed's own 2-second trend.
+// Short-term deviation from it (quarter-second smoothed)
+// is instability the pilot feels; slow changes are the
+// throttle curve doing its job and stay out of the
+// verdict. Without a stated target this never claims
+// more than "worth a look" — there is no contract to
+// hold the rotor to, only its own steadiness.
+// ------------------------------------------------------
+function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
+  const inFlightIndexes = detectInFlightSamples({
+    timeSeconds,
+    headspeed
+  });
+
+  if (!inFlightIndexes) {
+    return {
+      score: null,
+      status: "insufficient",
+      mode: "headspeed-hold",
+      hasRotorSpeedData: false,
+      movedDuringRecording: null,
+      story:
+        "This log states no governor target and records no usable rotor speed, so rotor-speed hold cannot be assessed.",
+      droopRpm: null,
+      droopPercent: null,
+      droopTimeSeconds: null,
+      averageHeadspeed: null,
+      stableSampleCount: 0,
+      stableSegments: [],
+      metrics: []
+    };
+  }
+
+  const sampleRate = estimateSampleRate(timeSeconds) ?? 100;
+  const trend = buildRollingMean(
+    headspeed,
+    Math.max(5, Math.round(sampleRate * 2))
+  );
+  const shortTerm = buildRollingMean(
+    headspeed,
+    Math.max(3, Math.round(sampleRate * 0.25))
+  );
+
+  let meanSum = 0;
+  let meanCount = 0;
+  let worstDeviation = 0;
+  let worstTime = null;
+
+  for (const index of inFlightIndexes) {
+    const actual = Number(headspeed[index]);
+
+    if (Number.isFinite(actual)) {
+      meanSum += actual;
+      meanCount += 1;
+    }
+
+    const deviation =
+      Number.isFinite(shortTerm[index]) &&
+      Number.isFinite(trend[index])
+        ? Math.abs(shortTerm[index] - trend[index])
+        : null;
+
+    if (
+      Number.isFinite(deviation) &&
+      deviation > worstDeviation
+    ) {
+      worstDeviation = deviation;
+      worstTime = Number(timeSeconds[index]);
+    }
+  }
+
+  if (meanCount < 100) {
+    return null;
+  }
+
+  const meanRpm = meanSum / meanCount;
+  const deviationPercent =
+    meanRpm > 0 ? (worstDeviation / meanRpm) * 100 : 0;
+
+  // Never "attention" without a stated target: there is no
+  // contract being broken, only steadiness worth reviewing.
+  const status = deviationPercent > 3 ? "watch" : "good";
+
+  const story =
+    status === "good"
+      ? `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+          meanRpm
+        )} rpm and stayed within ${Math.round(
+          worstDeviation
+        )} rpm (${deviationPercent.toFixed(
+          1
+        )}%) of it. Deliberate headspeed changes are not counted against this.`
+      : `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+          meanRpm
+        )} rpm, with a largest short-term swing of ${Math.round(
+          worstDeviation
+        )} rpm (${deviationPercent.toFixed(1)}%)${
+          Number.isFinite(worstTime)
+            ? ` at ${worstTime.toFixed(1)} s`
+            : ""
+        }. Worth a look at that moment on the chart.`;
+
+  return {
+    score: null,
+    status,
+    mode: "headspeed-hold",
+    hasRotorSpeedData: true,
+    story,
+    droopRpm: Math.round(worstDeviation * 10) / 10,
+    droopPercent:
+      Math.round(deviationPercent * 100) / 100,
+    droopTimeSeconds:
+      Number.isFinite(worstTime)
+        ? Math.round(worstTime * 100) / 100
+        : null,
+    averageHeadspeed: Math.round(meanRpm),
+    stableSampleCount: meanCount,
+    stableSegments: [],
+    metrics: [
+      {
+        label: "Average headspeed",
+        value: `${Math.round(meanRpm)} rpm`
+      },
+      {
+        label: "Governor target",
+        value: "not logged"
+      },
+      {
+        label: "Largest short-term swing",
+        value: `${Math.round(
+          worstDeviation
+        )} rpm (${deviationPercent.toFixed(1)}%)`
+      },
+      {
+        label: "In-flight samples used",
+        value: meanCount.toLocaleString()
       }
     ]
   };

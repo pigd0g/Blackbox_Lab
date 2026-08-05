@@ -314,6 +314,37 @@ function rotorSpeedVerdictFromLab(governorLab) {
     return null;
   }
 
+  // Models that state no governor target still get a rotor
+  // story: hold judged against the rotor's own trend. Without
+  // a target there is no contract to break, so this card never
+  // goes past "watch".
+  if (
+    governorLab.mode === "headspeed-hold" &&
+    governorLab.status !== "insufficient" &&
+    Number.isFinite(governorLab.droopRpm)
+  ) {
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: governorLab.status,
+      headline:
+        governorLab.status === "good"
+          ? `Headspeed held steady near ${governorLab.averageHeadspeed} rpm`
+          : `Headspeed swung ${Math.round(
+              governorLab.droopRpm
+            )} rpm short-term`,
+      detail: `No governor target is logged, so hold is judged against the rotor's own trend: largest short-term swing ${Math.round(
+        governorLab.droopRpm
+      )} rpm (${governorLab.droopPercent.toFixed(1)}%).`,
+      action:
+        governorLab.status === "good"
+          ? "Nothing to change from this result."
+          : "Worth a look at that moment in the Governor Lab chart — deliberate headspeed changes are not counted against this.",
+      screen: "governor",
+      evidence: "Headspeed Over Time chart, Governor Lab"
+    };
+  }
+
   if (
     governorLab.status === "insufficient" ||
     !Number.isFinite(governorLab.droopRpm)
