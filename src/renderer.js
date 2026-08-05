@@ -40,6 +40,10 @@ import {
   resolveFlightDateMs
 } from "./analysis/metadataReader.js";
 import {
+  isSettingsDumpFile,
+  LARGEST_PLAUSIBLE_DUMP_BYTES
+} from "./analysis/fileIdentification.js";
+import {
   computeNoiseSpectrum,
   estimateSampleRate
 } from "./analysis/dsp/fft.js";
@@ -349,6 +353,10 @@ openLogLock.addEventListener("click", (event) => {
 
 let loadedLog = null;
 
+// The helicopter whose flight is open, so settings opened afterwards
+// can be filed against it.
+let currentCraftName = null;
+
 // ---- load progress overlay ----
 // The inline status lives on Home. A log opened from any other
 // screen (sidebar button, drag & drop) would load invisibly and
@@ -411,10 +419,70 @@ loadStayHere.addEventListener("click", () => {
   loadProgress.hidden = true;
 });
 
+const DUMP_SNIFF_BYTES = 64 * 1024;
+
+async function looksLikeSettingsDump(file) {
+  if (
+    file.size > LARGEST_PLAUSIBLE_DUMP_BYTES ||
+    /\.(bbl|bfl|csv)$/i.test(file.name)
+  ) {
+    return false;
+  }
+
+  return isSettingsDumpFile({
+    name: file.name,
+    size: file.size,
+    head: await file.slice(0, DUMP_SNIFF_BYTES).text()
+  });
+}
+
+/**
+ * Send a settings dump to the helicopter it describes.
+ *
+ * Returns true when the file was handled here, so the caller stops
+ * treating it as a flight.
+ */
+async function routeSettingsDump(file) {
+  if (!(await looksLikeSettingsDump(file))) {
+    return false;
+  }
+
+  // Settings explain a flight; without one loaded there is nothing to
+  // attach them to, and no way to know which helicopter they belong to.
+  if (!currentCraftName) {
+    setLoadStatus(
+      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home — the settings are filed against that helicopter.`
+    );
+    finishLoadProgress(false);
+    return true;
+  }
+
+  const text = await file.text();
+
+  openCraftCardPanel(currentCraftName);
+  stageCraftDump(text);
+  navigation.showScreen("home");
+
+  setLoadStatus(
+    `${file.name} read into your ${currentCraftName} model card — the flight stays open.`
+  );
+  finishLoadProgress(true);
+  return true;
+}
+
 async function loadFromFile(file) {
   beginLoadProgress();
   setLoadStatus(`Reading ${file.name}...`);
   await new Promise((resolve) => setTimeout(resolve, 30));
+
+  // A settings dump describes the machine, not a flight. Opening one
+  // here is the natural thing to try, so it is taken as "attach this
+  // to my helicopter" rather than as a file to display in place of the
+  // flight — which would close the flight the settings are meant to
+  // explain.
+  if (await routeSettingsDump(file)) {
+    return;
+  }
 
   const logData = await readLogFile(file);
 
@@ -1100,6 +1168,10 @@ if (
   }
 
   return {
+    // Which helicopter this flight came from. A before/after
+    // comparison is only a before/after when both are the same
+    // machine; otherwise the difference is the aircraft.
+    craftName: getMetadataValue(lines, "Craft name"),
     pidScore: Number.isFinite(pidAnalysis?.score) ? pidAnalysis.score : null,
     // Carried so a comparison can say how much each side's score rests
     // on. Two tracking numbers are only worth subtracting when both
@@ -2684,6 +2756,10 @@ function analyzeFlight(flightIndex) {
   const rawCraftName = getMetadataValue(currentFlightLines, "Craft name");
   const craftKeyName =
     rawCraftName === "Not found" ? "Unknown craft" : rawCraftName;
+
+  // Remembered so a settings dump opened afterwards knows which
+  // helicopter it belongs to.
+  currentCraftName = craftKeyName;
 
   if (currentDataset) {
     const craftName = rawCraftName;

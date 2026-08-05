@@ -96,6 +96,36 @@ export function comparableEvidence(beforeConfidence, afterConfidence) {
   };
 }
 
+/**
+ * Are these two flights the same helicopter?
+ *
+ * Comparing a change means holding the machine still and varying one
+ * thing. Two different helicopters differ in every way at once, so the
+ * numbers are worth showing but the difference is not a verdict on
+ * anything the pilot did.
+ *
+ * Unknown names are treated as the same aircraft: a log without a
+ * craft name is common, and refusing to compare on that basis would
+ * take a working feature away from the pilots most likely to need it.
+ */
+export function sameAircraft(beforeCraft, afterCraft) {
+  const clean = (name) => {
+    const text = String(name ?? "").trim();
+    return !text || text === "Not found" || text === "Unknown craft"
+      ? null
+      : text.toLowerCase();
+  };
+
+  const before = clean(beforeCraft);
+  const after = clean(afterCraft);
+
+  if (!before || !after) {
+    return { known: false, same: true, before, after };
+  }
+
+  return { known: true, same: before === after, before, after };
+}
+
 export function compareFlights(baseline, comparison) {
   const rows = [];
 
@@ -231,21 +261,33 @@ export function compareFlights(baseline, comparison) {
   // "Consider reverting it" tells a pilot to undo work. It has to rest
   // on something measured on both sides — with nothing comparable to
   // count, the honest answer is that this pair does not answer the
-  // question, not a direction to act on.
+  // question, not a direction to act on. The same applies when the two
+  // flights are different helicopters: every number will differ, and
+  // none of it is a verdict on a change.
   const comparedRows = better + worse;
+  const aircraft = sameAircraft(baseline.craftName, comparison.craftName);
 
   const summary =
     rows.length === 0
       ? "Not enough shared data between the two flights to compare."
-      : comparedRows === 0
-        ? uncomparable > 0
-          ? "These two flights cannot be compared usefully — see the rows below for what was missing."
-          : "No meaningful change between these two flights."
-        : worse === 0 && better > 0
-          ? "Your change helped — nothing got worse. That's a keeper."
-          : better === 0 && worse > 0
-            ? "This change went the wrong way — consider reverting it."
-            : "Mixed result: some things improved, others got worse. Trade-off territory.";
+      : !aircraft.same
+        ? `These flights are different helicopters (${aircraft.before} and ${aircraft.after}), so the figures below describe two machines rather than a change to one.`
+        : comparedRows === 0
+          ? uncomparable > 0
+            ? "These two flights cannot be compared usefully — see the rows below for what was missing."
+            : "No meaningful change between these two flights."
+          : worse === 0 && better > 0
+            ? "Your change helped — nothing got worse. That's a keeper."
+            : better === 0 && worse > 0
+              ? "This change went the wrong way — consider reverting it."
+              : "Mixed result: some things improved, others got worse. Trade-off territory.";
 
-  return { rows, summary, better, worse, uncomparable };
+  return {
+    rows,
+    summary,
+    better,
+    worse,
+    uncomparable,
+    sameAircraft: aircraft.same
+  };
 }

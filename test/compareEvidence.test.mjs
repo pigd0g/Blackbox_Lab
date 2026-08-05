@@ -119,3 +119,41 @@ test("a missing confidence is not treated as thin", () => {
   // must not silently stop every comparison from working.
   assert.equal(comparableEvidence(null, null).comparable, true);
 });
+
+test("two different helicopters are not a before and after", () => {
+  const result = compareFlights(
+    { ...flight({ score: 95, confidence: solid }), craftName: "md500e" },
+    { ...flight({ score: 60, confidence: solid }), craftName: "Bell 222UT" }
+  );
+
+  assert.doesNotMatch(
+    result.summary,
+    /revert/i,
+    "a different machine is not a change the pilot made"
+  );
+  assert.match(result.summary, /different helicopters/i);
+  assert.equal(result.sameAircraft, false);
+});
+
+test("the same helicopter compares as before", () => {
+  const result = compareFlights(
+    { ...flight({ score: 95, confidence: solid }), craftName: "md500e" },
+    { ...flight({ score: 60, confidence: solid }), craftName: "MD500E" }
+  );
+
+  assert.equal(result.sameAircraft, true, "the name is matched case-insensitively");
+  assert.match(result.summary, /wrong way|revert/i);
+});
+
+test("an unnamed craft does not block comparison", () => {
+  // Plenty of logs carry no craft name; refusing to compare on that
+  // basis would remove the feature from the pilots most likely to
+  // need it.
+  const result = compareFlights(
+    flight({ score: 95, confidence: solid }),
+    flight({ score: 60, confidence: solid })
+  );
+
+  assert.equal(result.sameAircraft, true);
+  assert.match(result.summary, /wrong way|revert/i);
+});

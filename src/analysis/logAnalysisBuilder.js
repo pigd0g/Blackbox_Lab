@@ -830,7 +830,9 @@ const governorLabAnalysis = analyzeGovernorLab({
     extraSummary = `
       File Type: ${fileType}<br>
       Status: Settings file detected<br>
-      Next: CLI Reader will extract governor, filters, PIDs, ports, GPS, and receiver setup.
+      Settings belong to a helicopter rather than to a flight: open the
+      flight they go with, then add this file from the model card on
+      Home. Names and identifiers are removed before anything is kept.
     `;
 
 
