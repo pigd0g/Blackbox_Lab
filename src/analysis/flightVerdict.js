@@ -348,17 +348,54 @@ function rotorSpeedVerdictFromLab(governorLab) {
   const droopRpm = governorLab.droopRpm;
   const droopPercent = governorLab.droopPercent;
 
+  // A deep sustained dip under load anywhere in the flight is
+  // the headline, and the motor output at that moment decides
+  // what the card recommends: at the ceiling, the fix is power,
+  // not governor gain.
+  const flightDipSevere =
+    Number.isFinite(governorLab.flightDroopPercent) &&
+    governorLab.flightDroopPercent > 8;
+
+  if (flightDipSevere) {
+    const outputAtCeiling =
+      Number.isFinite(governorLab.flightDroopOutputPercent) &&
+      governorLab.flightDroopOutputPercent >= 95;
+
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: "attention",
+      headline: `Rotor fell ${Math.round(
+        governorLab.flightDroopRpm
+      )} rpm under load`,
+      detail: `A sustained ${governorLab.flightDroopPercent.toFixed(
+        1
+      )}% dip below target${
+        Number.isFinite(governorLab.flightDroopOutputPercent)
+          ? ` with the motor output at ${Math.round(
+              governorLab.flightDroopOutputPercent
+            )}%`
+          : ""
+      }.`,
+      action: outputAtCeiling
+        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the moment."
+        : "Review the worst-droop event in Governor Lab before changing gain or power-system settings.",
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
+    };
+  }
+
   if (governorLab.status === "attention") {
     return {
       key: "rotor",
       title: "Rotor Speed",
       status: "attention",
-      headline: `Largest stable-flight dip ${Math.round(
+      headline: `Sustained dip of ${Math.round(
         droopRpm
-      )} rpm`,
+      )} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
         1
-      )}% below target during stable flight.`,
+      )}% below target, held for a quarter second or longer.`,
       action:
         "Review the matching event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
@@ -371,9 +408,9 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: "watch",
-      headline: `Largest stable-flight dip ${Math.round(
+      headline: `Sustained dip of ${Math.round(
         droopRpm
-      )} rpm`,
+      )} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
         1
       )}% below target. Review the event before making a governor change.`,
@@ -388,8 +425,8 @@ function rotorSpeedVerdictFromLab(governorLab) {
     key: "rotor",
     title: "Rotor Speed",
     status: "good",
-    headline: "Rock-solid stable-flight headspeed",
-    detail: `Largest stable-flight dip was ${Math.round(
+    headline: "Rock-solid headspeed",
+    detail: `Largest sustained dip was ${Math.round(
       droopRpm
     )} rpm (${droopPercent.toFixed(1)}%).`,
     action: "Nothing to change from this result.",

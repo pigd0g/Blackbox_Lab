@@ -25,7 +25,7 @@ function getMedian(values) {
   return sorted[middle];
 }
 
-function estimateSampleRate(timeSeconds) {
+export function estimateSampleRate(timeSeconds) {
   if (!Array.isArray(timeSeconds) || timeSeconds.length < 3) {
     return null;
   }
@@ -394,7 +394,7 @@ export function hasUsableRotorSpeed(values) {
   });
 }
 
-function buildRollingMean(values, windowSamples) {
+export function buildRollingMean(values, windowSamples) {
   const smoothed = new Array(values.length).fill(null);
 
   const half = Math.max(1, Math.round(windowSamples / 2));

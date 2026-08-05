@@ -1145,7 +1145,18 @@ if (
 
   // ---- labs + verdict ----
   const labs = {
-    governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
+    governor: analyzeGovernorLab({
+      timeSeconds,
+      headspeed,
+      governorTarget,
+      // Output context for the worst-droop event: a dip with the
+      // throttle at its ceiling is a power limit, not a gain issue.
+      motorOutput:
+        Array.isArray(escThrottle) &&
+        escThrottle.some((value) => Number(value) > 0)
+          ? escThrottle
+          : motor
+    }),
    esc: analyzeEscLab({
   timeSeconds,
   motor,
