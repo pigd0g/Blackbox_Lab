@@ -372,3 +372,28 @@ export function groupByGovernorTarget({
     }))
     .sort((first, second) => first.targetRpm - second.targetRpm);
 }
+
+// Every consecutive run inside a sorted index list — the
+// multi-window spectra average across all of a bank's stable
+// stretches, not only its longest one.
+export function allConsecutiveRuns(indexes) {
+  if (!Array.isArray(indexes) || indexes.length === 0) {
+    return [];
+  }
+
+  const runs = [];
+  let runStart = indexes[0];
+  let runLength = 1;
+
+  for (let i = 1; i <= indexes.length; i += 1) {
+    if (indexes[i] === indexes[i - 1] + 1) {
+      runLength += 1;
+    } else {
+      runs.push({ startIndex: runStart, length: runLength });
+      runStart = indexes[i];
+      runLength = 1;
+    }
+  }
+
+  return runs;
+}

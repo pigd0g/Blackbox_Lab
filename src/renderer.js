@@ -45,6 +45,7 @@ import {
 } from "./analysis/fileIdentification.js";
 import {
   computeNoiseSpectrum,
+  computeNoiseSpectrumOverRuns,
   estimateSampleRate
 } from "./analysis/dsp/fft.js";
 import {
@@ -78,7 +79,8 @@ import {
   explainLoadEvent,
   isCollectiveDriven,
   groupByGovernorTarget,
-  longestConsecutiveRun
+  longestConsecutiveRun,
+  allConsecutiveRuns
 } from "./analysis/evidenceViews.js";
 import { analyzeProfileResponse } from "./analysis/profilePidBreakdown.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
@@ -825,70 +827,58 @@ const spectrumFlightPhase =
       alignedGovernorTarget
   });
 
-const longestSpectrumSegment =
-  spectrumFlightPhase.segments
-    .filter(
-      (segment) =>
-        Number.isInteger(
-          segment.startIndex
-        ) &&
-        segment.sampleCount >=
-          fftWindowSize
-    )
-    .sort(
-      (first, second) =>
-        second.sampleCount -
-        first.sampleCount
-    )[0] ?? null;
+// The noise picture is averaged across EVERY stable run of the
+// flight, not read from one slice. A single window makes the
+// spectrum hostage to where the slice happens to land: an
+// intermittent shake scores very differently between two flights
+// of the same machine purely by window luck.
+const minimumSpectrumRun = 1024;
 
-const spectrumWindowStart =
-  longestSpectrumSegment
-    ? longestSpectrumSegment.startIndex +
-      Math.floor(
-        (
-          longestSpectrumSegment.sampleCount -
-          fftWindowSize
-        ) / 2
-      )
-    : null;
+const stableSpectrumRuns = (columnName) => {
+  if (!columnName) {
+    return [];
+  }
 
-const buildStableSpectrumSamples =
-  (columnName) => {
+  const values = alignedColumnValues(columnName);
+  const runs = [];
+
+  for (const segment of spectrumFlightPhase.segments ?? []) {
     if (
-      !Number.isInteger(
-        spectrumWindowStart
-      )
+      !Number.isInteger(segment.startIndex) ||
+      segment.sampleCount < minimumSpectrumRun
     ) {
-      return [];
+      continue;
     }
 
-    const values =
-      alignedColumnValues(columnName)
-        .slice(
-          spectrumWindowStart,
-          spectrumWindowStart +
-            fftWindowSize
-        );
+    const run = values.slice(
+      segment.startIndex,
+      segment.startIndex + segment.sampleCount
+    );
 
-    return (
-      values.length === fftWindowSize &&
-      values.every(Number.isFinite)
-    )
-      ? values
-      : [];
-  };
+    if (run.every(Number.isFinite)) {
+      runs.push(run);
+    }
+  }
+
+  return runs;
+};
+
+const hasSpectrumRuns = (
+  spectrumFlightPhase.segments ?? []
+).some(
+  (segment) =>
+    Number.isInteger(segment.startIndex) &&
+    segment.sampleCount >= minimumSpectrumRun
+);
 
 const spectra = [];
 
-if (
-  sampleRate &&
-  longestSpectrumSegment
-) {
+if (sampleRate && hasSpectrumRuns) {
   gyroColumnNames.forEach(
     (name, index) => {
       const spectrum =
-        computeNoiseSpectrum(
-          buildStableSpectrumSamples(name),
+        computeNoiseSpectrumOverRuns(
+          stableSpectrumRuns(name),
           sampleRate,
           {
             segmentSize: fftWindowSize
@@ -982,10 +972,8 @@ if (
     filteredColumns[0];
 
   filteredSpectrumStrongest =
-    computeNoiseSpectrum(
-      buildStableSpectrumSamples(
-        filteredName
-      ),
+    computeNoiseSpectrumOverRuns(
+      stableSpectrumRuns(filteredName),
       sampleRate,
       {
         segmentSize: fftWindowSize
@@ -1050,26 +1038,29 @@ if (
     const filteredName =
       filteredColumns[strongestAxisIndex] ?? filteredColumns[0];
 
-    const bankWindowSamples = (columnName, startIndex) => {
+    // A bank's spectrum averages across all of its stable runs,
+    // matching the flight-wide spectra: one slice per bank made
+    // the per-bank story hostage to where that slice landed.
+    const bankRunSamples = (columnName, runs) => {
       if (!columnName) {
         return [];
       }
 
-      const values = alignedColumnValues(columnName).slice(
-        startIndex,
-        startIndex + fftWindowSize
-      );
+      const values = alignedColumnValues(columnName);
 
-      return values.length === fftWindowSize &&
-        values.every(Number.isFinite)
-        ? values
-        : [];
+      return runs
+        .filter((run) => run.length >= minimumSpectrumRun)
+        .map((run) =>
+          values.slice(run.startIndex, run.startIndex + run.length)
+        )
+        .filter((run) => run.every(Number.isFinite));
     };
 
     return banks.map((bank) => {
-      const run = longestConsecutiveRun(bank.indexes);
+      const runs = allConsecutiveRuns(bank.indexes);
+      const longestRun = longestConsecutiveRun(bank.indexes);
 
-      if (!run || run.length < fftWindowSize) {
+      if (!longestRun || longestRun.length < minimumSpectrumRun) {
         return {
           targetRpm: bank.targetRpm,
           stableSampleCount: bank.indexes.length,
@@ -1077,12 +1068,8 @@ if (
         };
       }
 
-      const windowStart =
-        run.startIndex +
-        Math.floor((run.length - fftWindowSize) / 2);
-
-      const unfilteredSpectrum = computeNoiseSpectrum(
-        bankWindowSamples(unfilteredName, windowStart),
+      const unfilteredSpectrum = computeNoiseSpectrumOverRuns(
+        bankRunSamples(unfilteredName, runs),
         sampleRate,
         { segmentSize: fftWindowSize }
       );
@@ -1096,22 +1083,30 @@ if (
       }
 
       const filteredSpectrum = hasOwnUnfiltered(headerLine)
-        ? computeNoiseSpectrum(
-            bankWindowSamples(filteredName, windowStart),
+        ? computeNoiseSpectrumOverRuns(
+            bankRunSamples(filteredName, runs),
             sampleRate,
             { segmentSize: fftWindowSize }
           )
         : null;
 
-      const bankHeadspeed = windowStats(
-        alignedHeadspeed,
-        windowStart,
-        windowStart + fftWindowSize - 1
-      );
+      // The bank's rpm is read over its whole stable set, not a
+      // single window, to match the spectra.
+      const bankRpm = (() => {
+        let sum = 0;
+        let count = 0;
 
-      const bankRpm = bankHeadspeed
-        ? bankHeadspeed.average
-        : bank.targetRpm;
+        for (const index of bank.indexes) {
+          const value = Number(alignedHeadspeed[index]);
+
+          if (Number.isFinite(value) && value > 0) {
+            sum += value;
+            count += 1;
+          }
+        }
+
+        return count > 0 ? sum / count : bank.targetRpm;
+      })();
 
       return {
         targetRpm: bank.targetRpm,

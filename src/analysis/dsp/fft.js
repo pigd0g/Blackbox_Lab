@@ -179,3 +179,91 @@ export function estimateSampleRate(timeValuesMicroseconds) {
 
   return (timeValuesMicroseconds.length - 1) / spanSeconds;
 }
+
+// ------------------------------------------------------
+// computeNoiseSpectrumOverRuns(runs, sampleRateHz, options)
+//
+// One 4-second slice is a coin flip: an intermittent shake
+// lands inside it on one flight and outside it on the next,
+// and two logs of the same machine tell different stories.
+// This averages Welch spectra across every stable run the
+// flight offers — same bins, power-weighted by how many
+// segments each run contributed — so the noise picture is
+// the flight's, not the slice's.
+// ------------------------------------------------------
+export function computeNoiseSpectrumOverRuns(runs, sampleRateHz, options = {}) {
+  if (!Array.isArray(runs) || !Number.isFinite(sampleRateHz)) {
+    return null;
+  }
+
+  const usable = runs.filter(
+    (run) => run && run.length >= 64
+  );
+
+  if (usable.length === 0) {
+    return null;
+  }
+
+  const longest = usable.reduce(
+    (best, run) => Math.max(best, run.length),
+    0
+  );
+
+  const maxSegment = options.segmentSize ?? 4096;
+
+  // Every run must share one segment size or the bins differ
+  // and cannot be averaged. The longest run sets it; shorter
+  // runs that cannot fill one segment sit this out.
+  let segmentSize = 64;
+
+  while (segmentSize * 2 <= Math.min(longest, maxSegment)) {
+    segmentSize *= 2;
+  }
+
+  const half = segmentSize / 2;
+  const power = new Float64Array(half);
+  let totalSegments = 0;
+  let frequencies = null;
+
+  for (const run of usable) {
+    if (run.length < segmentSize) {
+      continue;
+    }
+
+    const spectrum = computeNoiseSpectrum(run, sampleRateHz, {
+      segmentSize
+    });
+
+    if (!spectrum || spectrum.segmentSize !== segmentSize) {
+      continue;
+    }
+
+    for (let bin = 0; bin < half; bin += 1) {
+      power[bin] +=
+        spectrum.magnitudes[bin] *
+        spectrum.magnitudes[bin] *
+        spectrum.segments;
+    }
+
+    totalSegments += spectrum.segments;
+    frequencies = spectrum.frequencies;
+  }
+
+  if (totalSegments === 0 || !frequencies) {
+    return null;
+  }
+
+  const magnitudes = new Float64Array(half);
+
+  for (let bin = 0; bin < half; bin += 1) {
+    magnitudes[bin] = Math.sqrt(power[bin] / totalSegments);
+  }
+
+  return {
+    frequencies,
+    magnitudes,
+    segmentSize,
+    segments: totalSegments,
+    sampleRateHz
+  };
+}
