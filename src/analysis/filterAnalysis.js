@@ -1280,6 +1280,20 @@ axisErrorAverage: yawAxisErrorAverage,
 })
   });
   }
+
+// "Cleanest" is a placing, and a placing needs a field. A flight flown
+// at one headspeed has nothing to be cleanest against, so the profile
+// is described as the one that was measured. Only the clean label is
+// comparative — a profile that earns "Monitor" or "Needs Review" earns
+// it on its own reading, so those stand however many profiles there
+// are, and the score reads the same statuses as before.
+if (profileSpecificFilterAnalysis.length === 1) {
+  const onlyProfile = profileSpecificFilterAnalysis[0];
+
+  if (onlyProfile.mechanicalFinding?.status === "Cleanest Profile") {
+    onlyProfile.mechanicalFinding.status = "Only Profile Measured";
+  }
+}
   
 
 

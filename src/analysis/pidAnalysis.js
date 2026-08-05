@@ -928,6 +928,18 @@ return {
     Number.isFinite(profile.averageTrackingError)
   );
 
+// Best and worst are answers to "compared with what?". One profile
+// answers it with itself: the same headspeed gets named as both the
+// lowest and the highest tracking error, which reads as a finding and
+// is only a reflection. Below two profiles there is no comparison to
+// report — the flight simply ran at one headspeed.
+const canCompareProfiles = validProfileTrackingResults.length >= 2;
+
+const onlyTrackingProfile =
+  validProfileTrackingResults.length === 1
+    ? validProfileTrackingResults[0]
+    : null;
+
 const bestTrackingProfile =
   validProfileTrackingResults.reduce(
     (best, profile) => {
@@ -1782,9 +1794,11 @@ const pidSummary = [
       } showed possible sustained saturation.`
     : "No sustained PID-term saturation pattern was identified.",
 
-  bestTrackingProfile
+  canCompareProfiles
     ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
-    : "A best tracking profile could not be identified."
+    : onlyTrackingProfile
+      ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
+      : "A best tracking profile could not be identified."
 ];
 const hasCompleteTrackingEvidence =
   validAxisCount === 3 &&
@@ -2565,13 +2579,22 @@ highestTrackingErrorAxis
   ];
 }),
 
-bestTrackingProfile
-  ? `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(2)}.`
-  : "A best tracking profile could not be identified.",
-
-worstTrackingProfile
-  ? `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(2)}.`
-  : "A worst tracking profile could not be identified.",
+...(canCompareProfiles
+  ? [
+      `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+        2
+      )}.`,
+      `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(
+        2
+      )}.`
+    ]
+  : onlyTrackingProfile
+    ? [
+        `${onlyTrackingProfile.targetRpm} RPM was the only headspeed flown, with an average tracking error of ${onlyTrackingProfile.averageTrackingError.toFixed(
+          2
+        )}. Fly a second headspeed to compare them.`
+      ]
+    : ["Tracking could not be compared across headspeeds."]),
   ...pidCommandTermContributionPercentages.map(
   (axisResult) =>
     `${axisResult.axis} command-event PID contribution from ${
