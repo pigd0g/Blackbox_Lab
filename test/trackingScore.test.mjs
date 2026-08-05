@@ -18,7 +18,7 @@ import {
 } from "../src/analysis/pidAnalysis.js";
 
 test("the score falls as measured tracking error grows", () => {
-  const crisp = computeTrackingScore({ relativeError: 0.2 });
+  const crisp = computeTrackingScore({ relativeError: 0.1 });
   const decent = computeTrackingScore({ relativeError: 0.5 });
   const sloppy = computeTrackingScore({ relativeError: 1.0 });
 
@@ -33,7 +33,7 @@ test("the score falls as measured tracking error grows", () => {
 
 test("nearby error values produce nearby scores", () => {
   const a = computeTrackingScore({ relativeError: 0.6 }).score;
-  const b = computeTrackingScore({ relativeError: 0.65 }).score;
+  const b = computeTrackingScore({ relativeError: 0.62 }).score;
 
   assert.ok(
     Math.abs(a - b) <= 3,

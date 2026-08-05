@@ -154,13 +154,17 @@ export const TRACKING_SCORE_TUNING = {
   // keeps a hover-only log from dividing by nearly zero.
   SETPOINT_ACTIVITY_FLOOR: 25,
 
-  // Relative error at or below this deducts nothing.
-  FULL_MARKS_RELATIVE_ERROR: 0.25,
+  // Relative error at or below this deducts nothing. Fleet p05
+  // is 0.124 across 179 measured flights, so the cleanest decile
+  // keeps full marks.
+  FULL_MARKS_RELATIVE_ERROR: 0.15,
 
-  // Relative error at or above this takes the full deduction.
-  ZERO_MARKS_RELATIVE_ERROR: 1.4,
+  // Relative error at or above this takes the full deduction —
+  // beyond the fleet's p95 of 0.549, with headroom for genuinely
+  // rough machines (fleet max observed: 0.85).
+  ZERO_MARKS_RELATIVE_ERROR: 0.75,
 
-  MAX_TRACKING_DEDUCTION: 55,
+  MAX_TRACKING_DEDUCTION: 50,
 
   BALANCE_DEDUCTION_PER_AXIS: 10,
   MAX_BALANCE_DEDUCTION: 25,
