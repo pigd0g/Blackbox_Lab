@@ -11,7 +11,8 @@ import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  hasUsableRotorSpeed
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
 
@@ -470,12 +471,124 @@ const alignedHeadspeedSamples = headspeedSamples
     Number.isFinite(sample.targetRpm)
   );
      
+// Airframe motion, used only when no rotor speed was logged.
+// It lets the app tell "no RPM sensor" apart from "this was a
+// bench run and the model never moved".
+const gyroActivityByRow = (() => {
+  // Adapter headers may arrive quoted ("gyroADC[0]") — strip the
+  // quotes before comparing, or quoted logs silently lose their
+  // motion signal.
+  const unquoted = (header) =>
+    String(header).trim().replace(/^"|"$/g, "").toLowerCase();
+
+  const axisSamples = [0, 1, 2]
+    .map((axis) => {
+      const columnName =
+        headers.find(
+          (header) => unquoted(header) === `gyroadc[${axis}]`
+        ) ??
+        headers.find(
+          (header) => unquoted(header) === `gyroraw[${axis}]`
+        ) ??
+        null;
+
+      return columnName
+        ? getColumnSamples(
+            lines,
+            telemetryHeaderIndex,
+            columnName
+          )
+        : [];
+    })
+    .filter((samples) => samples.length > 0);
+
+  if (axisSamples.length === 0) {
+    return null;
+  }
+
+  const totals = new Map();
+
+  for (const samples of axisSamples) {
+    for (const sample of samples) {
+      const value = Number(sample.value);
+
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+
+      totals.set(
+        sample.rowIndex,
+        (totals.get(sample.rowIndex) ?? 0) + Math.abs(value)
+      );
+    }
+  }
+
+  return totals;
+})();
+
 const headspeedProfiles =
   detectHeadspeedProfiles(
     headspeedValues,
     governorTargetValues,
     alignedHeadspeedSamples
   );
+
+// Without rotor-speed data there are no headspeed profiles, but
+// stick-following needs none of that: the tracking checks only need
+// to know WHEN the machine was flying. Airframe motion answers it,
+// so a no-RPM log still earns a tuning read — labelled as such, and
+// with its confidence capped by the missing rotor context.
+const motionProfiles = (() => {
+  if (
+    headspeedProfiles.length > 0 ||
+    !gyroActivityByRow ||
+    hasUsableRotorSpeed(headspeedValues)
+  ) {
+    return [];
+  }
+
+  const rows = [...gyroActivityByRow.entries()]
+    .map(([rowIndex, activityValue]) => ({
+      rowIndex,
+      activityValue,
+      timeSeconds: timeByRow.get(rowIndex)
+    }))
+    .filter((row) => Number.isFinite(row.timeSeconds))
+    .sort((a, b) => a.rowIndex - b.rowIndex);
+
+  if (rows.length < 100) {
+    return [];
+  }
+
+  const motionPhase = detectStableFlightPhase({
+    timeSeconds: rows.map((row) => row.timeSeconds),
+    headspeed: [],
+    governorTarget: [],
+    activity: rows.map((row) => row.activityValue)
+  });
+
+  const stableIndexes = motionPhase.stableIndexes ?? [];
+
+  if (stableIndexes.length < 1000) {
+    return [];
+  }
+
+  return [
+    {
+      targetRpm: null,
+      basis: "motion",
+      sampleCount: stableIndexes.length,
+      sampleIndexes: stableIndexes.map(
+        (position) => rows[position].rowIndex
+      )
+    }
+  ];
+})();
+
+const pidProfiles =
+  headspeedProfiles.length > 0
+    ? headspeedProfiles
+    : motionProfiles;
 
 
       const keyHeaders = [
@@ -579,58 +692,9 @@ const headspeedProfiles =
 pidAnalysis = analyzePids(
   analysisContext,
   lines,
- headspeedProfiles
+  pidProfiles
 );
-// Airframe motion, used only when no rotor speed was logged.
-// It lets the app tell "no RPM sensor" apart from "this was a
-// bench run and the model never moved".
-const gyroActivityByRow = (() => {
-  const axisSamples = [0, 1, 2]
-    .map((axis) => {
-      const columnName =
-        headers.find(
-          (header) =>
-            header.toLowerCase() === `gyroadc[${axis}]`
-        ) ??
-        headers.find(
-          (header) =>
-            header.toLowerCase() === `gyroraw[${axis}]`
-        ) ??
-        null;
 
-      return columnName
-        ? getColumnSamples(
-            lines,
-            telemetryHeaderIndex,
-            columnName
-          )
-        : [];
-    })
-    .filter((samples) => samples.length > 0);
-
-  if (axisSamples.length === 0) {
-    return null;
-  }
-
-  const totals = new Map();
-
-  for (const samples of axisSamples) {
-    for (const sample of samples) {
-      const value = Number(sample.value);
-
-      if (!Number.isFinite(value)) {
-        continue;
-      }
-
-      totals.set(
-        sample.rowIndex,
-        (totals.get(sample.rowIndex) ?? 0) + Math.abs(value)
-      );
-    }
-  }
-
-  return totals;
-})();
 
 const governorLabSamples = headspeedSamples
   .map((sample) => ({

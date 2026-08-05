@@ -1727,6 +1727,16 @@ const pidTermContributionByAxis =
     Number.POSITIVE_INFINITY
   );
 
+// Tracking windows can come from airframe motion instead of rotor
+// speed (no-RPM logs). The measurements are real, but without rotor
+// context the stable-phase quality is weaker — the confidence cap
+// below says so.
+const motionBasisOnly =
+  headspeedProfiles.length > 0 &&
+  headspeedProfiles.every(
+    (profile) => profile.basis === "motion"
+  );
+
 let confidenceScore = 10;
 
 if (validAxisCount === 3) {
@@ -1759,6 +1769,10 @@ confidenceScore = Math.max(
   0,
   confidenceScore - commandEvidence.penalty
 );
+
+if (motionBasisOnly) {
+  confidenceScore = Math.min(confidenceScore, 65);
+}
 
 const confidenceLevel =
   confidenceScore >= 80
@@ -1871,7 +1885,9 @@ const pidSummary = [
   canCompareProfiles
     ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
     : onlyTrackingProfile
-      ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
+      ? Number.isFinite(onlyTrackingProfile.targetRpm)
+        ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
+        : "No rotor-speed data was logged, so tracking was measured over the moving parts of the flight and headspeeds cannot be compared."
       : "A best tracking profile could not be identified."
 ];
 const hasCompleteTrackingEvidence =
@@ -2661,7 +2677,11 @@ highestTrackingErrorAxis
     : [];
 
   return [
-    `${profile.targetRpm} RPM profile tracking from ${profile.sampleCount} samples:`,
+    `${
+      Number.isFinite(profile.targetRpm)
+        ? `${profile.targetRpm} RPM profile tracking`
+        : "Motion-based tracking (no rotor-speed data)"
+    } from ${profile.sampleCount} samples:`,
 
     ...(axisResults.length > 0
       ? axisResults.map((axisResult) =>
@@ -2688,7 +2708,11 @@ highestTrackingErrorAxis
     ]
   : onlyTrackingProfile
     ? [
-        `${onlyTrackingProfile.targetRpm} RPM was the only headspeed flown, with an average tracking error of ${onlyTrackingProfile.averageTrackingError.toFixed(
+        `${
+        Number.isFinite(onlyTrackingProfile.targetRpm)
+          ? `${onlyTrackingProfile.targetRpm} RPM was the only headspeed flown`
+          : "Tracking was measured over the moving parts of the flight (no rotor-speed data)"
+      }, with an average tracking error of ${onlyTrackingProfile.averageTrackingError.toFixed(
           2
         )}. Fly a second headspeed to compare them.`
       ]
