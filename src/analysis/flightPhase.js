@@ -64,7 +64,8 @@ function buildCandidateMask({
   timeSeconds,
   headspeed,
   governorTarget,
-  sampleCount
+  sampleCount,
+  sampleRateHz = 100
 }) {
   const mask =
     new Array(sampleCount).fill(false);
@@ -86,6 +87,19 @@ function buildCandidateMask({
         numericValue >= 500
       );
     });
+
+  // With no target to measure against, a plateau is found by asking
+  // whether rotor speed is going anywhere — which has to be asked of
+  // the trend, not of two lone samples four seconds apart. Sensor
+  // jitter alone clears the movement limit often enough to punch
+  // holes through every candidate stretch, and a plateau full of
+  // holes contains no segment long enough to count.
+  const smoothedHeadspeed = hasUsableGovernorTarget
+    ? null
+    : buildRollingMean(
+        headspeed.slice(0, sampleCount).map(Number),
+        Math.max(3, Math.round(sampleRateHz))
+      );
 
   let earlierIndex = 0;
   let laterIndex = 0;
@@ -186,12 +200,14 @@ function buildCandidateMask({
 
     const earlierActual =
       Number(
-        headspeed[earlierIndex]
+        smoothedHeadspeed?.[earlierIndex] ??
+          headspeed[earlierIndex]
       );
 
     const laterActual =
       Number(
-        headspeed[laterIndex]
+        smoothedHeadspeed?.[laterIndex] ??
+          headspeed[laterIndex]
       );
 
     if (
@@ -610,7 +626,8 @@ const sampleCount =
           timeSeconds: alignedTime,
           headspeed: alignedHeadspeed,
           governorTarget: alignedTarget,
-          sampleCount
+          sampleCount,
+          sampleRateHz
         });
 
   const transitionCleanedMask =

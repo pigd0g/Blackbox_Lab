@@ -14,6 +14,60 @@ import {
   detectStableFlightPhase
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
+
+// Does this log carry a governor target, or only rotor speed?
+// Models on an ESC or external governor log the second without the
+// first, and the column may be present but empty.
+function hasRealGovernorTarget(governorTargetValues) {
+  return (
+    Array.isArray(governorTargetValues) &&
+    governorTargetValues.some((value) => Number(value) > 0)
+  );
+}
+
+// The headspeed a pilot is holding, with the measurement noise taken
+// out. For a governed model the flight controller states its target
+// outright; for an ungoverned one, the steady value the rotor actually
+// runs at is the closest honest equivalent — but only once smoothed.
+// Raw rotor speed jitters by tens of rpm sample to sample, and that
+// jitter is what fragments one real headspeed into dozens of profile
+// buckets and reads as a governor changing its mind.
+function smoothRotorSpeed(values, windowSamples) {
+  const half = Math.max(1, Math.round(windowSamples / 2));
+  const smoothed = new Array(values.length).fill(null);
+
+  let runningTotal = 0;
+  let runningCount = 0;
+
+  for (let index = 0; index < values.length + half; index += 1) {
+    if (index < values.length) {
+      const entering = Number(values[index]);
+      if (Number.isFinite(entering)) {
+        runningTotal += entering;
+        runningCount += 1;
+      }
+    }
+
+    const leavingIndex = index - 2 * half;
+
+    if (leavingIndex >= 0) {
+      const leaving = Number(values[leavingIndex]);
+      if (Number.isFinite(leaving)) {
+        runningTotal -= leaving;
+        runningCount -= 1;
+      }
+    }
+
+    const writeIndex = index - half;
+
+    if (writeIndex >= 0 && writeIndex < values.length && runningCount > 0) {
+      smoothed[writeIndex] = runningTotal / runningCount;
+    }
+  }
+
+  return smoothed;
+}
+
 function detectHeadspeedProfiles(
   headspeedValues,
   governorTargetValues,
@@ -29,6 +83,15 @@ function detectHeadspeedProfiles(
 ) {
   return [];
 }
+const targetIsReal = hasRealGovernorTarget(governorTargetValues);
+
+// Without a real target there is nothing to hand the phase detector:
+// it already falls back to reading rotor speed on its own, and giving
+// it a target copied from the measurement is actively worse than
+// giving it none. The transition filter exists to drop the moments a
+// governor switches banks, so a "target" that jitters with the sensor
+// looks like a governor changing its mind on every sample and takes
+// the whole flight out with it.
 const stableFlightPhase =
   rowAlignedSamples.length > 0
     ? detectStableFlightPhase({
@@ -38,9 +101,9 @@ const stableFlightPhase =
         headspeed: rowAlignedSamples.map(
           (sample) => sample.measuredRpm
         ),
-        governorTarget: rowAlignedSamples.map(
-          (sample) => sample.targetRpm
-        )
+        governorTarget: targetIsReal
+          ? rowAlignedSamples.map((sample) => sample.targetRpm)
+          : []
       })
     : null;
 
@@ -49,7 +112,7 @@ const stableSampleIndexes =
     stableFlightPhase?.stableIndexes || []
   );
 
-const profileSamples =
+const rawProfileSamples =
   rowAlignedSamples.length > 0
     ? rowAlignedSamples
     : headspeedValues.map((measuredRpm, index) => ({
@@ -60,6 +123,54 @@ const profileSamples =
     ? Number(governorTargetValues[index])
     : Number(measuredRpm)
       }));
+
+// Profiles are grouped by target, so an ungoverned model needs its
+// stand-in target smoothed before grouping — otherwise one steady
+// 1700 rpm scatters across every 10-rpm bucket between 1600 and 1800
+// and no single bucket holds enough samples to count as a profile.
+// A real bank change moves the smoothed value too, so distinct
+// headspeeds stay distinct.
+const profileSamples = (() => {
+  if (targetIsReal || rawProfileSamples.length === 0) {
+    return rawProfileSamples;
+  }
+
+  const times = rawProfileSamples.map((sample) => sample.timeSeconds);
+  const firstTime = times.find((value) => Number.isFinite(value));
+  const lastTime = [...times]
+    .reverse()
+    .find((value) => Number.isFinite(value));
+
+  const span =
+    Number.isFinite(firstTime) && Number.isFinite(lastTime)
+      ? lastTime - firstTime
+      : 0;
+
+  const samplesPerSecond =
+    span > 0 ? rawProfileSamples.length / span : 1000;
+
+  // Two seconds: long enough to flatten sensor noise, short enough
+  // that a deliberate headspeed change still shows up as one.
+  const windowSamples = Math.max(
+    5,
+    Math.min(
+      Math.round(samplesPerSecond * 2),
+      Math.floor(rawProfileSamples.length / 2)
+    )
+  );
+
+  const smoothed = smoothRotorSpeed(
+    rawProfileSamples.map((sample) => sample.measuredRpm),
+    windowSamples
+  );
+
+  return rawProfileSamples.map((sample, index) => ({
+    ...sample,
+    targetRpm: Number.isFinite(smoothed[index])
+      ? smoothed[index]
+      : sample.measuredRpm
+  }));
+})();
 
  const sampleCount = profileSamples.length;
 
@@ -147,10 +258,53 @@ if (targetRpm < 300) {
   }
  
 
-  return Array.from(profileGroups.values())
+  // A stated target lands on one bucket every time, so governed logs
+  // group correctly as they are. A derived target is a measurement,
+  // and a measurement sitting near a bucket edge falls either side of
+  // it — one steady headspeed arriving as two half-populated buckets,
+  // both then too small to survive the minimum. Merge neighbours back
+  // together first, and merge against the running cluster mean rather
+  // than the previous bucket so a slow drift cannot chain distinct
+  // headspeeds into one.
+  const grouped = Array.from(profileGroups.values()).sort(
+    (first, second) => first.targetRpm - second.targetRpm
+  );
+
+  const merged = targetIsReal
+    ? grouped
+    : grouped.reduce((clusters, candidate) => {
+        const open = clusters[clusters.length - 1];
+
+        const tolerance = open
+          ? Math.max(30, open.targetRpm * 0.02)
+          : 0;
+
+        if (open && candidate.targetRpm - open.targetRpm <= tolerance) {
+          const total = open.sampleCount + candidate.sampleCount;
+
+          open.targetRpm =
+            (open.targetRpm * open.sampleCount +
+              candidate.targetRpm * candidate.sampleCount) /
+            total;
+          open.measuredTotal += candidate.measuredTotal;
+          open.sampleCount = total;
+          open.sampleIndexes = open.sampleIndexes.concat(
+            candidate.sampleIndexes
+          );
+          open.minimumRpm = Math.min(open.minimumRpm, candidate.minimumRpm);
+          open.maximumRpm = Math.max(open.maximumRpm, candidate.maximumRpm);
+
+          return clusters;
+        }
+
+        clusters.push({ ...candidate });
+        return clusters;
+      }, []);
+
+  return merged
     .filter((profile) => profile.sampleCount >= 1000)
     .map((profile) => ({
-      targetRpm: profile.targetRpm,
+      targetRpm: Math.round(profile.targetRpm),
       averageRpm:
         profile.measuredTotal / profile.sampleCount,
       minimumRpm: profile.minimumRpm,
