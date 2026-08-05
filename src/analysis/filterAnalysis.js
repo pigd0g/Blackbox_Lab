@@ -4,6 +4,90 @@
 import {
   detectStableFlightPhase
 } from "./flightPhase.js";
+
+// Remaining filtered gyro level, averaged across the axes, at which a
+// headspeed profile stops reading as clean. One home for the two
+// numbers: the per-profile status and the score's view of whether
+// vibration still matters have to agree, or a page can call a profile
+// "Monitor" and score it as though nothing were wrong.
+const PROFILE_MONITOR_LEVEL = 12;
+const PROFILE_REVIEW_LEVEL = 16;
+
+// Below this average reduction, filtering is doing very little. On a
+// quiet machine that is the right answer; alongside real vibration it
+// is a finding.
+const LOW_REDUCTION_PERCENT = 15;
+
+/**
+ * What the filter analysis could not settle, and what each of those
+ * costs the score.
+ *
+ * A score built only from how many column groups were detected reaches
+ * 100 on any readable log, including one whose own findings report an
+ * unexplained peak or filters removing almost nothing. This is the
+ * part that reads those findings back.
+ *
+ * @param unmatchedPeakCount  raw peaks matching no known aircraft
+ *                            frequency — unexplained shake
+ * @param averageReduction    percent gyro noise removed by filtering
+ * @param remainingVibration  filtered gyro level left afterwards
+ */
+export function assessUnresolvedFindings({
+  unmatchedPeakCount = 0,
+  averageReduction = null,
+  remainingVibration = null
+} = {}) {
+  // Filters removing little on an already-quiet machine is correct,
+  // not a fault. Filters removing little while real vibration remains
+  // is the fault. Everything below turns on that distinction.
+  const vibrationStillMatters =
+    Number.isFinite(remainingVibration) &&
+    remainingVibration >= PROFILE_MONITOR_LEVEL;
+
+  const filtersAreIneffective =
+    Number.isFinite(averageReduction) &&
+    averageReduction < LOW_REDUCTION_PERCENT &&
+    vibrationStillMatters;
+
+  const findings = [];
+
+  if (unmatchedPeakCount > 0) {
+    findings.push({
+      reason:
+        unmatchedPeakCount === 1
+          ? "A raw vibration peak matched no known aircraft frequency."
+          : `${unmatchedPeakCount} raw vibration peaks matched no known aircraft frequency.`,
+      // Unexplained shake is the least resolvable finding here: the
+      // analysis cannot say what is producing it.
+      cost: Math.min(25, unmatchedPeakCount * 12)
+    });
+  }
+
+  if (filtersAreIneffective) {
+    findings.push({
+      reason: `Filtering reduced gyro noise by only ${averageReduction.toFixed(
+        1
+      )}% while measurable vibration remained.`,
+      cost: 20
+    });
+  }
+
+  if (vibrationStillMatters && !filtersAreIneffective) {
+    findings.push({
+      reason:
+        "Vibration remains at a level worth watching after filtering.",
+      cost: 10
+    });
+  }
+
+  return {
+    findings,
+    penalty: findings.reduce((total, finding) => total + finding.cost, 0),
+    vibrationStillMatters,
+    filtersAreIneffective
+  };
+}
+
 function findMatchingColumns(columns, patterns) {
   if (!Array.isArray(columns)) {
     return [];
@@ -887,9 +971,9 @@ const headspeedProfiles =
 
   let status = "Cleanest Profile";
 
-if (averageFiltered >= 16) {
+if (averageFiltered >= PROFILE_REVIEW_LEVEL) {
   status = "Needs Review";
-} else if (averageFiltered >= 12) {
+} else if (averageFiltered >= PROFILE_MONITOR_LEVEL) {
   status = "Monitor";
 }
   let confidence = "Low";
@@ -1634,6 +1718,62 @@ const profileResultPenalty =
     return totalPenalty;
   }, 0);
 
+// ------------------------------------------------------
+// What the analysis found, and what it could not settle.
+//
+// Detecting five column groups says the log is readable, not that
+// the machine is well filtered. A score built from column presence
+// alone reaches 100 while the same page reports an unexplained peak
+// or filters that measurably remove almost nothing. These are the
+// findings the score has to answer for.
+// ------------------------------------------------------
+
+// The quietest profile, and how much filtering actually achieved
+// there. Needed by the score, and again by the recommendations below.
+const quietestProfile =
+  profileSpecificFilterAnalysis.length > 0
+    ? profileSpecificFilterAnalysis.reduce((best, current) => {
+        const bestFiltered =
+          best.mechanicalFinding?.averageFiltered ?? Infinity;
+        const currentFiltered =
+          current.mechanicalFinding?.averageFiltered ?? Infinity;
+
+        return currentFiltered < bestFiltered ? current : best;
+      })
+    : null;
+
+const quietestReductions = quietestProfile
+  ? [
+      quietestProfile.roll?.reductionPercent,
+      quietestProfile.pitch?.reductionPercent,
+      quietestProfile.yaw?.reductionPercent
+    ].filter(Number.isFinite)
+  : [];
+
+const averageReduction =
+  quietestReductions.length > 0
+    ? quietestReductions.reduce((total, value) => total + value, 0) /
+      quietestReductions.length
+    : null;
+
+const remainingVibration =
+  quietestProfile?.mechanicalFinding?.averageFiltered ?? null;
+
+const hasControlMotionEvidence =
+  profileSpecificFilterAnalysis.some(
+    (profile) => profile.mechanicalFinding?.controlMotionAssessment
+  );
+
+const {
+  findings: unresolvedFindings,
+  penalty: unresolvedPenalty,
+  vibrationStillMatters
+} = assessUnresolvedFindings({
+  unmatchedPeakCount: unmatchedMechanicalPeakCount,
+  averageReduction,
+  remainingVibration
+});
+
 const score =
   hasSufficientFilterEvidence
     ? Math.max(
@@ -1641,7 +1781,8 @@ const score =
         Math.min(
           100,
           dataCompletenessScore -
-            profileResultPenalty
+            profileResultPenalty -
+            unresolvedPenalty
         )
       )
     : null;
@@ -1672,14 +1813,26 @@ if (!hasSufficientFilterEvidence) {
    
   
 
+// Confidence is how much of the evidence this verdict rests on, so
+// evidence the analysis never had has to lower it. Detecting every
+// column group says the log was readable; it says nothing about
+// whether the checks that need commanded motion or a stable profile
+// could be run at all.
+const missingEvidencePenalty =
+  (hasControlMotionEvidence ? 0 : 20) +
+  (hasStableProfileEvidence ? 0 : 15);
+
   const confidenceScore =
   hasSufficientFilterEvidence
-    ? hasBlackboxLog
-      ? Math.min(
-          100,
-          20 + detectedGroupCount * 16
-        )
-      : detectedGroupCount * 10
+    ? Math.max(
+        0,
+        (hasBlackboxLog
+          ? Math.min(
+              100,
+              20 + detectedGroupCount * 16
+            )
+          : detectedGroupCount * 10) - missingEvidencePenalty
+      )
     : 0;
 
 let confidenceLabel =
@@ -1701,52 +1854,51 @@ if (hasSufficientFilterEvidence) {
     recommendations.push(
       "Review the missing column groups before calculating filter-performance scores."
     );
-  } else if (profileSpecificFilterAnalysis.length > 0) {
-  const cleanestProfile =
-    profileSpecificFilterAnalysis.reduce((bestProfile, currentProfile) => {
-      const bestFiltered =
-        bestProfile.mechanicalFinding?.averageFiltered ?? Infinity;
-
-      const currentFiltered =
-        currentProfile.mechanicalFinding?.averageFiltered ?? Infinity;
-
-      return currentFiltered < bestFiltered
-        ? currentProfile
-        : bestProfile;
-    });
-const reductionValues = [
-  cleanestProfile.roll?.reductionPercent,
-  cleanestProfile.pitch?.reductionPercent,
-  cleanestProfile.yaw?.reductionPercent
-].filter(Number.isFinite);
-
-const averageReduction =
-  reductionValues.length > 0
-    ? reductionValues.reduce((total, value) => total + value, 0) /
-      reductionValues.length
-    : null;
-  
+  } else if (quietestProfile) {
 let filterReductionAssessment = "";
 
+// Little reduction means two opposite things depending on how much
+// vibration there was to remove, and saying the wrong one sends a
+// pilot chasing filters on a healthy machine.
 if (Number.isFinite(averageReduction)) {
-  if (averageReduction < 15) {
-    filterReductionAssessment =
-      " The low average reduction suggests the filters may not be removing much vibration.";
+  if (averageReduction < LOW_REDUCTION_PERCENT) {
+    filterReductionAssessment = vibrationStillMatters
+      ? " Measurable vibration remained afterwards, so the filters are not removing much of what is there."
+      : " There was little vibration to remove, so filters doing little is the expected result here.";
   } else if (averageReduction > 60) {
     filterReductionAssessment =
       " The high average reduction deserves a closer check for possible over-filtering.";
   }
 }
+
+// With one profile there is nothing to be quietest against — say
+// which profile was measured, not which one won.
+const onlyOneProfile = profileSpecificFilterAnalysis.length === 1;
+
 recommendations.push(
-  `${cleanestProfile.targetRpm} RPM currently has the lowest remaining filtered vibration` +
+  `${quietestProfile.targetRpm} RPM ${
+    onlyOneProfile
+      ? "was the only headspeed profile analyzed, so profiles cannot be compared"
+      : "currently has the lowest remaining filtered vibration"
+  }` +
   `${
     Number.isFinite(averageReduction)
-      ? ` with an average gyro reduction of ${averageReduction.toFixed(1)}%`
+      ? ` — average gyro reduction ${averageReduction.toFixed(1)}%`
       : ""
   }.` +
   filterReductionAssessment +
   ` It should be used as the baseline for the next comparison flight.`
 );
+
+for (const finding of unresolvedFindings) {
+  recommendations.push(finding.reason);
+}
+
+if (!hasControlMotionEvidence) {
+  recommendations.push(
+    "No commanded-motion samples were available, so the check that separates filter delay from mechanical noise could not be run."
+  );
+}
 } else {
   recommendations.push(
     "Raw and filtered gyro values were compared successfully, but no stable headspeed profiles were available for a profile-specific recommendation."
