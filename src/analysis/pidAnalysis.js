@@ -78,6 +78,67 @@ export function applyFeedforwardDoctrine(
   };
 }
 
+/**
+ * How much a timing check can be trusted, given how many clean command
+ * events it had to work with.
+ *
+ * One home for the thresholds: the per-axis confidence printed in the
+ * findings and the overall confidence rating are the same judgement,
+ * and a page that prints "Insufficient" beside "High 100/100" is
+ * telling a pilot two different things about one flight.
+ */
+export function commandEvidenceConfidence(eventCount) {
+  if (eventCount >= 10) return "High";
+  if (eventCount >= 5) return "Medium";
+  if (eventCount >= 2) return "Low";
+  return "Insufficient";
+}
+
+/**
+ * What the confidence rating owes to evidence the timing checks never
+ * had. Overshoot, bounce-back, settling and ringing are all measured
+ * from clean command events, so an axis with almost none leaves those
+ * checks unanswered however complete the log's columns are.
+ *
+ * Evidence is counted as clean responses, NOT as responses that
+ * misbehaved. An overshoot figure only exists where the response
+ * crossed past its target, so an axis that tracked well produces no
+ * overshoot numbers at all — counting those as missing evidence would
+ * mark down the best-flying machines for flying well.
+ */
+export function assessCommandEvidence(commandEvents = []) {
+  const axes = commandEvents.map((axisResult) => {
+    const events = Array.isArray(axisResult?.events)
+      ? axisResult.events
+      : [];
+
+    const usable = events.filter((event) =>
+      Number.isFinite(event?.responsePeak)
+    ).length;
+
+    return {
+      axis: axisResult?.axis ?? "Axis",
+      usableEvents: usable,
+      confidence: commandEvidenceConfidence(usable)
+    };
+  });
+
+  const penalty = axes.reduce((total, axis) => {
+    if (axis.confidence === "Insufficient") return total + 15;
+    if (axis.confidence === "Low") return total + 8;
+    return total;
+  }, 0);
+
+  return {
+    axes,
+    penalty,
+    thinAxes: axes.filter(
+      (axis) =>
+        axis.confidence === "Insufficient" || axis.confidence === "Low"
+    )
+  };
+}
+
 export function analyzePids(
   analysisContext,
   lines = [],
@@ -1686,6 +1747,19 @@ if (
   confidenceScore += 20;
 }
 
+// Everything above this point rates the log: three axes present,
+// enough samples, every PID column detected. None of it asks whether
+// the checks built on those columns actually had anything to measure.
+// Overshoot, bounce-back, settling and ringing all need clean command
+// events, and an axis that yielded almost none leaves them unanswered
+// — which is a limit on the verdict, not a detail beneath it.
+const commandEvidence = assessCommandEvidence(commandEvents);
+
+confidenceScore = Math.max(
+  0,
+  confidenceScore - commandEvidence.penalty
+);
+
 const confidenceLevel =
   confidenceScore >= 80
     ? "High"
@@ -2047,27 +2121,38 @@ const highestOvershootEvent =
     },
     null
   );
+  // An overshoot figure exists only where the response crossed past
+  // its target. Plenty of clean responses and no overshoot among them
+  // is an answer — the axis did not overshoot — not an absence of
+  // evidence. Confidence therefore follows how many clean responses
+  // the axis produced; only a shortage of THOSE leaves the question
+  // open.
+  const cleanResponseCount = axisResult.events.filter((event) =>
+    Number.isFinite(event.responsePeak)
+  ).length;
+
   const overshootConfidence =
-  
-  validOvershootEvents.length >= 10
-    ? "High"
-    : validOvershootEvents.length >= 5
-      ? "Medium"
-      : validOvershootEvents.length >= 2
-        ? "Low"
-        : "Insufficient";
+    commandEvidenceConfidence(cleanResponseCount);
+
+  const axisDidNotOvershoot =
+    cleanResponseCount >= 2 && validOvershootEvents.length === 0;
+
    const overshootRecommendation =
   overshootConfidence === "Insufficient" ||
   overshootConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating overshoot.`
-    : Number.isFinite(medianOvershootPercent) &&
+    : axisDidNotOvershoot
+      ? `${axisResult.axis} did not overshoot its target on any of the ${cleanResponseCount} clean responses measured.`
+      : Number.isFinite(medianOvershootPercent) &&
         medianOvershootPercent >= 25
       ? `Review ${axisResult.axis} for repeated overshoot. Confirm the pattern with another log before changing PID or feedforward values.`
-      : `No repeated ${axisResult.axis} overshoot pattern was identified from the available clean events.`;   
-  
+      : `No repeated ${axisResult.axis} overshoot pattern was identified from the available clean events.`;
+
 return [
   `${axisResult.axis} events with valid overshoot measurements: ${validOvershootEvents.length}`,
-  `${axisResult.axis} overshoot confidence: ${overshootConfidence}`,
+  `${axisResult.axis} overshoot confidence: ${overshootConfidence}${
+    axisDidNotOvershoot ? " (no overshoot occurred)" : ""
+  }`,
 `${axisResult.axis} overshoot recommendation: ${overshootRecommendation}`,
   
   `${axisResult.axis} average event overshoot: ${
@@ -2200,8 +2285,21 @@ const trimmedMaximumBounceBackPercent =
         medianBounceBackPercent >= 15
       ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
       : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
+      // A response can only bounce back from an overshoot, so an axis
+      // that never overshot offers nothing to measure — which is a
+      // result about the axis, not a gap in the log. Saying
+      // "Insufficient Data" there sends a pilot hunting for evidence
+      // their good flying is the reason they do not have.
+      const nothingToBounceFrom =
+        validBounceBackEvents.length === 0 &&
+        axisResult.events.filter((event) =>
+          Number.isFinite(event.responsePeak)
+        ).length >= 2;
+
       const bounceBackStatus =
-  bounceBackConfidence === "Insufficient" ||
+  nothingToBounceFrom
+    ? "Clear — no overshoot to recover from"
+    : bounceBackConfidence === "Insufficient" ||
   bounceBackConfidence === "Low"
     ? "Insufficient Data"
     : Number.isFinite(medianBounceBackPercent) &&
