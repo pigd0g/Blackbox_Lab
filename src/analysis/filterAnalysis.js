@@ -18,6 +18,17 @@ const PROFILE_REVIEW_LEVEL = 16;
 // is a finding.
 const LOW_REDUCTION_PERCENT = 15;
 
+// Remaining vibration high enough to be worth deducting for.
+//
+// Measured against 190 contributed flights rather than chosen: the
+// fleet's per-profile filtered level runs a median of 15.5 and an
+// upper quartile of 30.5. Deducting from PROFILE_MONITOR_LEVEL would
+// charge the median helicopter for being ordinary, which tells a pilot
+// nothing — the same failure as scoring every readable log 100, just
+// at the other end.
+const VIBRATION_ELEVATED = 16;
+const VIBRATION_HIGH = 30;
+
 /**
  * What the filter analysis could not settle, and what each of those
  * costs the score.
@@ -34,6 +45,7 @@ const LOW_REDUCTION_PERCENT = 15;
  */
 export function assessUnresolvedFindings({
   unmatchedPeakCount = 0,
+  matchedPeakCount = 0,
   averageReduction = null,
   remainingVibration = null
 } = {}) {
@@ -42,7 +54,11 @@ export function assessUnresolvedFindings({
   // is the fault. Everything below turns on that distinction.
   const vibrationStillMatters =
     Number.isFinite(remainingVibration) &&
-    remainingVibration >= PROFILE_MONITOR_LEVEL;
+    remainingVibration >= VIBRATION_ELEVATED;
+
+  const vibrationIsHigh =
+    Number.isFinite(remainingVibration) &&
+    remainingVibration >= VIBRATION_HIGH;
 
   const filtersAreIneffective =
     Number.isFinite(averageReduction) &&
@@ -51,15 +67,18 @@ export function assessUnresolvedFindings({
 
   const findings = [];
 
-  if (unmatchedPeakCount > 0) {
+  // A peak matching nothing known is only evidence of unexplained
+  // vibration when the matcher is otherwise finding things. Across the
+  // contributed fleet most flights match nothing at all, so on its own
+  // "unmatched" reports the matcher's reach, not the machine's health,
+  // and a pilot must not be marked down for it.
+  if (unmatchedPeakCount > 0 && matchedPeakCount > 0) {
     findings.push({
       reason:
         unmatchedPeakCount === 1
-          ? "A raw vibration peak matched no known aircraft frequency."
-          : `${unmatchedPeakCount} raw vibration peaks matched no known aircraft frequency.`,
-      // Unexplained shake is the least resolvable finding here: the
-      // analysis cannot say what is producing it.
-      cost: Math.min(25, unmatchedPeakCount * 12)
+          ? "One vibration peak did not line up with any known rotating frequency of this machine."
+          : `${unmatchedPeakCount} vibration peaks did not line up with any known rotating frequency of this machine.`,
+      cost: Math.min(10, unmatchedPeakCount * 5)
     });
   }
 
@@ -67,16 +86,22 @@ export function assessUnresolvedFindings({
     findings.push({
       reason: `Filtering reduced gyro noise by only ${averageReduction.toFixed(
         1
-      )}% while measurable vibration remained.`,
-      cost: 20
+      )}% while vibration stayed high.`,
+      cost: 15
     });
   }
 
-  if (vibrationStillMatters && !filtersAreIneffective) {
+  if (vibrationIsHigh) {
+    findings.push({
+      reason:
+        "Vibration after filtering is high compared with most machines.",
+      cost: 20
+    });
+  } else if (vibrationStillMatters && !filtersAreIneffective) {
     findings.push({
       reason:
         "Vibration remains at a level worth watching after filtering.",
-      cost: 10
+      cost: 8
     });
   }
 
@@ -84,6 +109,7 @@ export function assessUnresolvedFindings({
     findings,
     penalty: findings.reduce((total, finding) => total + finding.cost, 0),
     vibrationStillMatters,
+    vibrationIsHigh,
     filtersAreIneffective
   };
 }
@@ -1770,6 +1796,7 @@ const {
   vibrationStillMatters
 } = assessUnresolvedFindings({
   unmatchedPeakCount: unmatchedMechanicalPeakCount,
+  matchedPeakCount: matchedMechanicalPeakCount,
   averageReduction,
   remainingVibration
 });

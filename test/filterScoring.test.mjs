@@ -22,8 +22,12 @@ import assert from "node:assert/strict";
 
 import { assessUnresolvedFindings } from "../src/analysis/filterAnalysis.js";
 
-// Above the level at which a profile stops reading as clean.
-const VIBRATION_THAT_MATTERS = 14;
+// Levels are calibrated against the contributed fleet, whose
+// per-profile filtered level runs a median of 15.5 and an upper
+// quartile of 30.5. "Matters" is elevated for this fleet; "high" is
+// genuinely unusual; "ordinary" is what most machines look like.
+const VIBRATION_HIGH = 35;
+const VIBRATION_THAT_MATTERS = 20;
 const VIBRATION_THAT_DOES_NOT = 6;
 
 test("a clean result leaves nothing to answer for", () => {
@@ -37,26 +41,52 @@ test("a clean result leaves nothing to answer for", () => {
   assert.equal(penalty, 0, "a genuinely clean analysis still scores full marks");
 });
 
-test("an unexplained peak costs the perfect score", () => {
-  const { penalty } = assessUnresolvedFindings({
+test("an unmatched peak counts only when the matcher is working", () => {
+  // Across the contributed fleet most flights match no known frequency
+  // at all. Deducting for "unmatched" on its own would score the
+  // matcher's reach, not the machine — and mark down the pilot for it.
+  const matcherFoundNothing = assessUnresolvedFindings({
+    unmatchedPeakCount: 3,
+    matchedPeakCount: 0,
+    averageReduction: 45,
+    remainingVibration: VIBRATION_THAT_DOES_NOT
+  });
+
+  assert.equal(
+    matcherFoundNothing.penalty,
+    0,
+    "a matcher that recognises nothing is not evidence about the machine"
+  );
+
+  const matcherWorking = assessUnresolvedFindings({
     unmatchedPeakCount: 1,
+    matchedPeakCount: 2,
     averageReduction: 45,
     remainingVibration: VIBRATION_THAT_DOES_NOT
   });
 
   assert.ok(
-    penalty > 0,
-    "vibration the analysis cannot attribute is an open question"
+    matcherWorking.penalty > 0,
+    "a peak standing out among recognised ones is a real open question"
   );
 });
 
 test("more unexplained peaks cost more, up to a limit", () => {
-  const one = assessUnresolvedFindings({ unmatchedPeakCount: 1 }).penalty;
-  const three = assessUnresolvedFindings({ unmatchedPeakCount: 3 }).penalty;
-  const ten = assessUnresolvedFindings({ unmatchedPeakCount: 10 }).penalty;
+  const one = assessUnresolvedFindings({
+    unmatchedPeakCount: 1,
+    matchedPeakCount: 1
+  }).penalty;
+  const three = assessUnresolvedFindings({
+    unmatchedPeakCount: 3,
+    matchedPeakCount: 1
+  }).penalty;
+  const ten = assessUnresolvedFindings({
+    unmatchedPeakCount: 10,
+    matchedPeakCount: 1
+  }).penalty;
 
   assert.ok(three > one);
-  assert.ok(ten <= 25, "one finding must not consume the whole score");
+  assert.ok(ten <= 10, "one finding must not dominate the score");
 });
 
 test("quiet machine, little filtering: not a fault", () => {
@@ -108,7 +138,33 @@ test("vibration left behind is a finding even when filters worked hard", () => {
   );
 });
 
-test("the two vibration findings never both fire", () => {
+test("an ordinary machine is not marked down for being ordinary", () => {
+  // The fleet median sits around 15.5; scoring that as a problem would
+  // tell most pilots their helicopter needs attention when it does not.
+  const result = assessUnresolvedFindings({
+    unmatchedPeakCount: 0,
+    averageReduction: 24,
+    remainingVibration: 15
+  });
+
+  assert.equal(result.penalty, 0);
+});
+
+test("unusually high vibration costs more than merely elevated", () => {
+  const elevated = assessUnresolvedFindings({
+    averageReduction: 45,
+    remainingVibration: VIBRATION_THAT_MATTERS
+  }).penalty;
+
+  const high = assessUnresolvedFindings({
+    averageReduction: 45,
+    remainingVibration: VIBRATION_HIGH
+  }).penalty;
+
+  assert.ok(high > elevated, "severity has to move the score");
+});
+
+test("one remaining-vibration problem is charged once", () => {
   const result = assessUnresolvedFindings({
     averageReduction: 2,
     remainingVibration: VIBRATION_THAT_MATTERS
@@ -117,7 +173,7 @@ test("the two vibration findings never both fire", () => {
   assert.equal(
     result.findings.length,
     1,
-    "one remaining-vibration problem is charged once, not twice"
+    "the same vibration must not be deducted for twice"
   );
 });
 
