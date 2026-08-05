@@ -34,7 +34,11 @@ import { APP_VERSION, checkForUpdate } from "./version.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
-import { getMetadataValue } from "./analysis/metadataReader.js";
+import {
+  getMetadataValue,
+  isPlausibleFlightDate,
+  resolveFlightDateMs
+} from "./analysis/metadataReader.js";
 import {
   computeNoiseSpectrum,
   estimateSampleRate
@@ -139,6 +143,8 @@ const chartHeadspeed = el("chartHeadspeed");
 const chartPower = el("chartPower");
 const chartSpectrum = el("chartSpectrum");
 const chartGovernor = el("chartGovernor");
+const governorChartTitle = el("governorChartTitle");
+const governorChartHint = el("governorChartHint");
 const chartEsc = el("chartEsc");
 const chartBattery = el("chartBattery");
 
@@ -2219,6 +2225,24 @@ function renderAllCharts(dataset) {
       /govTarget/i
     ]).slice(0, 6);
 
+    // Models on an ESC or external governor log rotor speed with
+    // no target beside it. The chart then carries one trace, so it
+    // says what it shows: rotor speed over time, and that droop —
+    // which is measured against a target — is not on offer here.
+    const hasTarget = dataset.columnPresence?.hasGovernorTarget;
+
+    if (governorChartTitle) {
+      governorChartTitle.textContent = hasTarget
+        ? "Headspeed vs Target"
+        : "Headspeed Over Time";
+    }
+
+    if (governorChartHint) {
+      governorChartHint.textContent = hasTarget
+        ? "Zoom into collective inputs — dips below the target line are droop."
+        : "View rotor-speed stability throughout the flight. Governor target telemetry was not available, so tracking error and droop cannot be measured.";
+    }
+
     if (governorColumns.length === 0) {
       chartGovernor.innerHTML =
         '<p class="chart-empty">This log has no data for this chart.</p>';
@@ -2662,7 +2686,10 @@ function analyzeFlight(flightIndex) {
 
     const entry = buildHistoryEntry({
       fileName: file.name,
-      flightDateMs: file.lastModified || 0,
+      flightDateMs: resolveFlightDateMs(
+        currentFlightLines,
+        file.lastModified
+      ),
       durationSeconds:
         currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1],
    dataset: {
@@ -3078,7 +3105,11 @@ function refreshHistoryScreen(selectedCraft) {
       .map(
         (entry, index) => `
       <tr>
-        <td>${new Date(entry.flightDateMs).toLocaleDateString()}</td>
+        <td>${
+          isPlausibleFlightDate(entry.flightDateMs)
+            ? new Date(entry.flightDateMs).toLocaleDateString()
+            : "Date unavailable"
+        }</td>
         <td>${entry.fileName}</td>
         <td>${cell(entry.durationSeconds, " s")}</td>
         <td>${cell(entry.vibrationPeak)}${entry.vibrationHz ? ` @ ${entry.vibrationHz} Hz` : ""}</td>

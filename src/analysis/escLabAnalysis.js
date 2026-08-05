@@ -101,11 +101,15 @@ export function analyzeEscLab({
       ? escThrottle
       : motor;
 
+  // A governor target sharpens the stable-phase search but is
+  // not required for it: models on an ESC or external governor
+  // log rotor speed with no target to compare it against, and
+  // the phase detector falls back to headspeed on its own. Only
+  // the data this Lab actually reads may bound the sample count.
   const sampleCount = Math.min(
     timeSeconds?.length ?? 0,
     selectedOutput?.length ?? 0,
-    headspeed?.length ?? 0,
-    governorTarget?.length ?? 0
+    headspeed?.length ?? 0
   );
 
   if (sampleCount < 200) {
@@ -121,7 +125,9 @@ export function analyzeEscLab({
     headspeed.slice(0, sampleCount);
 
   const alignedTarget =
-    governorTarget.slice(0, sampleCount);
+    Array.isArray(governorTarget)
+      ? governorTarget.slice(0, sampleCount)
+      : [];
 
   const alignedAmperage =
     Array.isArray(selectedAmperage)

@@ -88,11 +88,14 @@ export function analyzeBatteryLab({
     return null;
   }
 
+    // The governor target refines the stable-phase search but is
+    // not part of a battery assessment: pack voltage and current
+    // are readable whether or not the model runs a Rotorflight
+    // governor. Only the data this Lab reads may bound the count.
     const sampleCount = Math.min(
     timeSeconds?.length ?? 0,
     selectedVoltage.length,
-    headspeed?.length ?? 0,
-    governorTarget?.length ?? 0
+    headspeed?.length ?? 0
   );
 
   if (sampleCount < 200) {
@@ -114,7 +117,9 @@ export function analyzeBatteryLab({
     headspeed.slice(0, sampleCount);
 
   const alignedTarget =
-    governorTarget.slice(0, sampleCount);
+    Array.isArray(governorTarget)
+      ? governorTarget.slice(0, sampleCount)
+      : [];
 
   const rawAverage = averageOf(alignedVbat);
 

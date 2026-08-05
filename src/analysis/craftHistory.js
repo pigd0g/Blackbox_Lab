@@ -132,9 +132,35 @@ if (craftKey === "Unknown craft") {
     }
   } else {
     history[craftKey].push(entry);
-    history[craftKey].sort(
-      (a, b) => a.flightDateMs - b.flightDateMs
-    );
+    // Flights with no trustworthy date keep their arrival order at
+    // the end of the record rather than steering it: subtracting a
+    // missing date yields NaN, and a NaN comparator scrambles the
+    // ordering of everything around it.
+    history[craftKey].sort((first, second) => {
+      // Number(null) is 0, a perfectly finite epoch date in 1970,
+      // so a missing date has to be ruled out before the number is
+      // taken rather than after.
+      const dateOf = (flight) =>
+        flight.flightDateMs === null ||
+        flight.flightDateMs === undefined
+          ? Number.NaN
+          : Number(flight.flightDateMs);
+
+      const firstMs = dateOf(first);
+      const secondMs = dateOf(second);
+      const firstKnown = Number.isFinite(firstMs);
+      const secondKnown = Number.isFinite(secondMs);
+
+      if (firstKnown && secondKnown) {
+        return firstMs - secondMs;
+      }
+
+      if (firstKnown !== secondKnown) {
+        return firstKnown ? -1 : 1;
+      }
+
+      return 0;
+    });
 
     if (
       history[craftKey].length >
