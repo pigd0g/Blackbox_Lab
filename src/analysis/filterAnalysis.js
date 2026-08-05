@@ -47,11 +47,16 @@ export function assessUnresolvedFindings({
   unmatchedPeakCount = 0,
   matchedPeakCount = 0,
   averageReduction = null,
-  remainingVibration = null
+  remainingVibration = null,
+  lowFrequencyPeakCount = 0
 } = {}) {
   // Filters removing little on an already-quiet machine is correct,
   // not a fault. Filters removing little while real vibration remains
-  // is the fault. Everything below turns on that distinction.
+  // is the fault. Everything below turns on that distinction — with
+  // one more: when the vibration sits below the filter band (~20 Hz),
+  // "the filters removed little" is filters behaving correctly, and
+  // charging the filter score for it points the pilot at the wrong
+  // part of the machine.
   const vibrationStillMatters =
     Number.isFinite(remainingVibration) &&
     remainingVibration >= VIBRATION_ELEVATED;
@@ -63,9 +68,26 @@ export function assessUnresolvedFindings({
   const filtersAreIneffective =
     Number.isFinite(averageReduction) &&
     averageReduction < LOW_REDUCTION_PERCENT &&
-    vibrationStillMatters;
+    vibrationStillMatters &&
+    lowFrequencyPeakCount === 0;
 
   const findings = [];
+
+  if (
+    lowFrequencyPeakCount > 0 &&
+    Number.isFinite(averageReduction) &&
+    averageReduction < LOW_REDUCTION_PERCENT &&
+    vibrationStillMatters
+  ) {
+    // Named, but free: the score answers for filter quality, and
+    // filters not removing sub-band vibration is correct behavior.
+    // The vibration itself is still charged below.
+    findings.push({
+      reason:
+        "Low overall reduction alongside a peak below the ~20 Hz filter band — that vibration is structural, and filters are right not to touch it. The fix is at the bench, not in filter settings.",
+      cost: 0
+    });
+  }
 
   // A peak matching nothing known is only evidence of unexplained
   // vibration when the matcher is otherwise finding things. Across the
@@ -1616,8 +1638,9 @@ if (aircraftFrequencyMatches.length > 0) {
 let unmatchedMechanicalPeakCount = 0;
 let matchedFilteredPeakCount = 0;
 let unmatchedFilteredPeakCount = 0;
+let lowFrequencyStructuralPeakCount = 0;
   for (const axisMatch of aircraftFrequencyMatches) {
-    
+
     const rawMatch = axisMatch.rawMatch;
     const filteredMatch = axisMatch.filteredMatch;
 
@@ -1629,6 +1652,19 @@ let unmatchedFilteredPeakCount = 0;
         `${rawMatch.frequencyName} at ` +
         `${rawMatch.targetRpm ?? Math.round(rawMatch.averageRpm)} RPM ` +
         `within ${rawMatch.differenceHz.toFixed(2)} Hz.`
+      );
+    } else if (rawMatch && rawMatch.peakFrequencyHz < 20) {
+      // Below ~20 Hz the flight controller itself must respond, so
+      // filters may not act there. Whatever this peak is, it is a
+      // structural story — not an unexplained one, and not one the
+      // filter settings can answer for.
+      lowFrequencyStructuralPeakCount += 1;
+      findings.push(
+        `${axisMatch.axis} raw peak at ` +
+        `${rawMatch.peakFrequencyHz.toFixed(2)} Hz sits below the ` +
+        `filter band (~20 Hz): a structural or airframe resonance. ` +
+        `Gyro filters must not act this low, so this peak is a ` +
+        `bench item, not a filter-settings item.`
       );
     } else if (rawMatch) {
       unmatchedMechanicalPeakCount += 1;
@@ -1812,7 +1848,8 @@ const {
   unmatchedPeakCount: unmatchedMechanicalPeakCount,
   matchedPeakCount: matchedMechanicalPeakCount,
   averageReduction,
-  remainingVibration
+  remainingVibration,
+  lowFrequencyPeakCount: lowFrequencyStructuralPeakCount
 });
 
 const score =

@@ -178,6 +178,10 @@ export function adviseFilters({
       magnitude: Math.round(peak.magnitude * 10) / 10,
       source: classified.source,
       rpmLinked: classified.rpmLinked,
+      // Below ~20 Hz the flight controller itself must respond, so
+      // no gyro filter may act there without costing control phase.
+      // Whatever the source, a peak this low is a bench story.
+      belowFilterBand: peak.hz < 20,
       prominenceRatio: peak.prominenceRatio,
       filteredMagnitude:
         filteredMagnitude !== null
@@ -199,8 +203,26 @@ const isStrongProminentPeak =
 
 
 
+// ---- below the filter band: bench only ----
+// A peak under ~20 Hz sits inside the band the flight controller
+// must react to. A notch or a lower cutoff there costs control
+// response and cannot fix the shake — so this advice always points
+// at the airframe, never at filter settings.
+const structuralRows = rows.filter(
+  (row) => row.belowFilterBand && row.magnitude > 3
+);
+
+if (structuralRows.length > 0) {
+  const strongest = structuralRows[0];
+
+  recommendations.push({
+    priority: "first",
+    text: `Your ${strongest.hz} Hz peak (magnitude ${strongest.magnitude}) sits below ~20 Hz — inside the band the flight controller itself works in. No gyro filter can remove it without softening control response, so do not add a notch or lower a cutoff for this one. It is a mechanical story: frame and boom stiffness, landing-gear or canopy resonance, mounting and damping are the places to look.`
+  });
+}
+
 // ---- mechanics before filters ----
-if (isStrongProminentPeak) {
+if (isStrongProminentPeak && !biggest.belowFilterBand) {
   recommendations.push({
     priority: "first",
     text: `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first — blade balance and tracking, head damping, bearings, shafts, and mounting — then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
@@ -212,6 +234,7 @@ if (isStrongProminentPeak) {
 const rpmLinkedRows = rows.filter(
   (row) =>
     row.rpmLinked &&
+    !row.belowFilterBand &&
     row.magnitude > 2
 );
   
@@ -228,11 +251,14 @@ const rpmLinkedRows = rows.filter(
   }
 
   // ---- poorly-attenuated peaks ----
+  // Peaks below the filter band are excluded: filters not removing
+  // what filters must not touch is correct behavior, not a leak.
   const leakyRows = rows.filter(
     (row) =>
       row.reductionPercent !== null &&
       row.reductionPercent < 70 &&
-      row.magnitude > 3
+      row.magnitude > 3 &&
+      !row.belowFilterBand
   );
 
   if (leakyRows.length > 0) {
