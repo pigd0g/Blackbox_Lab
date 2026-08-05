@@ -220,22 +220,6 @@ const filteredGyroValues =
         )
       : []
   }));
- console.log(
-  "PID DEBUG " +
-    JSON.stringify({
-      telemetryHeaderIndex,
-      stableRowCount: stableRowIndexes.length,
-      setpointColumns: axisSetpointColumns,
-      gyroColumns: filteredGyroColumns,
-      setpointValueCounts: axisSetpointValues.map(
-        (result) => result.values.length
-      ),
-      gyroValueCounts: filteredGyroValues.map(
-        (result) => result.values.length
-      ),
-      firstStableRows: stableRowIndexes.slice(0, 5)
-    })
-);
 const axisErrorValues =
   recordedAxisErrorValues.length === 3
     ? recordedAxisErrorValues
