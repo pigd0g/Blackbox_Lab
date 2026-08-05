@@ -912,9 +912,39 @@ if (
 
  
 
-  const governedHeadspeed = headspeed
-    ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
-    : null;
+  // Anchor rotor-harmonic classification to the rotor speed the
+  // machine actually flew at. The stable-flight samples are the
+  // authority; the tail-of-log average is only a fallback for logs
+  // with no detectable stable phase, because ground idle and
+  // spool-down in the tail drag that average away from flight rpm
+  // and shift every harmonic ratio with it.
+  const stableMeanHeadspeed = (() => {
+    const indexes = spectrumFlightPhase.stableIndexes ?? [];
+
+    if (!alignedHeadspeed || indexes.length < 100) {
+      return null;
+    }
+
+    let sum = 0;
+    let count = 0;
+
+    for (const index of indexes) {
+      const value = alignedHeadspeed[index];
+
+      if (Number.isFinite(value) && value > 0) {
+        sum += value;
+        count += 1;
+      }
+    }
+
+    return count >= 100 ? sum / count : null;
+  })();
+
+  const governedHeadspeed =
+    stableMeanHeadspeed ??
+    (headspeed
+      ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
+      : null);
 
   const markers = buildSpectrumMarkers(spectra, governedHeadspeed);
 
@@ -1144,7 +1174,8 @@ if (
   governorTarget,
   vbat,
   pidAnalysis,
-  labs
+  labs,
+  anchorHeadspeedRpm: governedHeadspeed
 });
 
   // Evidence that zooms to the moment: attach a focus

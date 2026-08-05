@@ -519,11 +519,19 @@ export function buildFlightVerdict({
   governorTarget,
   vbat,
   pidAnalysis,
-  labs
+  labs,
+  anchorHeadspeedRpm
 }) {
-  const governedHeadspeed = headspeed
-    ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
-    : null;
+  // Peak naming needs the rotor speed the machine flew at. The
+  // caller passes the stable-flight mean when one exists; the
+  // tail-of-log average remains only as a fallback.
+  const governedHeadspeed =
+    (Number.isFinite(anchorHeadspeedRpm) && anchorHeadspeedRpm > 0
+      ? anchorHeadspeedRpm
+      : null) ??
+    (headspeed
+      ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
+      : null);
 
   const cards = [
   vibrationVerdict(spectra, governedHeadspeed),
