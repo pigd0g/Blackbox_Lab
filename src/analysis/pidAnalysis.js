@@ -139,6 +139,86 @@ export function assessCommandEvidence(commandEvents = []) {
   };
 }
 
+// ------------------------------------------------------
+// Tracking-score calibration
+//
+// The score is continuous: the deduction grows with the
+// measured relative tracking error instead of stepping in
+// fixed penalty sizes. The constants below are calibrated
+// against the contributed fleet so the spread carries
+// information — every value here is a dial, and the corpus
+// is the dyno it was set on.
+// ------------------------------------------------------
+export const TRACKING_SCORE_TUNING = {
+  // Denominator floor for relative error, in setpoint units —
+  // keeps a hover-only log from dividing by nearly zero.
+  SETPOINT_ACTIVITY_FLOOR: 25,
+
+  // Relative error at or below this deducts nothing.
+  FULL_MARKS_RELATIVE_ERROR: 0.25,
+
+  // Relative error at or above this takes the full deduction.
+  ZERO_MARKS_RELATIVE_ERROR: 1.4,
+
+  MAX_TRACKING_DEDUCTION: 55,
+
+  BALANCE_DEDUCTION_PER_AXIS: 10,
+  MAX_BALANCE_DEDUCTION: 25,
+
+  SATURATION_DEDUCTION_PER_TERM: 6,
+  MAX_SATURATION_DEDUCTION: 18,
+
+  // One real-world flight cannot prove a mathematically
+  // perfect tune.
+  REAL_WORLD_MARGIN: 2
+};
+
+export function computeTrackingScore({
+  relativeError = null,
+  commandBalanceReviewCount = 0,
+  saturationReviewCount = 0
+} = {}) {
+  const tuning = TRACKING_SCORE_TUNING;
+
+  const trackingDeduction = Number.isFinite(relativeError)
+    ? Math.min(
+        1,
+        Math.max(
+          0,
+          (relativeError - tuning.FULL_MARKS_RELATIVE_ERROR) /
+            (tuning.ZERO_MARKS_RELATIVE_ERROR -
+              tuning.FULL_MARKS_RELATIVE_ERROR)
+        )
+      ) * tuning.MAX_TRACKING_DEDUCTION
+    : 0;
+
+  const balanceDeduction = Math.min(
+    tuning.MAX_BALANCE_DEDUCTION,
+    commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
+  );
+
+  const saturationDeduction = Math.min(
+    tuning.MAX_SATURATION_DEDUCTION,
+    saturationReviewCount * tuning.SATURATION_DEDUCTION_PER_TERM
+  );
+
+  return {
+    score: Math.max(
+      0,
+      Math.round(
+        100 -
+          tuning.REAL_WORLD_MARGIN -
+          trackingDeduction -
+          balanceDeduction -
+          saturationDeduction
+      )
+    ),
+    trackingDeduction: Math.round(trackingDeduction * 10) / 10,
+    balanceDeduction,
+    saturationDeduction
+  };
+}
+
 export function analyzePids(
   analysisContext,
   lines = [],
@@ -1040,6 +1120,38 @@ const averageAbsoluteAxisError =
     averageAbsoluteError:
       calculateAverageAbsolute(axisResult.values)
   }));
+
+// Tracking error only means something against how hard the machine
+// was being flown: 30 units of error is sloppy in a hover and
+// invisible in a full-rate flip. Each axis's error is read relative
+// to its own commanded magnitude, with a floor so a hover-only log
+// cannot divide by almost nothing.
+const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
+  (axisResult, index) => {
+    const setpointMagnitude = calculateAverageAbsolute(
+      axisSetpointValues[index]?.values ?? []
+    );
+
+    return Number.isFinite(axisResult.averageAbsoluteError) &&
+      Number.isFinite(setpointMagnitude)
+      ? axisResult.averageAbsoluteError /
+          Math.max(
+            setpointMagnitude,
+            TRACKING_SCORE_TUNING.SETPOINT_ACTIVITY_FLOOR
+          )
+      : null;
+  }
+);
+
+const finiteRelativeErrors = axisRelativeTrackingErrors.filter(
+  Number.isFinite
+);
+
+const meanRelativeTrackingError =
+  finiteRelativeErrors.length > 0
+    ? finiteRelativeErrors.reduce((sum, value) => sum + value, 0) /
+      finiteRelativeErrors.length
+    : null;
   
 
 
@@ -1902,55 +2014,32 @@ const pidOverallStatus =
       : commandBalanceReviewAxes.length > 0
         ? "Review"
         : "Clear";
-      const pidScoreDeductions = {
-  commandBalance:
-    Math.min(
-      commandBalanceReviewAxes.length * 20,
-      40
-    ),
-
-  saturation:
-    Math.min(
-      saturationReviewTerms.length * 15,
-      45
-    ),
-realWorldMargin: 2,
-  incompleteTracking:
-    highestTrackingErrorAxis ? 0 : 15,
-
-  incompleteProfileComparison: 0
-    
-};
-
-
+      const scoreParts = computeTrackingScore({
+  relativeError: meanRelativeTrackingError,
+  commandBalanceReviewCount: commandBalanceReviewAxes.length,
+  saturationReviewCount: saturationReviewTerms.length
+});
 
 const pidScore =
-  hasCompleteTrackingEvidence
-    ? Math.max(
-        0,
-        100 -
-          pidScoreDeductions.commandBalance -
-          pidScoreDeductions.saturation -
-          pidScoreDeductions.realWorldMargin -
-          pidScoreDeductions.incompleteTracking -
-          pidScoreDeductions.incompleteProfileComparison
-      )
-    : null;
+  hasCompleteTrackingEvidence ? scoreParts.score : null;
+
 const pidScoreExplanation = [
-  `${pidScoreDeductions.realWorldMargin} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
+  `${TRACKING_SCORE_TUNING.REAL_WORLD_MARGIN} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
+  Number.isFinite(meanRelativeTrackingError)
+    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error — on average the response missed its commanded rate by ${Math.round(
+        meanRelativeTrackingError * 100
+      )}% of the commanded magnitude.`
+    : "Tracking error could not be measured against commanded motion.",
+
   commandBalanceReviewAxes.length > 0
-    ? `${pidScoreDeductions.commandBalance} points deducted because ${commandBalanceReviewAxes
+    ? `${scoreParts.balanceDeduction} points deducted because ${commandBalanceReviewAxes
         .map((axisResult) => axisResult.axis)
         .join(", ")} command balance requires review.`
     : "No points were deducted for command balance.",
 
   saturationReviewTerms.length > 0
-    ? `${pidScoreDeductions.saturation} points deducted because sustained PID-term saturation requires review.`
+    ? `${scoreParts.saturationDeduction} points deducted because sustained PID-term saturation requires review.`
     : "No points were deducted for PID-term saturation.",
-
-  !highestTrackingErrorAxis
-    ? `${pidScoreDeductions.incompleteTracking} points deducted because complete tracking data was unavailable.`
-    : "No points were deducted for missing tracking data.",
 
   bestTrackingProfile
   ? "No points were deducted for profile comparison data."
@@ -1969,6 +2058,16 @@ const pidScoreExplanation = [
     technicalSummary: {
   highestTrackingErrorAxis:
     highestTrackingErrorAxis?.axis ?? null,
+  meanRelativeTrackingError:
+    Number.isFinite(meanRelativeTrackingError)
+      ? Math.round(meanRelativeTrackingError * 1000) / 1000
+      : null,
+  axisRelativeTrackingErrors:
+    axisRelativeTrackingErrors.map((value) =>
+      Number.isFinite(value)
+        ? Math.round(value * 1000) / 1000
+        : null
+    ),
   bestTrackingProfileRpm:
     bestTrackingProfile?.targetRpm ?? null,
   commandBalanceReviewAxes:
