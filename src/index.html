@@ -1176,6 +1176,31 @@ current demand; the steady downward slope is normal discharge.
     </div>
   </div>
 
+  <div class="overlay" id="errorReportOverlay" hidden>
+    <div class="overlay-dialog">
+      <button class="overlay-close" id="errorReportClose"
+        title="Close">✕</button>
+      <h3>Something went wrong</h3>
+      <p id="errorReportIntro">
+        The app hit an unexpected error. Your log and your data are
+        fine.
+      </p>
+      <p class="overlay-privacy" id="errorReportSummary"></p>
+      <div class="overlay-actions">
+        <button class="overlay-link" id="errorReportCopy">
+          Copy details
+        </button>
+        <button class="overlay-primary" id="errorReportSend">
+          Send report
+        </button>
+      </div>
+      <p class="overlay-footnote">
+        The report contains the app version, the error details and
+        technical facts about the file — never your flight data.
+      </p>
+    </div>
+  </div>
+
   <script type="module" src="./renderer.js"></script>
 </body>
 </html>

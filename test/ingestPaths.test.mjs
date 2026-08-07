@@ -124,3 +124,57 @@ test("future schema versions still address cleanly", () => {
     );
   }
 });
+
+// ---- error reports travel the same worker ----
+
+import {
+  errorReportPath,
+  buildErrorBundle,
+  bundleFingerprint
+} from "../src/errorReport.js";
+
+function workerErrorPattern() {
+  const match = workerSource.match(
+    /const ERROR_REPORT_PATH\s*=\s*\n?\s*(\/.*\/);/
+  );
+
+  assert.ok(
+    match,
+    "the worker must declare ERROR_REPORT_PATH for the app to be checked against"
+  );
+
+  const body = match[1];
+  const lastSlash = body.lastIndexOf("/");
+
+  return new RegExp(
+    body.slice(1, lastSlash),
+    body.slice(lastSlash + 1)
+  );
+}
+
+test("the error-report path the app sends is a path the worker accepts", () => {
+  const bundle = buildErrorBundle({
+    error: new Error("chart exploded"),
+    platform: "test"
+  });
+
+  const path = errorReportPath(bundleFingerprint(bundle));
+
+  assert.match(
+    path,
+    workerErrorPattern(),
+    `worker would reject ${path}`
+  );
+});
+
+test("the error route cannot carry a contribution-sized body", () => {
+  const capMatch = workerSource.match(
+    /MAX_ERROR_REPORT_BYTES\s*=\s*(\d+)\s*\*\s*1024/
+  );
+
+  assert.ok(capMatch, "the error route must declare its own size cap");
+  assert.ok(
+    Number(capMatch[1]) <= 256,
+    "an error report is kilobytes, not a log"
+  );
+});

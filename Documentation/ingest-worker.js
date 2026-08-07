@@ -30,6 +30,15 @@ const MAX_BODY_BYTES = 40 * 1024 * 1024; // 40 MB gzipped
 const CONTRIBUTION_PATH =
   /^contrib\/\d+(?:\.\d+)?\/[a-f0-9]{16,128}\/(payload\.json|frames\.bin\.gz|dump\.txt)$/;
 
+// errors/<schema>/<fingerprint>.json — one small object per
+// distinct failure. The fingerprint is the app's own hash of the
+// error, so the same bug reported across the fleet lands on one
+// key instead of piling up. Reports are a few kilobytes of
+// version + stack — the size cap keeps the route from being
+// anything else.
+const ERROR_REPORT_PATH = /^errors\/\d+\/[a-f0-9]{8,64}\.json$/;
+const MAX_ERROR_REPORT_BYTES = 64 * 1024;
+
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
@@ -50,6 +59,15 @@ export default {
 
     if (CONTRIBUTION_PATH.test(path)) {
       // Idempotent by construction: same flight, same key.
+      await env.LOGS.put(path, body);
+      return new Response("thanks", { status: 200 });
+    }
+
+    if (ERROR_REPORT_PATH.test(path)) {
+      if (body.byteLength > MAX_ERROR_REPORT_BYTES) {
+        return new Response("too large", { status: 413 });
+      }
+
       await env.LOGS.put(path, body);
       return new Response("thanks", { status: 200 });
     }

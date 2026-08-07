@@ -59,6 +59,23 @@ import {
   assessLogQuality,
   columnCarriesData
 } from "./analysis/logQuality.js";
+import {
+  buildErrorBundle,
+  bundleFingerprint,
+  formatBundleText,
+  installErrorCapture,
+  alreadySent,
+  markSent,
+  sendErrorReport
+} from "./errorReport.js";
+
+// What the pilot last asked for — one line of context that turns
+// "it crashed" into a reproducible report.
+let lastUserAction = null;
+
+function noteAction(action) {
+  lastUserAction = action;
+}
 import { buildFlightEvents } from "./analysis/flightEvents.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
@@ -477,6 +494,7 @@ async function routeSettingsDump(file) {
 }
 
 async function loadFromFile(file) {
+  noteAction(`opening ${file.name}`);
   beginLoadProgress();
   setLoadStatus(`Reading ${file.name}...`);
   await new Promise((resolve) => setTimeout(resolve, 30));
@@ -544,6 +562,9 @@ logFileInput.addEventListener("change", async () => {
         "Something went wrong reading this log: " + error.message
       );
       finishLoadProgress(false);
+      // A file the decoder cannot read is exactly the failure the
+      // project most needs to hear about.
+      showErrorReport(error);
     }
   }
 
@@ -3916,3 +3937,125 @@ checkForUpdate(APP_VERSION).then((update) => {
     updateBanner.hidden = true;
   });
 });
+
+// ======================================================
+// Error report — the global net under everything else.
+// One dialog, one click; the pilot never debugs. The
+// report describes the software, never the flight.
+// ======================================================
+
+const errorReportOverlay = el("errorReportOverlay");
+const errorReportSummary = el("errorReportSummary");
+const errorReportSend = el("errorReportSend");
+const errorReportCopy = el("errorReportCopy");
+const errorReportClose = el("errorReportClose");
+
+let currentErrorBundle = null;
+
+function describeLoadedFile() {
+  if (!loadedLog) {
+    return null;
+  }
+
+  const flight = loadedLog.flights?.[0] ?? null;
+  const stats = flight?.stats ?? null;
+
+  return {
+    name: loadedLog.file?.name ?? null,
+    sizeKb: Number(loadedLog.sizeKb) || null,
+    frames: stats
+      ? (stats.intraFrames ?? 0) + (stats.interFrames ?? 0)
+      : null,
+    corruptFrames: stats?.corruptFrames ?? null,
+    sampleRateHz: currentDataset?.sampleRateHz ?? null
+  };
+}
+
+function showErrorReport(error) {
+  if (!errorReportOverlay) {
+    return;
+  }
+
+  currentErrorBundle = buildErrorBundle({
+    error,
+    screen:
+      document.querySelector("[data-screen].screen-active")?.dataset
+        .screen ?? null,
+    lastAction: lastUserAction,
+    file: describeLoadedFile()
+  });
+
+  errorReportSummary.textContent = currentErrorBundle.message;
+
+  // For support consoles and the smoke driver: the full bundle of
+  // the last caught error, inspectable from devtools.
+  window.__blackboxLabLastError = currentErrorBundle;
+
+  const fingerprint = bundleFingerprint(currentErrorBundle);
+  const canSend = Boolean(CONTRIBUTE_ENDPOINT);
+  const sentBefore =
+    canSend && alreadySent(localStorage, fingerprint);
+
+  errorReportSend.hidden = !canSend;
+  errorReportSend.disabled = sentBefore;
+  errorReportSend.textContent = sentBefore
+    ? "Report already sent — thank you!"
+    : "Send report";
+
+  errorReportOverlay.hidden = false;
+}
+
+if (errorReportClose) {
+  errorReportClose.addEventListener("click", () => {
+    errorReportOverlay.hidden = true;
+  });
+}
+
+if (errorReportCopy) {
+  errorReportCopy.addEventListener("click", async () => {
+    if (!currentErrorBundle) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        formatBundleText(currentErrorBundle)
+      );
+      errorReportCopy.textContent = "Copied!";
+      setTimeout(() => {
+        errorReportCopy.textContent = "Copy details";
+      }, 2000);
+    } catch {
+      // No clipboard available — the dialog stays usable.
+    }
+  });
+}
+
+if (errorReportSend) {
+  errorReportSend.addEventListener("click", async () => {
+    if (!currentErrorBundle) {
+      return;
+    }
+
+    errorReportSend.disabled = true;
+    errorReportSend.textContent = "Sending…";
+
+    const result = await sendErrorReport(
+      CONTRIBUTE_ENDPOINT,
+      currentErrorBundle
+    );
+
+    if (result.ok) {
+      markSent(
+        localStorage,
+        bundleFingerprint(currentErrorBundle)
+      );
+      errorReportSend.textContent = "Sent — thank you!";
+    } else {
+      errorReportSend.disabled = false;
+      errorReportSend.textContent = "Send failed — use Copy details";
+    }
+  });
+}
+
+installErrorCapture({ onError: showErrorReport });
