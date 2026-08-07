@@ -392,6 +392,43 @@ const settledWindowSamples = eventWindowSamples(0.2, 5);
 const minimumRingingWindowSamples = eventWindowSamples(0.2, 5);
 const minimumBounceBackSamples = eventWindowSamples(0.03, 3);
 
+// Event moments print as seconds from the start of the recording
+// — the same axis every chart shows — so a finding can be walked
+// straight to its place in the log.
+const firstDataRowTimeMicros = timeColumnName
+  ? Number(
+      getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        timeColumnName,
+        [telemetryHeaderIndex + 1]
+      )[0]
+    )
+  : Number.NaN;
+
+const stableSampleTimeSeconds = (compactedIndex) => {
+  const micros = Number(stableTimeValues[compactedIndex]);
+
+  return Number.isFinite(micros) &&
+    Number.isFinite(firstDataRowTimeMicros)
+    ? (micros - firstDataRowTimeMicros) / 1_000_000
+    : null;
+};
+
+const eventMomentText = (compactedIndex, rowIndex) => {
+  const seconds = stableSampleTimeSeconds(compactedIndex);
+
+  if (seconds === null) {
+    return Number.isInteger(rowIndex)
+      ? `data row ${rowIndex}`
+      : "Unavailable";
+  }
+
+  return `${seconds.toFixed(2)} s${
+    Number.isInteger(rowIndex) ? ` (data row ${rowIndex})` : ""
+  }`;
+};
+
 
 const recordedAxisErrorValues =
   axisErrorColumns.map((columnName) => ({
@@ -2389,17 +2426,23 @@ return [
   
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — sample: ${
-      highestOvershootEvent.sample ?? "Unavailable"
+  ? `${axisResult.axis} highest overshoot event details — command at: ${
+      eventMomentText(
+        highestOvershootEvent.sampleIndex,
+        highestOvershootEvent.sampleRowIndex
+      )
     }, command end: ${
-      highestOvershootEvent.commandEnd ?? "Unavailable"
+      eventMomentText(
+        highestOvershootEvent.commandEndSampleIndex,
+        highestOvershootEvent.commandEndRowIndex
+      )
     }, previous setpoint: ${
       Number.isFinite(highestOvershootEvent.previousSetpoint)
         ? highestOvershootEvent.previousSetpoint.toFixed(2)
         : "Unavailable"
     }, target: ${
-      Number.isFinite(highestOvershootEvent.target)
-        ? highestOvershootEvent.target.toFixed(2)
+      Number.isFinite(highestOvershootEvent.commandTarget)
+        ? highestOvershootEvent.commandTarget.toFixed(2)
         : "Unavailable"
     }, command magnitude: ${
       Number.isFinite(highestOvershootEvent.commandMagnitude)
@@ -2482,8 +2525,27 @@ const trimmedMaximumBounceBackPercent =
     },
     null
     );
+    // A response can only bounce back from an overshoot, so an axis
+    // that never overshot offers nothing to measure — which is a
+    // result about the axis, not a gap in the log. Saying
+    // "Insufficient Data" there sends a pilot hunting for evidence
+    // their good flying is the reason they do not have. The whole
+    // block must tell that one story: an observation ("no overshoot
+    // to recover from") backed by the clean responses that justify
+    // it — never a "Clear" verdict sitting beside an Insufficient
+    // confidence and a plea for more data.
+    const cleanBounceResponseCount = axisResult.events.filter(
+      (event) => Number.isFinite(event.responsePeak)
+    ).length;
+
+    const nothingToBounceFrom =
+      validBounceBackEvents.length === 0 &&
+      cleanBounceResponseCount >= 2;
+
     const bounceBackConfidence =
-  validBounceBackEvents.length >= 5
+  nothingToBounceFrom
+    ? commandEvidenceConfidence(cleanBounceResponseCount)
+    : validBounceBackEvents.length >= 5
     ? "High"
     : validBounceBackEvents.length >= 3
       ? "Medium"
@@ -2491,27 +2553,19 @@ const trimmedMaximumBounceBackPercent =
         ? "Low"
         : "Insufficient";
         const bounceBackRecommendation =
-  bounceBackConfidence === "Insufficient" ||
+  nothingToBounceFrom
+    ? `${axisResult.axis} produced ${cleanBounceResponseCount} clean responses and none overshot, so there is no bounce-back to measure. No action needed.`
+    : bounceBackConfidence === "Insufficient" ||
   bounceBackConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating bounce-back.`
     : Number.isFinite(medianBounceBackPercent) &&
         medianBounceBackPercent >= 15
       ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
       : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
-      // A response can only bounce back from an overshoot, so an axis
-      // that never overshot offers nothing to measure — which is a
-      // result about the axis, not a gap in the log. Saying
-      // "Insufficient Data" there sends a pilot hunting for evidence
-      // their good flying is the reason they do not have.
-      const nothingToBounceFrom =
-        validBounceBackEvents.length === 0 &&
-        axisResult.events.filter((event) =>
-          Number.isFinite(event.responsePeak)
-        ).length >= 2;
 
       const bounceBackStatus =
   nothingToBounceFrom
-    ? "Clear — no overshoot to recover from"
+    ? "No overshoot to recover from"
     : bounceBackConfidence === "Insufficient" ||
   bounceBackConfidence === "Low"
     ? "Insufficient Data"
@@ -2522,10 +2576,18 @@ const trimmedMaximumBounceBackPercent =
 return [
   `${axisResult.axis} events with valid bounce-back measurements: ${validBounceBackEvents.length}`,
   `${axisResult.axis} bounce-back status: ${bounceBackStatus}`,
-  `${axisResult.axis} bounce-back confidence: ${bounceBackConfidence}`,
-  `${axisResult.axis} bounce-back evidence: ${validBounceBackEvents.length} valid event${
-  validBounceBackEvents.length === 1 ? "" : "s"
-}`,
+  `${axisResult.axis} bounce-back confidence: ${bounceBackConfidence}${
+    nothingToBounceFrom
+      ? ` (based on ${cleanBounceResponseCount} clean responses, none overshot)`
+      : ""
+  }`,
+  `${axisResult.axis} bounce-back evidence: ${
+    nothingToBounceFrom
+      ? `${cleanBounceResponseCount} clean responses without overshoot — no bounce-back events expected`
+      : `${validBounceBackEvents.length} valid event${
+          validBounceBackEvents.length === 1 ? "" : "s"
+        }`
+  }`,
   `${axisResult.axis} bounce-back recommendation: ${bounceBackRecommendation}`,
 
   `${axisResult.axis} average event bounce-back: ${
@@ -2553,7 +2615,12 @@ return [
   }%`,
 
   highestBounceBackEvent
-    ? `${axisResult.axis} highest bounce-back event details — sample: ${highestBounceBackEvent.sampleIndex}, target: ${
+    ? `${axisResult.axis} highest bounce-back event details — command at: ${
+        eventMomentText(
+          highestBounceBackEvent.sampleIndex,
+          highestBounceBackEvent.sampleRowIndex
+        )
+      }, target: ${
         Number.isFinite(highestBounceBackEvent.commandTarget)
           ? highestBounceBackEvent.commandTarget.toFixed(2)
           : "Unavailable"
