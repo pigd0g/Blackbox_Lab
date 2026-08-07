@@ -2754,7 +2754,8 @@ function analyzeFlight(flightIndex) {
     buildFlightEvents({
       trackingAnalysis:
         pidAnalysis?.detectedColumns?.trackingAnalysis,
-      timeSeconds: currentDataset?.timeSeconds
+      timeSeconds: currentDataset?.timeSeconds,
+      dataRowOffset: findTelemetryHeaderIndex(lines) + 1
     })
   );
 

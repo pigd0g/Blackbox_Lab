@@ -45,6 +45,35 @@ test("events carry time, axis and rounded measurements", () => {
   assert.equal(events[0].verdict, "clean");
 });
 
+test("an absolute row anchor beats the compacted stable-array index", () => {
+  // Events are measured on the compacted stable-flight arrays,
+  // so their sampleIndex means nothing on the flight timeline.
+  // With sampleRowIndex present, the time must come from it —
+  // offset by the first data line — never from sampleIndex.
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Yaw",
+          events: [
+            rawEvent({
+              axis: "Yaw",
+              sampleIndex: 8_300, // compacted → 4.15 s, WRONG
+              sampleRowIndex: 40_100 // line index in the file
+            })
+          ]
+        }
+      ]
+    },
+    timeSeconds,
+    dataRowOffset: 100 // telemetry header at line 99
+  });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].sample, 40_000);
+  assert.equal(events[0].t, 20);
+});
+
 test("verdict thresholds: overshoot beats slow, clean is the default", () => {
   const { events, summary } = buildFlightEvents({
     trackingAnalysis: {

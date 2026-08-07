@@ -328,7 +328,71 @@ for (const rowSegment of stableRowSegments) {
   stableArrayOffset += segmentLength;
 }
 
-     
+// The command-event windows below are defined in SECONDS and
+// converted to samples here. "Stable for 0.2 s" has to mean the
+// same thing in a 100 Hz CSV export and a 1 kHz raw log — a
+// fixed sample count silently shrinks every window at higher
+// logging rates, which splits one stick movement into several
+// events and calls a mid-movement pause its target.
+const timeColumnName = allColumns.find((name) =>
+  /^"?time"?$/i.test(String(name).trim())
+);
+
+const stableTimeValues =
+  timeColumnName && hasStableFlightRows
+    ? getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        timeColumnName,
+        stableRowIndexes
+      )
+    : [];
+
+const samplesPerSecond = (() => {
+  for (const segment of stableArraySegments) {
+    if (segment.sampleCount < 50) {
+      continue;
+    }
+
+    const firstMicros = Number(
+      stableTimeValues[segment.startIndex]
+    );
+    const lastMicros = Number(
+      stableTimeValues[segment.endIndex]
+    );
+
+    if (
+      Number.isFinite(firstMicros) &&
+      Number.isFinite(lastMicros) &&
+      lastMicros > firstMicros
+    ) {
+      return (
+        ((segment.sampleCount - 1) /
+          (lastMicros - firstMicros)) *
+        1_000_000
+      );
+    }
+  }
+
+  return 100;
+})();
+
+const eventWindowSamples = (seconds, minimumSamples) =>
+  Math.max(
+    minimumSamples,
+    Math.round(seconds * samplesPerSecond)
+  );
+
+const commandChangeWindowSamples = eventWindowSamples(0.2, 5);
+const commandStableWindowSamples = eventWindowSamples(0.2, 5);
+const commandEndLookaheadSamples = eventWindowSamples(3, 60);
+const responseWindowLimitSamples = eventWindowSamples(2, 40);
+const minimumEventSpacingSamples = eventWindowSamples(0.5, 10);
+const settledWindowSamples = eventWindowSamples(0.2, 5);
+const minimumRingingWindowSamples = eventWindowSamples(0.2, 5);
+const minimumBounceBackSamples = eventWindowSamples(0.03, 3);
+
+
 const recordedAxisErrorValues =
   axisErrorColumns.map((columnName) => ({
     columnName,
@@ -514,7 +578,7 @@ exceedancePercent: null
     const events = [];
     const values = setpointResult.values;
 
-    const minimumEventSpacing = 50;
+    const minimumEventSpacing = minimumEventSpacingSamples;
 
     for (const stableSegment of stableArraySegments) {
       const segmentStart =
@@ -528,11 +592,12 @@ exceedancePercent: null
 
       for (
         let sampleIndex =
-          Math.max(segmentStart + 20, 20);
+          segmentStart + commandChangeWindowSamples;
         sampleIndex <= segmentEnd;
         sampleIndex += 1
       ) {
-      const previousValue = values[sampleIndex - 20];
+      const previousValue =
+        values[sampleIndex - commandChangeWindowSamples];
       const currentValue = values[sampleIndex];
 
       const commandChange =
@@ -553,12 +618,20 @@ let commandEndSampleIndex =
   sampleIndex;
 
 let stableSampleCount = 0;
-const requiredStableSamples = 20;
+const requiredStableSamples = commandStableWindowSamples;
 
+// Both look-aheads stop at the segment edge: past it the
+// compacted array jumps to a different moment of the flight,
+// and a window that crosses that seam would read two distant
+// moments as if they were adjacent.
 for (
   let lookAheadIndex = sampleIndex + 1;
   lookAheadIndex <
-    Math.min(sampleIndex + 300, values.length);
+    Math.min(
+      sampleIndex + commandEndLookaheadSamples,
+      segmentEnd + 1,
+      values.length
+    );
   lookAheadIndex += 1
 ) {
   const lookAheadChange =
@@ -598,7 +671,8 @@ const responseWindowStart =
 
 const maximumResponseWindowEnd =
   Math.min(
-    responseWindowStart + 200,
+    responseWindowStart + responseWindowLimitSamples,
+    segmentEnd + 1,
     values.length,
     responseResult?.values.length ?? 0
   );
@@ -756,7 +830,7 @@ const validBounceBackWindow =
   validBounceBackWindow.length;
 
 const hasSufficientBounceBackWindow =
-  bounceBackSampleCount >= 3;
+  bounceBackSampleCount >= minimumBounceBackSamples;
   const bounceBackExtreme =
   hasSufficientBounceBackWindow
     ? commandDirection > 0
@@ -819,7 +893,7 @@ const bounceBackAmount =
           settlingTolerance
       )
     : [];
-    const requiredSettledSamples = 20;
+    const requiredSettledSamples = settledWindowSamples;
     let settlingStartOffset = null;
 let consecutiveSettledSamples = 0;
 
@@ -912,7 +986,7 @@ for (
   significantRingingErrorWindow.length;
 
 const hasSufficientRingingWindow =
-  ringingSampleCount >= 20;
+  ringingSampleCount >= minimumRingingWindowSamples;
   const ringingEligible =
   !hasOverlappingCommand &&
   hasSufficientRingingWindow &&
@@ -962,8 +1036,28 @@ ringingEligible,
   responseWindow,
   responsePeak,
 responsePeakOffset,
-responsePeakSampleIndex
+responsePeakSampleIndex,
+  // Absolute data-row anchors: the compacted stable-array
+  // indexes above cannot be read against the flight timeline,
+  // so every consumer that names a time or draws a chart uses
+  // these instead.
+  sampleRowIndex:
+    stableRowIndexes[sampleIndex] ?? null,
+  commandEndRowIndex:
+    stableRowIndexes[commandEndSampleIndex] ?? null,
+  responsePeakRowIndex:
+    Number.isInteger(responsePeakSampleIndex)
+      ? stableRowIndexes[responsePeakSampleIndex] ?? null
+      : null
 });
+
+// One stick movement is one event: the scan resumes after the
+// command finished settling, so a long continuous input cannot
+// re-trigger every few tenths along its own rise.
+sampleIndex = Math.max(
+  sampleIndex,
+  commandEndSampleIndex
+);
       }
     }
     return {

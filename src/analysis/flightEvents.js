@@ -63,12 +63,19 @@ function eventVerdict(event, settlingMs) {
  *
  * @param {object} options {
  *     trackingAnalysis,  // pidAnalysis.detectedColumns.trackingAnalysis
- *     timeSeconds        // dataset.timeSeconds (row index → seconds)
+ *     timeSeconds,       // dataset.timeSeconds (row index → seconds)
+ *     dataRowOffset      // first data line's index in the source
+ *                        // file (telemetry header index + 1), so
+ *                        // absolute row anchors map onto dataset rows
  *   }
  * Returns { events, summary } — events sorted by time;
  * summary = { total, clean, overshoot, slow, sentence, worst }.
  */
-export function buildFlightEvents({ trackingAnalysis, timeSeconds } = {}) {
+export function buildFlightEvents({
+  trackingAnalysis,
+  timeSeconds,
+  dataRowOffset = 0
+} = {}) {
   const perAxis = trackingAnalysis?.commandEvents ?? [];
   const dtMs = sampleSpacingMs(timeSeconds);
 
@@ -85,8 +92,16 @@ export function buildFlightEvents({ trackingAnalysis, timeSeconds } = {}) {
 
       const verdict = eventVerdict(raw, settlingMs);
 
+      // Events measured on the compacted stable-flight arrays
+      // carry their absolute source row; the flight timeline is
+      // only allowed to be read through it.
+      const datasetRow = Number.isInteger(raw.sampleRowIndex)
+        ? raw.sampleRowIndex - dataRowOffset
+        : raw.sampleIndex;
+
       events.push({
-        t: toSeconds(timeSeconds, raw.sampleIndex),
+        t: toSeconds(timeSeconds, datasetRow),
+        sample: datasetRow,
         axis: raw.axis,
         kind: "command",
         magnitude: Number.isFinite(raw.commandMagnitude)
