@@ -434,13 +434,41 @@ export function analyzeGovernorLab({
 // more than "worth a look" — there is no contract to
 // hold the rotor to, only its own steadiness.
 // ------------------------------------------------------
+// Drops the first and last `marginSamples` entries of every
+// contiguous index run, so boundary samples never speak for the
+// steady interior they sit next to.
+function trimSegmentEdges(indexes, marginSamples) {
+  const trimmed = [];
+  let runStart = 0;
+
+  for (let k = 1; k <= indexes.length; k += 1) {
+    const runEnded =
+      k === indexes.length ||
+      indexes[k] !== indexes[k - 1] + 1;
+
+    if (runEnded) {
+      for (
+        let j = runStart + marginSamples;
+        j < k - marginSamples;
+        j += 1
+      ) {
+        trimmed.push(indexes[j]);
+      }
+
+      runStart = k;
+    }
+  }
+
+  return trimmed;
+}
+
 function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
-  const inFlightIndexes = detectInFlightSamples({
+  const rawInFlightIndexes = detectInFlightSamples({
     timeSeconds,
     headspeed
   });
 
-  if (!inFlightIndexes) {
+  if (!rawInFlightIndexes) {
     return {
       score: null,
       status: "insufficient",
@@ -460,6 +488,39 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
   }
 
   const sampleRate = estimateSampleRate(timeSeconds) ?? 100;
+
+  // The hold is judged against a centred 2-second trend, so any
+  // sample within one trend window of an in-flight boundary reads
+  // the entry or exit ramp, not the hold: at a spool-up or a
+  // commanded shutdown the quarter-second signal races ahead of
+  // the lagging trend and the difference looks like a huge swing
+  // that no pilot ever felt. Each contiguous in-flight segment
+  // therefore loses one full trend window at both ends before
+  // steadiness is measured. A genuine mid-flight bog never splits
+  // the in-flight mask, so it keeps every one of its samples.
+  const inFlightIndexes = trimSegmentEdges(
+    rawInFlightIndexes,
+    Math.max(5, Math.round(sampleRate * 2))
+  );
+
+  if (inFlightIndexes.length < 100) {
+    return {
+      score: null,
+      status: "insufficient",
+      mode: "headspeed-hold",
+      hasRotorSpeedData: true,
+      movedDuringRecording: null,
+      story:
+        "This log states no governor target, and the rotor never held a level section long enough to judge — the recording is nearly all spool-up, spool-down or headspeed changes.",
+      droopRpm: null,
+      droopPercent: null,
+      droopTimeSeconds: null,
+      averageHeadspeed: null,
+      stableSampleCount: 0,
+      stableSegments: [],
+      metrics: []
+    };
+  }
   const trend = buildRollingMean(
     headspeed,
     Math.max(5, Math.round(sampleRate * 2))

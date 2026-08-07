@@ -84,6 +84,93 @@ test("a deliberate headspeed ramp is not charged against the hold", () => {
   );
 });
 
+test("a commanded shutdown spool-down is not an in-flight swing", () => {
+  // Spool-up, level flight, then the motor is commanded to zero
+  // and the rotor spools down — the flight Daniel reported: the
+  // decay corner must not read as a 30% droop.
+  const timeSeconds = [];
+  const headspeed = [];
+
+  for (let i = 0; i < 110 * SAMPLE_RATE; i += 1) {
+    const t = i / SAMPLE_RATE;
+    let rpm;
+
+    if (t < 6) {
+      rpm = (t / 6) * 1300;
+    } else if (t < 95.6) {
+      rpm = 1300 + (i % 5) - 2;
+    } else if (t < 100) {
+      rpm = Math.max(0, 1300 * (1 - (t - 95.6) / 4.4));
+    } else {
+      rpm = 0;
+    }
+
+    timeSeconds.push(t);
+    headspeed.push(rpm);
+  }
+
+  const result = analyzeGovernorLab({
+    timeSeconds,
+    headspeed,
+    governorTarget: null
+  });
+
+  assert.ok(result);
+  assert.equal(result.mode, "headspeed-hold");
+  assert.equal(
+    result.status,
+    "good",
+    `shutdown decay must not be charged against the hold, got ${result.status} (${result.droopRpm} rpm)`
+  );
+  assert.ok(
+    result.droopRpm < 40,
+    `expected only noise-level swing, got ${result.droopRpm} rpm`
+  );
+});
+
+test("a genuine bog right before shutdown still registers", () => {
+  // The exclusion must remove the ramp corners, not the flight
+  // in front of them: an 8% bog twenty seconds before shutdown
+  // keeps its evidence.
+  const timeSeconds = [];
+  const headspeed = [];
+
+  for (let i = 0; i < 110 * SAMPLE_RATE; i += 1) {
+    const t = i / SAMPLE_RATE;
+    let rpm;
+
+    if (t < 6) {
+      rpm = (t / 6) * 1300;
+    } else if (t < 95.6) {
+      rpm = 1300 + (i % 5) - 2;
+
+      if (t >= 75 && t < 76.5) {
+        rpm = 1196;
+      }
+    } else if (t < 100) {
+      rpm = Math.max(0, 1300 * (1 - (t - 95.6) / 4.4));
+    } else {
+      rpm = 0;
+    }
+
+    timeSeconds.push(t);
+    headspeed.push(rpm);
+  }
+
+  const result = analyzeGovernorLab({
+    timeSeconds,
+    headspeed,
+    governorTarget: null
+  });
+
+  assert.ok(result);
+  assert.equal(result.status, "watch");
+  assert.ok(
+    result.droopRpm > 40,
+    `the bog should register, got ${result.droopRpm} rpm`
+  );
+});
+
 test("the verdict renders a rotor card for headspeed-hold results", () => {
   const lab = analyzeGovernorLab(ungovernedFlight({}));
 
