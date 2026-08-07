@@ -2913,6 +2913,7 @@ buildReportButton.addEventListener("click", () => {
     firmware: firmware === "Not found" ? null : firmware,
     durationSeconds: duration,
     verdict: currentDataset.verdict,
+    quality: currentLogQuality,
     labs: [
       { title: "Governor Lab", analysis: currentDataset.labs.governor },
       { title: "ESC Lab", analysis: currentDataset.labs.esc },
