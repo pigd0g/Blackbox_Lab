@@ -125,15 +125,15 @@ export function flightFingerprint(entry) {
   ].join("|");
 }
 
-export function recordFlight(storage, craftName, entry) {
-  const history = loadHistory(storage);
-
 const normalizeFileName = (fileName = "") =>
   String(fileName)
     .toLowerCase()
     .replace(/\.bbl\.csv$/, "")
     .replace(/\.bbl$/, "")
     .replace(/\.csv$/, "");
+
+export function recordFlight(storage, craftName, entry) {
+  const history = loadHistory(storage);
 
 let craftKey =
   (craftName || "Unknown craft").trim() ||
@@ -289,7 +289,61 @@ export function collapseDuplicateFlights(flights = []) {
     }
   }
 
-  return collapsed;
+  // Identity falls back to the file name exactly the way recording
+  // does: an entry written before flights carried a fingerprint can
+  // never match by fingerprint, so a record holding {old analysis,
+  // new analysis} of one source file kept both forever — two dates,
+  // two scores, one physical flight counted twice in every trend.
+  // The fingerprinted entry is the newer, better-described analysis:
+  // it stays, and the legacy entry only fills its gaps. Entries that
+  // BOTH carry fingerprints are left alone here — same-named flights
+  // from a multi-flight file are genuinely different flights.
+  const withoutFingerprint = collapsed.filter(
+    (flight) => !flightFingerprint(flight)
+  );
+
+  const survivors = [];
+
+  for (const flight of collapsed) {
+    if (flightFingerprint(flight)) {
+      survivors.push(flight);
+      continue;
+    }
+
+    const modern = collapsed.find(
+      (candidate) =>
+        flightFingerprint(candidate) &&
+        normalizeFileName(candidate.fileName) ===
+          normalizeFileName(flight.fileName)
+    );
+
+    const earlierLegacyTwin = withoutFingerprint.find(
+      (candidate) =>
+        candidate !== flight &&
+        survivors.includes(candidate) &&
+        normalizeFileName(candidate.fileName) ===
+          normalizeFileName(flight.fileName)
+    );
+
+    const keeper = modern ?? earlierLegacyTwin;
+
+    if (!keeper) {
+      survivors.push(flight);
+      continue;
+    }
+
+    for (const [key, value] of Object.entries(flight)) {
+      if (
+        (keeper[key] === null || keeper[key] === undefined) &&
+        value !== null &&
+        value !== undefined
+      ) {
+        keeper[key] = value;
+      }
+    }
+  }
+
+  return survivors;
 }
 
 export function deleteFlight(storage, craftName, fileName) {

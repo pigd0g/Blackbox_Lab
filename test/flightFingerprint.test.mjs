@@ -176,3 +176,83 @@ test("unidentifiable flights are never folded together", () => {
     "merging two real flights loses one — keep the duplicate instead"
   );
 });
+
+test("a pre-fingerprint entry folds into the modern analysis of its file", () => {
+  // The reported record: one .bbl analyzed by an older build (no
+  // date, no sample count — no fingerprint possible) and again by a
+  // newer one. The newer, better-described analysis stays; the
+  // legacy row only fills gaps — never overrides.
+  const collapsed = collapseDuplicateFlights([
+    {
+      fileName: "md500e_20260000_000000.bbl",
+      flightDateMs: null,
+      durationSeconds: 102.9,
+      trackingScore: 98,
+      vibrationPeak: 4.7,
+      batterySagPercent: 1.5
+    },
+    {
+      fileName: "md500e_20260000_000000.bbl",
+      flightDateMs: Date.UTC(2026, 4, 16),
+      durationSeconds: 102.9,
+      sampleCount: 102_720,
+      trackingScore: 87,
+      vibrationPeak: 3.8,
+      droopRpm: 38.1
+    }
+  ]);
+
+  assert.equal(collapsed.length, 1, "one physical flight, one row");
+  assert.equal(
+    collapsed[0].trackingScore,
+    87,
+    "the newer analysis speaks for the flight"
+  );
+  assert.equal(
+    collapsed[0].batterySagPercent,
+    1.5,
+    "the legacy row still fills gaps the new analysis left"
+  );
+});
+
+test("two flights of a multi-flight file are never merged by name", () => {
+  // One .bbl can hold several flights: same file name, different
+  // flights. Both carry fingerprints, so the name must not fold them.
+  const collapsed = collapseDuplicateFlights([
+    {
+      fileName: "session.bbl",
+      flightDateMs: Date.UTC(2026, 4, 16, 10, 0, 0),
+      durationSeconds: 210.4,
+      sampleCount: 210_000
+    },
+    {
+      fileName: "session.bbl",
+      flightDateMs: Date.UTC(2026, 4, 16, 10, 30, 0),
+      durationSeconds: 195.7,
+      sampleCount: 195_000
+    }
+  ]);
+
+  assert.equal(collapsed.length, 2, "different flights both survive");
+});
+
+test("two legacy rows of one file become one row", () => {
+  const collapsed = collapseDuplicateFlights([
+    {
+      fileName: "old.bbl",
+      flightDateMs: null,
+      durationSeconds: 88.8,
+      trackingScore: 91
+    },
+    {
+      fileName: "old.bbl",
+      flightDateMs: null,
+      durationSeconds: 88.8,
+      vibrationPeak: 2.2
+    }
+  ]);
+
+  assert.equal(collapsed.length, 1);
+  assert.equal(collapsed[0].trackingScore, 91);
+  assert.equal(collapsed[0].vibrationPeak, 2.2);
+});
