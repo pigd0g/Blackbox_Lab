@@ -18,6 +18,66 @@ import {
   estimateSampleRate
 } from "./flightPhase.js";
 
+// Fleet-calibrated scoring (247 contributed flights, 2026-08-07).
+// The fleet's stable sustained droop runs p25 2.57% / p50 4.09% /
+// p90 6.44%; RMS tracking error p25 9.3 rpm / p50 16.6 / p90 40.
+// The previous linear deductions (droop×12 + rms×0.5) put the
+// median governed machine at 36/100 and read "attention" for 68%
+// of governed flights — a verdict that fires on the median machine
+// describes the formula, not the machine. Credit now runs
+// continuously between a full-credit anchor near the fleet's clean
+// quartile and a zero-credit anchor beyond its worst, weighted
+// toward droop — holding the rotor against load is the governor's
+// actual contract; RMS is how calmly it does so.
+export const GOVERNOR_SCORE_TUNING = {
+  DROOP_FULL_CREDIT_PERCENT: 2.5,
+  DROOP_ZERO_CREDIT_PERCENT: 10,
+  RMS_FULL_CREDIT_RPM: 9,
+  RMS_ZERO_CREDIT_RPM: 90,
+  DROOP_WEIGHT: 70,
+  RMS_WEIGHT: 30
+};
+
+// Status speaks fleet language: "attention" is reserved for droop
+// that stands out from the fleet (≈p90), "watch" for the upper
+// half, "good" for the half of real flights below the median.
+export const GOVERNOR_STATUS_THRESHOLDS = {
+  WATCH_DROOP_PERCENT: 4,
+  ATTENTION_DROOP_PERCENT: 6.5,
+  SEVERE_FLIGHT_DIP_PERCENT: 12.5
+};
+
+function anchoredCredit(value, fullCreditAt, zeroCreditAt) {
+  if (!Number.isFinite(value) || value <= fullCreditAt) {
+    return 1;
+  }
+
+  if (value >= zeroCreditAt) {
+    return 0;
+  }
+
+  return (zeroCreditAt - value) / (zeroCreditAt - fullCreditAt);
+}
+
+export function computeGovernorScore({ droopPercent, rmsError }) {
+  const tuning = GOVERNOR_SCORE_TUNING;
+
+  return Math.round(
+    tuning.DROOP_WEIGHT *
+      anchoredCredit(
+        droopPercent,
+        tuning.DROOP_FULL_CREDIT_PERCENT,
+        tuning.DROOP_ZERO_CREDIT_PERCENT
+      ) +
+      tuning.RMS_WEIGHT *
+        anchoredCredit(
+          rmsError,
+          tuning.RMS_FULL_CREDIT_RPM,
+          tuning.RMS_ZERO_CREDIT_RPM
+        )
+  );
+}
+
 export function analyzeGovernorLab({
   timeSeconds,
   headspeed,
@@ -261,17 +321,7 @@ export function analyzeGovernorLab({
       ? (maximumDroop / averageTarget) * 100
       : 0;
 
-  const score = Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(
-        100 -
-          droopPercent * 12 -
-          rmsError * 0.5
-      )
-    )
-  );
+  const score = computeGovernorScore({ droopPercent, rmsError });
 
   // A deep sustained dip under load anywhere in the flight
   // outranks the stable-phase reading: that is the machine
@@ -280,13 +330,16 @@ export function analyzeGovernorLab({
   const flightDipSevere =
     flightDip &&
     Number.isFinite(flightDip.droopPercent) &&
-    flightDip.droopPercent > 8;
+    flightDip.droopPercent >
+      GOVERNOR_STATUS_THRESHOLDS.SEVERE_FLIGHT_DIP_PERCENT;
 
   const status = flightDipSevere
     ? "attention"
-    : droopPercent > 3
+    : droopPercent >
+        GOVERNOR_STATUS_THRESHOLDS.ATTENTION_DROOP_PERCENT
       ? "attention"
-      : droopPercent > 1.2
+      : droopPercent >
+          GOVERNOR_STATUS_THRESHOLDS.WATCH_DROOP_PERCENT
         ? "watch"
         : "good";
 

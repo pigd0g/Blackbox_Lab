@@ -74,10 +74,13 @@ test("a deep dip at full output is named a power limit", () => {
   const flight = baseFlight(120);
   const motorOutput = new Array(flight.headspeed.length).fill(600);
 
-  // Six seconds 12% below target with the output pinned: the
+  // Six seconds 15% below target with the output pinned: the
   // bog-down drops out of the stable phase but must be found.
+  // (Severe means beyond the fleet's p90 whole-flight dip — a
+  // quarter of real flights work their rotor past 8%, so the
+  // fixture digs clearly deeper than ordinary hard flying.)
   for (let i = 6000; i < 6600; i += 1) {
-    flight.headspeed[i] = 1580;
+    flight.headspeed[i] = 1530;
     motorOutput[i] = 1000;
   }
 
@@ -86,8 +89,8 @@ test("a deep dip at full output is named a power limit", () => {
   assert.ok(result, "governor lab should produce a result");
   assert.equal(result.status, "attention");
   assert.ok(
-    result.flightDroopPercent > 8,
-    `whole-flight dip should exceed 8%, got ${result.flightDroopPercent}`
+    result.flightDroopPercent > 12.5,
+    `whole-flight dip should read severe, got ${result.flightDroopPercent}`
   );
   assert.ok(
     result.flightDroopOutputPercent >= 95,
