@@ -555,6 +555,64 @@ const { mkdirSync } = require("node:fs");
   console.log("advanced switch ok: toggled to", advAfter.body, "and back");
   await window.screenshot({ path: "smoke-shots/11-sidebar-advanced.png" });
 
+  // ---- error-report dialog: the global net actually catches ----
+  // A deliberate unhandled throw must raise the dialog with the
+  // send path offered; the throw itself is expected, not a smoke
+  // failure.
+  const SYNTHETIC_ERROR = "smoke synthetic error (expected)";
+
+  await window.evaluate((message) => {
+    setTimeout(() => {
+      throw new Error(message);
+    }, 0);
+  }, SYNTHETIC_ERROR);
+  await window.waitForTimeout(600);
+
+  const errorDialog = await window.evaluate(() => ({
+    visible: !document.getElementById("errorReportOverlay").hidden,
+    summary: document.getElementById("errorReportSummary").textContent,
+    sendVisible: !document.getElementById("errorReportSend").hidden,
+    sendLabel: document.getElementById("errorReportSend").textContent
+  }));
+
+  if (!errorDialog.visible) {
+    throw new Error("error-report dialog did not appear");
+  }
+  if (!errorDialog.summary.includes("smoke synthetic error")) {
+    throw new Error(
+      "error-report summary missing the error: " + errorDialog.summary
+    );
+  }
+  if (!errorDialog.sendVisible) {
+    throw new Error("send button hidden despite configured endpoint");
+  }
+
+  // The backdrop owns most click points, so target the ✕ without
+  // Playwright's hit-test; the closed-state assertion below is the
+  // real check that the handler ran.
+  await window.click("#errorReportClose", { force: true });
+
+  const dialogClosed = await window.evaluate(
+    () => document.getElementById("errorReportOverlay").hidden
+  );
+  if (!dialogClosed) {
+    throw new Error("error-report dialog did not close");
+  }
+
+  console.log(
+    "error report ok: dialog raised, send offered (" +
+      errorDialog.sendLabel.trim() +
+      "), closed"
+  );
+  await window.screenshot({ path: "smoke-shots/12-error-report.png" });
+
+  const expectedErrorIndex = errors.findIndex((entry) =>
+    entry.includes(SYNTHETIC_ERROR)
+  );
+  if (expectedErrorIndex >= 0) {
+    errors.splice(expectedErrorIndex, 1);
+  }
+
   if (errors.length) {
     console.log("\n==== ERRORS ====");
     for (const error of errors) console.log(error);
