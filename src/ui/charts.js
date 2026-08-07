@@ -15,6 +15,7 @@
 // ======================================================
 
 import uPlot from "../vendor/uplot/uPlot.esm.js";
+import { VIBRATION_FLOOR_HZ } from "../analysis/dsp/fft.js";
 
 // Colorblind-safe series palette tuned for dark surfaces.
 export const CHART_COLORS = [
@@ -381,15 +382,31 @@ export function renderTimeSeriesChart(element, options) {
 // Noise spectrum (frequency domain)
 // ------------------------------------------------------
 export function renderSpectrumChart(element, spectra, options = {}) {
-  const { height = 260, markers = [] } = options;
+  const {
+    height = 260,
+    markers = [],
+    minimumHz = VIBRATION_FLOOR_HZ
+  } = options;
 
   destroyExistingChart(element);
 
   const first = spectra[0];
 
+  // The chart starts at the vibration floor. Near-DC bins carry
+  // maneuver energy many times taller than any real shake, and
+  // plotted together they flatten every vibration peak the
+  // verdict talks about into an invisible ripple — the evidence
+  // chart must be able to SHOW the peak it is cited for.
+  const firstBin = first.spectrum.frequencies.findIndex(
+    (hz) => hz >= minimumHz
+  );
+  const from = firstBin < 0 ? 0 : firstBin;
+
   const data = [
-    Float64Array.from(first.spectrum.frequencies),
-    ...spectra.map((entry) => Float64Array.from(entry.spectrum.magnitudes))
+    Float64Array.from(first.spectrum.frequencies.slice(from)),
+    ...spectra.map((entry) =>
+      Float64Array.from(entry.spectrum.magnitudes.slice(from))
+    )
   ];
 
   const chart = new uPlot(

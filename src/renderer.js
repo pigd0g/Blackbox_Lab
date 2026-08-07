@@ -46,7 +46,8 @@ import {
 import {
   computeNoiseSpectrum,
   computeNoiseSpectrumOverRuns,
-  estimateSampleRate
+  estimateSampleRate,
+  peakMagnitudeAbove
 } from "./analysis/dsp/fft.js";
 import {
   detectStableFlightPhase
@@ -953,13 +954,7 @@ if (sampleRate && hasSpectrumRuns) {
   let strongestValue = 0;
 
   spectra.forEach((entry, index) => {
-    let peak = 0;
-
-    for (const value of entry.spectrum.magnitudes) {
-      if (value > peak) {
-        peak = value;
-      }
-    }
+    const peak = spectrumPeakValue(entry.spectrum);
 
     if (peak > strongestValue) {
       strongestValue = peak;
@@ -989,8 +984,8 @@ if (sampleRate && hasSpectrumRuns) {
 
     for (const entry of spectra) {
       if (
-        Math.max(...entry.spectrum.magnitudes) >
-        Math.max(...strongest.spectrum.magnitudes)
+        spectrumPeakValue(entry.spectrum) >
+        spectrumPeakValue(strongest.spectrum)
       ) {
         strongest = entry;
       }
@@ -1241,16 +1236,12 @@ if (sampleRate && hasSpectrumRuns) {
   };
 }
 
+// "Strongest" always means strongest ABOVE the vibration floor:
+// a plain max is dominated by near-DC maneuver energy and elects
+// the most-flown axis, while the verdict names its peak from the
+// most-shaking one — and the two must never disagree.
 function spectrumPeakValue(spectrum) {
-  let peak = 0;
-
-  for (const value of spectrum.magnitudes) {
-    if (value > peak) {
-      peak = value;
-    }
-  }
-
-  return peak;
+  return peakMagnitudeAbove(spectrum);
 }
 
 function buildSpectrumMarkers(spectra, headspeedRpm) {

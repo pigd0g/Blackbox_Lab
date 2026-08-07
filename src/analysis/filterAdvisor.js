@@ -16,7 +16,9 @@
 //
 // ======================================================
 
-function findPeaks(spectrum, minimumHz = 10, count = 5) {
+import { VIBRATION_FLOOR_HZ } from "./dsp/fft.js";
+
+function findPeaks(spectrum, minimumHz = VIBRATION_FLOOR_HZ, count = 5) {
   const { frequencies, magnitudes } = spectrum;
   const peaks = [];
 
@@ -153,7 +155,7 @@ export function adviseFilters({
   if (peaks.length === 0) {
     return {
       story:
-        "No significant vibration peaks found — this gyro signal is about as clean as they come. Whatever your filters are set to, they are not being challenged.",
+        "No significant vibration peaks found in the UNFILTERED gyro — the raw signal is about as clean as they come. Whatever your filters are set to, they are not being challenged.",
       rows: [],
       recommendations: []
     };

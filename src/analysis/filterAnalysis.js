@@ -1702,6 +1702,15 @@ let lowFrequencyStructuralPeakCount = 0;
 }
 }
 if (aircraftFrequencyMatches.length > 0) {
+  // The peak frequencies above are measured over this analysis's
+  // own FFT window; the Noise Spectrum chart and the Home verdict
+  // average across every stable run of the flight. On a peak that
+  // drifts with rotor speed the two windows can legitimately read
+  // a few Hz apart — say so, or the difference looks like an error.
+  findings.push(
+    "Peak frequencies in these findings come from the filter analysis's own measurement window. The Noise Spectrum chart and the Home vibration card average across every stable section of the flight, so the same peak can read a few Hz differently there."
+  );
+
   if (matchedMechanicalPeakCount === 0 && unmatchedMechanicalPeakCount > 0) {
   summaryFindings.push(
     "The detected vibration peaks do not currently line up with the aircraft’s known rotating frequencies."

@@ -14,6 +14,8 @@
 //
 // ======================================================
 
+import { VIBRATION_FLOOR_HZ } from "./dsp/fft.js";
+
 function averageOf(values) {
   if (!values || values.length === 0) {
     return null;
@@ -36,14 +38,14 @@ function vibrationVerdict(spectra, headspeedRpm) {
     return null;
   }
 
-  // Strongest peak above 10 Hz across all gyro axes.
+  // Strongest peak above the vibration floor across all gyro axes.
   let peakHz = 0;
   let peakMagnitude = 0;
 
   for (const { spectrum } of spectra) {
     for (let i = 0; i < spectrum.frequencies.length; i += 1) {
       if (
-        spectrum.frequencies[i] > 10 &&
+        spectrum.frequencies[i] >= VIBRATION_FLOOR_HZ &&
         spectrum.magnitudes[i] > peakMagnitude
       ) {
         peakMagnitude = spectrum.magnitudes[i];

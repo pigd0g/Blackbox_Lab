@@ -163,6 +163,42 @@ export function computeNoiseSpectrum(samples, sampleRateHz, options = {}) {
   };
 }
 
+// Below this frequency a gyro spectrum shows the pilot flying,
+// not the machine shaking: stick inputs and slow maneuvers put
+// their energy here, and no verdict, marker or advisor reads
+// anything below it. Every consumer of "the strongest peak"
+// shares this floor so they can never disagree about which
+// axis carries the vibration story.
+export const VIBRATION_FLOOR_HZ = 10;
+
+// The largest magnitude at or above `minimumHz` — the peak that
+// is allowed to speak for vibration. A plain max over the whole
+// spectrum is dominated by near-DC maneuver energy and picks the
+// most-flown axis, not the most-shaking one.
+export function peakMagnitudeAbove(
+  spectrum,
+  minimumHz = VIBRATION_FLOOR_HZ
+) {
+  if (!spectrum) {
+    return 0;
+  }
+
+  const { frequencies, magnitudes } = spectrum;
+  let peak = 0;
+
+  for (let i = 0; i < frequencies.length; i += 1) {
+    if (
+      frequencies[i] >= minimumHz &&
+      Number.isFinite(magnitudes[i]) &&
+      magnitudes[i] > peak
+    ) {
+      peak = magnitudes[i];
+    }
+  }
+
+  return peak;
+}
+
 // Estimate the sample rate from the time column (microseconds).
 export function estimateSampleRate(timeValuesMicroseconds) {
   if (!timeValuesMicroseconds || timeValuesMicroseconds.length < 2) {
