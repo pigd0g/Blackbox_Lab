@@ -55,7 +55,10 @@ import {
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
-import { assessLogQuality } from "./analysis/logQuality.js";
+import {
+  assessLogQuality,
+  columnCarriesData
+} from "./analysis/logQuality.js";
 import { buildFlightEvents } from "./analysis/flightEvents.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
@@ -1212,13 +1215,18 @@ if (sampleRate && hasSpectrumRuns) {
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     filterAdvice,
     sampleRateHz: sampleRate,
+    // "Present" means CARRIES DATA: a headspeed column logged as
+    // constant zero (RPM wire unplugged) must not promise governor
+    // analysis, title a chart "vs Target", or mark a craft
+    // electric. 16 % of contributed flights carry at least one
+    // such dead column.
     columnPresence: {
       hasUnfilteredGyro: unfilteredColumns.length > 0,
       hasFilteredGyro: filteredColumns.length > 0,
-      hasHeadspeed: Boolean(headspeed),
-      hasGovernorTarget: Boolean(governorTarget),
-      hasVbat: Boolean(vbat),
-      hasAmperage: Boolean(amperage)
+      hasHeadspeed: columnCarriesData(headspeed),
+      hasGovernorTarget: columnCarriesData(governorTarget),
+      hasVbat: columnCarriesData(vbat),
+      hasAmperage: columnCarriesData(amperage)
     },
     headerLine,
     timeSeconds,
