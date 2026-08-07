@@ -42,6 +42,62 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;");
 }
 
+// A shared report is read by people who never saw the app. Inside
+// the app, the Log Quality gate says what this log could and could
+// not support — the report has to say the same, or its reader
+// cannot tell "this area was fine" from "this area was never
+// judged". A fully qualified report depends on complete data;
+// where data was missing, the report says so instead of staying
+// silent.
+const QUALITY_LEVELS = {
+  full: { word: "FULL DATA", color: "#1f8f5f" },
+  partial: { word: "PARTIAL DATA", color: "#b07d10" },
+  missing: { word: "NO JUDGMENT", color: "#b3423a" }
+};
+
+function buildQualityHtml(quality) {
+  if (!quality || !Array.isArray(quality.capabilities)) {
+    return "";
+  }
+
+  const rows = quality.capabilities
+    .map((capability) => {
+      const level =
+        QUALITY_LEVELS[capability.level] ?? QUALITY_LEVELS.partial;
+
+      const note =
+        capability.level === "missing"
+          ? `No judgment was possible on this area — ${escapeHtml(
+              capability.note
+            )}`
+          : escapeHtml(capability.note);
+
+      return `
+      <div class="basis-row">
+        <span class="basis-name">${escapeHtml(capability.name)}</span>
+        <span class="basis-level" style="color:${level.color};">${
+          level.word
+        }</span>
+        <div class="basis-note">${note}</div>
+      </div>`;
+    })
+    .join("");
+
+  const warnings = (quality.warnings ?? [])
+    .map(
+      (warning) =>
+        `<div class="basis-note basis-warning">${escapeHtml(warning)}</div>`
+    )
+    .join("");
+
+  return `
+  <h2>What This Report Is Based On</h2>
+  <p class="summary">${escapeHtml(quality.summary ?? "")} A fully
+  qualified report depends on all telemetry being logged — areas
+  without their data are stated below rather than judged.</p>
+  <div class="basis">${rows}${warnings}</div>`;
+}
+
 export function buildReportHtml({
   fileName,
   craftName,
@@ -49,7 +105,8 @@ export function buildReportHtml({
   durationSeconds,
   verdict,
   labs,
-  chartElements
+  chartElements,
+  quality = null
 }) {
   const date = new Date().toLocaleString();
 
@@ -204,6 +261,18 @@ export function buildReportHtml({
   .tile-label { font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
   .tile-value { font-weight: 650; margin-top: 2px; font-size: 15.5px; }
 
+  .basis {
+    background: #ffffff; border: 1px solid #e3e8ef; border-radius: 12px;
+    padding: 8px 18px 12px 18px; margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(13, 21, 36, 0.05);
+  }
+  .basis-row { padding: 10px 0; border-bottom: 1px solid #eef1f6; }
+  .basis-row:last-of-type { border-bottom: none; }
+  .basis-name { font-weight: 700; }
+  .basis-level { float: right; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; }
+  .basis-note { color: #46586d; font-size: 14.5px; margin-top: 3px; clear: both; }
+  .basis-warning { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e3e8ef; }
+
   .chart-panel {
     background: #101a2c; border-radius: 14px; padding: 14px 14px 8px 14px;
     margin: 12px 0; box-shadow: 0 6px 18px rgba(13, 21, 36, 0.18);
@@ -233,6 +302,8 @@ export function buildReportHtml({
   <h2>Verdict</h2>
   <p class="summary">${escapeHtml(verdict?.summary ?? "")}</p>
   ${cardsHtml}
+
+  ${buildQualityHtml(quality)}
 
   ${labsHtml ? `<h2>Lab Details</h2>${labsHtml}` : ""}
 
