@@ -25,7 +25,7 @@
     "name": "hillbilly1975",
     "email": "dlsinkjr22@gmail.com"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "uplot": "^1.6.32"

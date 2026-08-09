@@ -153,3 +153,10 @@ the Filter Lab.
 🚧 Active Development
 
 Built with Electron and JavaScript.
+
+## License
+
+Blackbox Lab is free software, licensed under the
+[GNU General Public License v3.0](LICENSE) — in line with the wider
+Rotorflight and Betaflight ecosystem. Copyright (C) 2026 Daniel Sink
+and contributors.
