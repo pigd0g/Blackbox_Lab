@@ -1810,3 +1810,12 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .replay-graph-tools button:hover {
   color: var(--ink);
 }
+
+/* The transport stays in reach while the stack scrolls — the
+   timeline of a video editor, pinned. */
+#replayCard {
+  position: sticky;
+  top: -20px;
+  z-index: 20;
+  box-shadow: 0 8px 22px rgba(4, 9, 18, 0.45);
+}

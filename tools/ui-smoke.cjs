@@ -43,6 +43,7 @@ const { mkdirSync } = require("node:fs");
   await window.evaluate(() => {
     localStorage.removeItem("blackboxLabCraftCards");
     localStorage.removeItem("blackboxLabCraftDumps");
+    localStorage.removeItem("blackboxLabReplayLayout");
   });
 
   // Before any log: the unlock card must be INVISIBLE by

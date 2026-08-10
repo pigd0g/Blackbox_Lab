@@ -415,7 +415,10 @@ function presetSeries(dataset, entries) {
 function loadReplayLayout() {
   try {
     const stored = JSON.parse(localStorage.getItem(REPLAY_LAYOUT_KEY));
-    if (Array.isArray(stored) && stored.length > 0) {
+    // An EMPTY stored layout is a deliberate choice — the
+    // sticks-only view, the classic video-overlay composition.
+    // Only a record that never existed gets the default.
+    if (Array.isArray(stored)) {
       return stored.filter((key) =>
         REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key)
       );
@@ -439,10 +442,20 @@ function renderReplayStack(dataset) {
   const layout = loadReplayLayout();
   stack.innerHTML = "";
 
+  const controls = el("replayStackControls");
+
   if (!dataset) {
+    if (controls) controls.hidden = true;
     stack.innerHTML =
-      '<p class="chart-empty">Open a log to build your replay view.</p>';
+      '<p class="chart-empty">Open a log first — then stack the charts you want to replay here.</p>';
     return;
+  }
+
+  if (controls) controls.hidden = false;
+
+  if (layout.length === 0) {
+    stack.innerHTML =
+      '<p class="chart-empty">Sticks-only view — no graphs stacked. The playhead, sticks and readouts still run above; add a graph anytime.</p>';
   }
 
   for (const key of layout) {
@@ -509,6 +522,10 @@ el("replayAddButton")?.addEventListener("click", () => {
   renderReplayStack(currentDataset);
   replay.playheads = [];
 });
+
+// Before any log, the picker would offer graphs with nothing to
+// draw them from — the stack says what to do instead.
+renderReplayStack(null);
 
 el("replayGraphStack")?.addEventListener("click", (event) => {
   const remove = event.target.closest("[data-stack-remove]");
