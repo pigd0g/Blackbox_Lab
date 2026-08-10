@@ -358,7 +358,21 @@ export async function buildContributionV1(
 
     // Schema 1.1: the flight's command events — capped so a
     // pathological log can never balloon the payload.
-    events: (extras.flightEvents?.events ?? []).slice(0, 300),
+    // Allowlist on write: exactly the schema-1.1 event fields.
+    // In-app helper fields (event id, window anchors) stay local.
+    events: (extras.flightEvents?.events ?? [])
+      .slice(0, 300)
+      .map((event) => ({
+        t: event.t,
+        sample: event.sample,
+        axis: event.axis,
+        kind: event.kind,
+        magnitude: event.magnitude,
+        direction: event.direction,
+        overshoot_percent: event.overshoot_percent,
+        settling_ms: event.settling_ms,
+        verdict: event.verdict
+      })),
     events_summary: extras.flightEvents?.summary
       ? {
           total: extras.flightEvents.summary.total,

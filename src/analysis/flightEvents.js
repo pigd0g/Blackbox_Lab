@@ -92,15 +92,37 @@ export function buildFlightEvents({
 
       const verdict = eventVerdict(raw, settlingMs);
 
-      // Events measured on the compacted stable-flight arrays
-      // carry their absolute source row; the flight timeline is
-      // only allowed to be read through it.
+      // Events measured on the compacted stable-flight arrays carry
+      // their absolute source row; the flight timeline is ONLY read
+      // through it. A compacted index is not a substitute — on a real
+      // log it lands tens of seconds early — so an event without its
+      // anchor keeps t = null and the UI says so, rather than naming
+      // a moment the flight never had.
       const datasetRow = Number.isInteger(raw.sampleRowIndex)
         ? raw.sampleRowIndex - dataRowOffset
-        : raw.sampleIndex;
+        : null;
+
+      const responseEndRow = Number.isInteger(raw.responsePeakRowIndex)
+        ? raw.responsePeakRowIndex - dataRowOffset
+        : null;
+
+      const commandEndRow = Number.isInteger(raw.commandEndRowIndex)
+        ? raw.commandEndRowIndex - dataRowOffset
+        : null;
 
       events.push({
-        t: toSeconds(timeSeconds, datasetRow),
+        // One identity for card, description, chart and findings:
+        // where the command started and ended in the source file.
+        id: `${raw.axis}:${raw.sampleRowIndex ?? "?"}:${raw.commandEndRowIndex ?? "?"}`,
+        t: datasetRow === null ? null : toSeconds(timeSeconds, datasetRow),
+        tEnd:
+          commandEndRow === null
+            ? null
+            : toSeconds(timeSeconds, commandEndRow),
+        tResponsePeak:
+          responseEndRow === null
+            ? null
+            : toSeconds(timeSeconds, responseEndRow),
         sample: datasetRow,
         axis: raw.axis,
         kind: "command",
@@ -117,7 +139,18 @@ export function buildFlightEvents({
     }
   }
 
-  events.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  // Sorted by time; events without a timeline anchor go last
+  // instead of masquerading as the start of the flight.
+  events.sort((a, b) => {
+    const aKnown = Number.isFinite(a.t);
+    const bKnown = Number.isFinite(b.t);
+
+    if (aKnown !== bKnown) {
+      return aKnown ? -1 : 1;
+    }
+
+    return (a.t ?? 0) - (b.t ?? 0);
+  });
 
   const counts = { clean: 0, overshoot: 0, slow: 0 };
   for (const event of events) {
@@ -156,5 +189,33 @@ export function buildFlightEvents({
       worst,
       sentence
     }
+  };
+}
+
+/**
+ * The chart window that provably CONTAINS the selected event:
+ * from just before the command started to just after the response
+ * finished (peak or settle), never a fixed slice around one point.
+ * Returns null when the event carries no timeline anchor.
+ */
+export function eventChartWindow(event, paddingSeconds = 1.5) {
+  if (!event || !Number.isFinite(event.t)) {
+    return null;
+  }
+
+  const candidates = [
+    event.t,
+    Number.isFinite(event.tEnd) ? event.tEnd : null,
+    Number.isFinite(event.tResponsePeak) ? event.tResponsePeak : null,
+    Number.isFinite(event.settling_ms)
+      ? event.t + event.settling_ms / 1000
+      : null
+  ].filter((value) => Number.isFinite(value));
+
+  const last = Math.max(...candidates);
+
+  return {
+    min: Math.max(0, event.t - paddingSeconds),
+    max: last + paddingSeconds
   };
 }

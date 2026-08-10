@@ -76,7 +76,7 @@ let lastUserAction = null;
 function noteAction(action) {
   lastUserAction = action;
 }
-import { buildFlightEvents } from "./analysis/flightEvents.js";
+import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
@@ -1390,7 +1390,13 @@ function renderFlightEvents(flightEvents) {
   // Every event as a small card on the time axis — click one
   // and its evidence unfolds RIGHT HERE: what happened, and
   // the matching chart zoomed to the moment. No teleporting.
-  for (const event of flightEvents.events.slice(0, 60)) {
+  const shown = flightEvents.events.slice(0, 60);
+
+  if (shown.length < flightEvents.events.length) {
+    summary.textContent += ` Showing the first ${shown.length} of ${flightEvents.events.length}.`;
+  }
+
+  for (const event of shown) {
     const chip = document.createElement("button");
     chip.className = `event-card chip-${event.verdict}`;
 
@@ -1419,7 +1425,19 @@ function renderFlightEvents(flightEvents) {
       }
 
       chip.classList.add("selected");
-      showEventDetail(event);
+      // Re-resolve by ID from the current event list, so a chip
+      // that somehow outlives a re-render can never open another
+      // event's evidence under its own label.
+      const canonical =
+        currentFlightEvents?.events.find(
+          (candidate) => candidate.id === event.id
+        ) ?? null;
+
+      if (canonical) {
+        showEventDetail(canonical);
+      } else {
+        hideEventDetail();
+      }
     });
 
     list.appendChild(chip);
@@ -1441,7 +1459,15 @@ function showEventDetail(event) {
 
   detail.hidden = false;
 
-  const asked = `At ${event.t?.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
+  // An event without a timeline anchor gets no invented moment —
+  // the card says what is known and the chart stays un-zoomed.
+  if (!Number.isFinite(event.t)) {
+    explain.textContent = `A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} command was analyzed, but its exact position on the flight timeline could not be anchored, so no zoomed chart is shown for it.`;
+    chartElement.innerHTML = "";
+    return;
+  }
+
+  const asked = `At ${event.t.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
   explain.textContent =
     event.verdict === "overshoot"
       ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
@@ -1449,12 +1475,22 @@ function showEventDetail(event) {
         ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
         : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
 
-  // The evidence, right here: the same setpoint-vs-gyro chart
-  // the Tuning matrix draws, zoomed to this moment, with the
-  // command marked.
+  // The evidence, right here: the same setpoint-vs-gyro chart the
+  // Tuning matrix draws, windowed to THIS event's own extent —
+  // command start through response — so the selected event is
+  // always inside the frame it is described by.
   const axisIndex = AXIS_INDEX[event.axis.toLowerCase()] ?? 0;
   const column = (base) =>
     new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
+
+  const markers = [{ x: event.t, label: "command" }];
+
+  if (
+    Number.isFinite(event.tResponsePeak) &&
+    event.tResponsePeak - event.t > 0.15
+  ) {
+    markers.push({ x: event.tResponsePeak, label: "response peak" });
+  }
 
   renderPresetChart(
     chartElement,
@@ -1466,19 +1502,18 @@ function showEventDetail(event) {
     "deg/s",
     {
       height: 240,
-      markers:
-        event.t !== null ? [{ x: event.t, label: "command" }] : []
+      markers
     }
   );
 
-  if (event.t !== null) {
-    const chart = chartElement.__blackboxLabChart;
-    if (chart) {
-      chart.setScale("x", {
-        min: Math.max(0, event.t - 2),
-        max: event.t + 3
-      });
-    }
+  // Zoom only the chart that was just rendered for this event: a
+  // handle left over from an earlier selection (its canvas is no
+  // longer attached) must never receive this event's window.
+  const chart = chartElement.__blackboxLabChart;
+  const window = eventChartWindow(event);
+
+  if (chart && chart.root?.isConnected && window) {
+    chart.setScale("x", window);
   }
 
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });

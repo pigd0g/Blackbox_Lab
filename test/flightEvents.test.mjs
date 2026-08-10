@@ -19,16 +19,27 @@ import { buildFlightEvents } from "../src/analysis/flightEvents.js";
 // 2 kHz log: rows are 0.5 ms apart.
 const timeSeconds = Array.from({ length: 100_000 }, (_, i) => i * 0.0005);
 
-const rawEvent = (overrides) => ({
-  axis: "Roll",
-  sampleIndex: 20_000, // 10.0 s
-  commandMagnitude: 180.4,
-  commandDirection: 1,
-  overshootPercent: 5,
-  settlingDetected: true,
-  settlingDurationSamples: 200, // 100 ms
-  ...overrides
-});
+const rawEvent = (overrides) => {
+  const merged = {
+    axis: "Roll",
+    sampleIndex: 20_000, // 10.0 s
+    commandMagnitude: 180.4,
+    commandDirection: 1,
+    overshootPercent: 5,
+    settlingDetected: true,
+    settlingDurationSamples: 200, // 100 ms
+    ...overrides
+  };
+
+  // Tests run with dataRowOffset 0, so unless a test states its own
+  // anchor, the absolute row IS the sample index. An event without
+  // any anchor is the explicit subject of its own test below.
+  if (!("sampleRowIndex" in merged)) {
+    merged.sampleRowIndex = merged.sampleIndex;
+  }
+
+  return merged;
+};
 
 test("events carry time, axis and rounded measurements", () => {
   const { events } = buildFlightEvents({
@@ -137,4 +148,103 @@ test("no commands found is an honest sentence, not an error", () => {
 
   const empty = buildFlightEvents({});
   assert.equal(empty.events.length, 0);
+});
+
+// ------------------------------------------------------
+// Canonical event identity (issue: card, description,
+// chart window and findings can desynchronize)
+// ------------------------------------------------------
+
+import { eventChartWindow } from "../src/analysis/flightEvents.js";
+
+test("an event without an absolute anchor gets no invented time", () => {
+  // The compacted stable-array index lands tens of seconds early
+  // on real logs. Without sampleRowIndex the event keeps t = null
+  // and sorts last — it never names a moment the flight never had.
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Yaw",
+          events: [
+            rawEvent({ axis: "Yaw", sampleIndex: 8_300, sampleRowIndex: null }),
+            rawEvent({ axis: "Yaw", sampleIndex: 4_000 })
+          ]
+        }
+      ]
+    },
+    timeSeconds
+  });
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0].t, 2, "anchored event first");
+  assert.equal(events[1].t, null, "anchorless event has no time");
+  assert.equal(events[1].verdict, "clean", "verdict still computed");
+});
+
+test("every event carries a stable identity", () => {
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Yaw",
+          events: [
+            rawEvent({ axis: "Yaw", sampleIndex: 4_000, commandEndSampleIndex: 4_400, commandEndRowIndex: 4_400 }),
+            rawEvent({ axis: "Yaw", sampleIndex: 6_000, commandEndSampleIndex: 6_500, commandEndRowIndex: 6_500 })
+          ]
+        },
+        {
+          axis: "Roll",
+          events: [
+            rawEvent({ sampleIndex: 4_000, commandEndSampleIndex: 4_400, commandEndRowIndex: 4_400 })
+          ]
+        }
+      ]
+    },
+    timeSeconds
+  });
+
+  const ids = events.map((event) => event.id);
+  assert.equal(new Set(ids).size, ids.length, "ids are unique");
+  assert.ok(ids.every((id) => typeof id === "string" && id.length > 0));
+});
+
+test("the event chart window contains the whole event, response included", () => {
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Yaw",
+          events: [
+            rawEvent({
+              axis: "Yaw",
+              sampleIndex: 110_400,
+              sampleRowIndex: 110_400, // beyond timeSeconds? no — keep in range
+              commandEndRowIndex: 111_000,
+              responsePeakRowIndex: 112_000,
+              settlingDurationSamples: 2_416 // 1208 ms
+            })
+          ]
+        }
+      ]
+    },
+    timeSeconds: Array.from({ length: 200_000 }, (_, i) => i * 0.0005)
+  });
+
+  const event = events[0];
+  const window = eventChartWindow(event);
+
+  assert.ok(window, "anchored event yields a window");
+  assert.ok(window.min <= event.t, "window starts before the command");
+  assert.ok(
+    window.max >= event.tResponsePeak,
+    "window covers the response peak"
+  );
+  assert.ok(
+    window.max >= event.t + event.settling_ms / 1000,
+    "window covers the settling tail"
+  );
+
+  assert.equal(eventChartWindow({ t: null }), null);
+  assert.equal(eventChartWindow(null), null);
 });
