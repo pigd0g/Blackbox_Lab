@@ -81,7 +81,8 @@ import {
   readPilotInput,
   createStickDisplay,
   getStickMode,
-  setStickMode
+  setStickMode,
+  timeToRowIndex
 } from "./ui/stickDisplay.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
@@ -282,6 +283,215 @@ document.addEventListener("click", (event) => {
     { restTime: entry.anchorTime }
   );
 });
+
+
+// ======================================================
+// REPLAY — fly the log again (Log Viewer transport)
+// ======================================================
+//
+// A video-editor timeline for the flight: play/pause and
+// speed, a scrub bar with the Flight Events as colored
+// ticks, a playhead running through every chart on the
+// viewer page, live readouts, and the stick display
+// following the pilot's hands. Scrubbing and chart zoom
+// stay exactly as they were — the playhead is a guest in
+// the charts, never their owner.
+// ======================================================
+
+const replay = {
+  time: 0,
+  duration: 0,
+  rate: 1,
+  playing: false,
+  frameHandle: null,
+  lastTick: null,
+  sticks: null,
+  readout: null,
+  playheads: []
+};
+
+function replayElements() {
+  return {
+    card: el("replayCard"),
+    play: el("replayPlay"),
+    speed: el("replaySpeed"),
+    time: el("replayTime"),
+    readout: el("replayReadout"),
+    scrub: el("replayScrub"),
+    ticks: el("replayTicks"),
+    sticksCanvas: el("replaySticks")
+  };
+}
+
+function setupReplay(dataset, pilotInput, flightEvents) {
+  const ui = replayElements();
+
+  if (!ui.card) return;
+
+  replayPause();
+  replay.time = 0;
+  replay.playheads = [];
+
+  if (!dataset || !Array.isArray(dataset.timeSeconds) || dataset.timeSeconds.length < 2) {
+    ui.card.hidden = true;
+    return;
+  }
+
+  ui.card.hidden = false;
+  replay.duration = dataset.timeSeconds[dataset.timeSeconds.length - 1];
+
+  // The sticks follow when the log recorded the pilot's hands;
+  // without rcCommand the transport still runs, sticks hidden.
+  replay.sticks =
+    pilotInput?.available
+      ? createStickDisplay(ui.sticksCanvas, { dataset, pilotInput })
+      : null;
+
+  const stickCol = ui.sticksCanvas?.closest(".stick-col");
+  if (stickCol) stickCol.hidden = !replay.sticks;
+
+  // Live readouts: headspeed and pack voltage at the playhead.
+  const voltageColumn = dataset.findColumnsIn([/^EscV$/i, /^vbatLatest$/i])[0] ?? null;
+  replay.readout = {
+    headspeed: Array.isArray(dataset.headspeed) ? dataset.headspeed : null,
+    volts: voltageColumn ? toVolts(dataset.columnValues(voltageColumn)) : null,
+    timeSeconds: dataset.timeSeconds
+  };
+
+  // Flight events as timeline ticks — the debrief on the scrub bar.
+  if (ui.ticks) {
+    ui.ticks.innerHTML = "";
+    for (const event of flightEvents?.events ?? []) {
+      if (!Number.isFinite(event.t) || replay.duration <= 0) continue;
+      const tick = document.createElement("span");
+      tick.className = `replay-tick tick-${event.verdict}`;
+      tick.style.left = `${(event.t / replay.duration) * 100}%`;
+      tick.title = `${event.axis} — ${event.t.toFixed(1)} s`;
+      ui.ticks.appendChild(tick);
+    }
+  }
+
+  if (ui.speed) replay.rate = Number(ui.speed.value) || 1;
+
+  replayUpdateUI();
+}
+
+function replayCollectPlayheads() {
+  replay.playheads = [];
+
+  document
+    .querySelectorAll('section[data-screen="viewer"] .chart-container')
+    .forEach((element) => {
+      const chart = element.__blackboxLabChart;
+      if (!chart || !chart.over || !chart.over.isConnected) return;
+
+      let line = chart.over.querySelector(".replay-playhead");
+      if (!line) {
+        line = document.createElement("div");
+        line.className = "replay-playhead";
+        chart.over.appendChild(line);
+      }
+      replay.playheads.push({ chart, line });
+    });
+}
+
+function replayUpdateUI() {
+  const ui = replayElements();
+  const t = replay.time;
+
+  if (ui.time) {
+    ui.time.textContent = `${t.toFixed(1)} / ${replay.duration.toFixed(1)} s`;
+  }
+
+  if (ui.scrub && replay.duration > 0) {
+    ui.scrub.value = String(Math.round((t / replay.duration) * 1000));
+  }
+
+  if (ui.readout && replay.readout) {
+    const row = timeToRowIndex(replay.readout.timeSeconds, t);
+    const parts = [];
+    const rpm = replay.readout.headspeed?.[row];
+    const volts = replay.readout.volts?.[row];
+    if (Number.isFinite(rpm) && rpm > 0) parts.push(`${Math.round(rpm)} rpm`);
+    if (Number.isFinite(volts) && volts > 0) parts.push(`${volts.toFixed(1)} V`);
+    ui.readout.textContent = parts.join(" · ");
+  }
+
+  replay.sticks?.showTime(t);
+
+  for (const { chart, line } of replay.playheads) {
+    if (!chart.over.isConnected) continue;
+    const { min, max } = chart.scales.x;
+    if (min == null || t < min || t > max) {
+      line.style.display = "none";
+    } else {
+      line.style.display = "";
+      line.style.left = `${chart.valToPos(t, "x")}px`;
+    }
+  }
+}
+
+function replayFrame(now) {
+  if (!replay.playing) return;
+
+  if (replay.lastTick !== null) {
+    replay.time += ((now - replay.lastTick) / 1000) * replay.rate;
+  }
+  replay.lastTick = now;
+
+  if (replay.time >= replay.duration) {
+    replay.time = replay.duration;
+    replayUpdateUI();
+    replayPause();
+    return;
+  }
+
+  replayUpdateUI();
+  replay.frameHandle = requestAnimationFrame(replayFrame);
+}
+
+function replayPlay() {
+  const ui = replayElements();
+  if (replay.duration <= 0) return;
+  if (replay.time >= replay.duration) replay.time = 0;
+
+  replay.playing = true;
+  replay.lastTick = null;
+  replayCollectPlayheads();
+  if (ui.play) ui.play.textContent = "⏸";
+  replay.frameHandle = requestAnimationFrame(replayFrame);
+}
+
+function replayPause() {
+  const ui = replayElements();
+  replay.playing = false;
+  if (replay.frameHandle !== null) {
+    cancelAnimationFrame(replay.frameHandle);
+    replay.frameHandle = null;
+  }
+  if (ui.play) ui.play.textContent = "▶";
+}
+
+el("replayPlay")?.addEventListener("click", () => {
+  if (replay.playing) {
+    replayPause();
+  } else {
+    replayPlay();
+  }
+});
+
+el("replaySpeed")?.addEventListener("change", () => {
+  replay.rate = Number(el("replaySpeed").value) || 1;
+});
+
+el("replayScrub")?.addEventListener("input", () => {
+  if (replay.duration <= 0) return;
+  replay.time =
+    (Number(el("replayScrub").value) / 1000) * replay.duration;
+  if (replay.playheads.length === 0) replayCollectPlayheads();
+  replayUpdateUI();
+});
+
 
 const droopContextCard = el("droopContextCard");
 const droopContextTitle = el("droopContextTitle");
@@ -3006,6 +3216,7 @@ function analyzeFlight(flightIndex) {
   renderQuality(currentDataset, flight.stats);
   renderFilterAdvisor(currentDataset);
   renderAllCharts(currentDataset);
+  setupReplay(currentDataset, currentPilotInput, currentFlightEvents);
   renderPidProfileBreakdown(pidAnalysis, lines);
   renderFilterProfileBreakdown(currentDataset);
 

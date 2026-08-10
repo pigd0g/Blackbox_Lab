@@ -1647,3 +1647,101 @@ section[data-screen="history"] .flight-picker .secondary-button {
   display: flex;
   flex-direction: column;
 }
+
+/* ---- Replay transport (Log Viewer) ---- */
+.replay-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.replay-controls {
+  flex: 1 1 320px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replay-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.replay-play {
+  width: 44px;
+  height: 36px;
+  font-size: 15px;
+  background: rgba(111, 178, 255, 0.12);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.replay-play:hover {
+  background: rgba(111, 178, 255, 0.22);
+}
+
+#replaySpeed {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.replay-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+.replay-readout {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.replay-timeline {
+  position: relative;
+  padding-top: 8px;
+}
+
+.replay-ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  pointer-events: none;
+}
+
+.replay-tick {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+
+.replay-tick.tick-clean { background: var(--good, #58c08a); opacity: 0.7; }
+.replay-tick.tick-overshoot { background: var(--attention, #ff7a6b); }
+.replay-tick.tick-slow { background: var(--watch, #ffc46b); }
+
+#replayScrub {
+  width: 100%;
+  accent-color: #ffc46b;
+}
+
+.replay-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 196, 107, 0.85);
+  pointer-events: none;
+  z-index: 4;
+}

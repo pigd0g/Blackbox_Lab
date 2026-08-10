@@ -388,6 +388,38 @@
           </details>
         </div>
 
+        <section class="card" id="replayCard" hidden>
+          <h3>Replay</h3>
+          <p class="chart-hint">Fly the log again: the playhead runs
+            through every chart on this page while the sticks show
+            the pilot's hands. Drag the timeline to seek — colored
+            ticks mark the Flight Events.</p>
+          <div class="replay-row">
+            <div class="stick-col">
+              <canvas id="replaySticks" width="320" height="170"></canvas>
+            </div>
+            <div class="replay-controls">
+              <div class="replay-buttons">
+                <button id="replayPlay" class="replay-play"
+                  aria-label="Play or pause">▶</button>
+                <select id="replaySpeed" aria-label="Playback speed">
+                  <option value="0.25">0.25×</option>
+                  <option value="0.5">0.5×</option>
+                  <option value="1" selected>1×</option>
+                  <option value="2">2×</option>
+                </select>
+                <span class="replay-time" id="replayTime">0.0 / 0.0 s</span>
+                <span class="replay-readout" id="replayReadout"></span>
+              </div>
+              <div class="replay-timeline">
+                <div class="replay-ticks" id="replayTicks"></div>
+                <input type="range" id="replayScrub" min="0" max="1000"
+                  value="0" step="1" aria-label="Timeline" />
+              </div>
+            </div>
+          </div>
+        </section>
+
 
         <section class="card">
           <h3>Gyro</h3>

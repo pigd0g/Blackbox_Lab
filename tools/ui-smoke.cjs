@@ -143,6 +143,43 @@ const { mkdirSync } = require("node:fs");
   await window.click(".chart-max-btn");
   console.log("tuning matrix ok: maximize expands to", maxState.width, "px and back");
 
+  // Replay transport: play advances the clock, the playhead line
+  // appears inside viewer charts, sticks follow, pause holds.
+  const replayBefore = await window.evaluate(() =>
+    document.getElementById("replayTime")?.textContent
+  );
+  await window.click("#replayPlay");
+  await window.waitForTimeout(1200);
+  const replayState = await window.evaluate(() => ({
+    time: document.getElementById("replayTime")?.textContent,
+    playheads: document.querySelectorAll(
+      'section[data-screen="viewer"] .replay-playhead'
+    ).length,
+    sticksRendered:
+      document.getElementById("replaySticks")?.dataset.stickRendered ===
+      "1",
+    playLabel: document.getElementById("replayPlay")?.textContent
+  }));
+  await window.click("#replayPlay");
+  if (
+    replayState.time === replayBefore ||
+    replayState.playheads === 0 ||
+    !replayState.sticksRendered ||
+    replayState.playLabel !== "⏸"
+  ) {
+    throw new Error(
+      "replay transport misbehaved: " + JSON.stringify(replayState)
+    );
+  }
+  await window.screenshot({ path: "smoke-shots/17-replay.png" });
+  console.log(
+    "replay ok:",
+    replayState.time,
+    "|",
+    replayState.playheads,
+    "playheads | sticks follow"
+  );
+
   // ---- walk the labs ----
   for (const [target, name] of [
     ["viewer", "03-viewer"],
