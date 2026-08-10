@@ -201,7 +201,7 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
 
   if (!wrap || !canvas) return;
 
-  stickControllers.get(canvasId)?.stop();
+  stickControllers.get(canvasId)?.controller.stop();
   stickControllers.delete(canvasId);
 
   if (!currentPilotInput?.available || !currentDataset || !Number.isFinite(anchorTime)) {
@@ -220,10 +220,20 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
   }
 
   wrap.hidden = false;
-  stickControllers.set(canvasId, controller);
 
-  if (playFrom && Number.isFinite(playFrom.min) && Number.isFinite(playFrom.max)) {
-    controller.playWindow(playFrom.min, playFrom.max, { restTime: anchorTime });
+  const replayWindow =
+    playFrom && Number.isFinite(playFrom.min) && Number.isFinite(playFrom.max)
+      ? playFrom
+      : { min: Math.max(0, anchorTime - 2.5), max: anchorTime + 2.5 };
+
+  stickControllers.set(canvasId, {
+    controller,
+    anchorTime,
+    replayWindow
+  });
+
+  if (playFrom) {
+    controller.playWindow(replayWindow.min, replayWindow.max, { restTime: anchorTime });
   } else {
     controller.showTime(anchorTime);
   }
@@ -240,8 +250,8 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
       if (!chart || !active || chart.cursor.idx == null) return;
       const t = chart.data?.[0]?.[chart.cursor.idx];
       if (Number.isFinite(t)) {
-        active.stop();
-        active.showTime(t);
+        active.controller.stop();
+        active.controller.showTime(t);
       }
     });
 
@@ -249,7 +259,7 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
       const active = stickControllers.get(canvasId);
       const anchor = chartElement.__stickAnchorTime;
       if (active && Number.isFinite(anchor)) {
-        active.showTime(anchor);
+        active.controller.showTime(anchor);
       }
     });
   }
@@ -258,6 +268,20 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
     if (chartElement) chartElement.__stickAnchorTime = anchorTime;
   }
 }
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".stick-replay-btn");
+  if (!button) return;
+
+  const entry = stickControllers.get(button.dataset.stickReplay);
+  if (!entry) return;
+
+  entry.controller.playWindow(
+    entry.replayWindow.min,
+    entry.replayWindow.max,
+    { restTime: entry.anchorTime }
+  );
+});
 
 const droopContextCard = el("droopContextCard");
 const droopContextTitle = el("droopContextTitle");
@@ -1538,7 +1562,7 @@ const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
 function hideEventDetail() {
   const detail = el("pidEventDetail");
   if (detail) detail.hidden = true;
-  stickControllers.get("pidEventSticks")?.stop();
+  stickControllers.get("pidEventSticks")?.controller.stop();
 }
 
 function showEventDetail(event) {

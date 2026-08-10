@@ -710,7 +710,10 @@
           <div id="pidEventDetail" hidden>
             <p class="event-detail-explain" id="pidEventExplain"></p>
             <div class="stick-inset" id="pidEventSticksWrap" hidden>
+              <div class="stick-col">
               <canvas id="pidEventSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="pidEventSticks" title="Watch this event again at true speed.">▶&nbsp;Replay</button>
+              </div>
               <p class="stick-inset-caption">Your hands during this event
                 — replayed once, then parked at the command. Hover the
                 chart to scrub.</p>
@@ -820,7 +823,10 @@
             governor asked for, and what the power system delivered.
           </p>
           <div class="stick-inset" id="droopSticksWrap" hidden>
-            <canvas id="droopSticks" width="320" height="170"></canvas>
+            <div class="stick-col">
+              <canvas id="droopSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="droopSticks" title="Play the seconds around the marked moment.">▶&nbsp;Replay</button>
+              </div>
             <p class="stick-inset-caption" id="droopSticksCaption">Pilot
               input at the marked moment — hover any chart to scrub.</p>
           </div>
@@ -914,7 +920,10 @@
             others follow.
           </p>
           <div class="stick-inset" id="escSticksWrap" hidden>
-            <canvas id="escSticks" width="320" height="170"></canvas>
+            <div class="stick-col">
+              <canvas id="escSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="escSticks" title="Play the seconds around peak load.">▶&nbsp;Replay</button>
+              </div>
             <p class="stick-inset-caption">Pilot input at peak load —
               the collective tells the story. Hover any chart to
               scrub.</p>

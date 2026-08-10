@@ -1621,3 +1621,29 @@ section[data-screen="history"] .flight-picker .secondary-button {
   color: var(--ink-muted);
   max-width: 340px;
 }
+
+.stick-replay-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  background: none;
+  border: 1px solid var(--line, rgba(127, 183, 255, 0.25));
+  border-radius: 12px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.stick-replay-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+.stick-inset {
+  align-items: flex-start;
+}
+
+.stick-inset .stick-col {
+  display: flex;
+  flex-direction: column;
+}

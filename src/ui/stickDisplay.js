@@ -141,32 +141,33 @@ export function mapStickPositions(frame, mode, scales) {
   // The label carries the live value, the way a pilot reads a
   // transmitter monitor: axis name + current deflection.
   const value = (name, raw) => `${name} ${Math.round(raw)}`;
+  const withMode = (positions) => ({ ...positions, mode: [1, 3, 4].includes(Number(mode)) ? Number(mode) : 2 });
 
   switch (Number(mode)) {
     case 1:
-      return {
+      return withMode({
         left: { x: yaw, y: pitch },
         right: { x: roll, y: collective },
         labels: { left: [value("Yaw", frame.yaw), value("Pitch", frame.pitch)], right: [value("Roll", frame.roll), value("Col", frame.collective)] }
-      };
+      });
     case 3:
-      return {
+      return withMode({
         left: { x: roll, y: pitch },
         right: { x: yaw, y: collective },
         labels: { left: [value("Roll", frame.roll), value("Pitch", frame.pitch)], right: [value("Yaw", frame.yaw), value("Col", frame.collective)] }
-      };
+      });
     case 4:
-      return {
+      return withMode({
         left: { x: roll, y: collective },
         right: { x: yaw, y: pitch },
         labels: { left: [value("Roll", frame.roll), value("Col", frame.collective)], right: [value("Yaw", frame.yaw), value("Pitch", frame.pitch)] }
-      };
+      });
     default:
-      return {
+      return withMode({
         left: { x: yaw, y: collective },
         right: { x: roll, y: pitch },
         labels: { left: [value("Yaw", frame.yaw), value("Col", frame.collective)], right: [value("Roll", frame.roll), value("Pitch", frame.pitch)] }
-      };
+      });
   }
 }
 
@@ -272,6 +273,12 @@ export function drawStickFrame(canvas, positions, options = {}) {
     ctx.fillStyle = COLORS.label;
     ctx.font = "11px 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = "center";
+
+    if (positions.mode) {
+      ctx.fillStyle = COLORS.crosshair;
+      ctx.fillText(`Mode ${positions.mode}`, width / 2, 12);
+      ctx.fillStyle = COLORS.label;
+    }
     ctx.fillText(
       positions.labels.left.join(" · "),
       leftX,
