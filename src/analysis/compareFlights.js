@@ -169,15 +169,26 @@ export function compareFlights(baseline, comparison) {
       8
     );
 
+    // "Droop" is a target-relative word. If either flight lacks a
+    // governor target, the number being compared is a short-term
+    // swing against the rotor's own trend, and the row says so.
+    const bothMeasuredDroop =
+      govBefore.capability === "full" &&
+      govAfter.capability === "full";
+
+    const measureWord = bothMeasuredDroop
+      ? "worst droop"
+      : "largest swing";
+
     rows.push({
       title: "Headspeed hold",
       direction: described.direction,
-      before: `${Math.round(droopBefore)} rpm worst droop`,
-      after: `${Math.round(droopAfter)} rpm worst droop`,
+      before: `${Math.round(droopBefore)} rpm ${measureWord}`,
+      after: `${Math.round(droopAfter)} rpm ${measureWord}`,
       sentence:
         described.direction === "same"
-          ? `Governor hold is about the same (worst droop ${Math.round(droopAfter)} rpm).`
-          : `Headspeed hold got ${described.word}: worst droop ${Math.round(droopBefore)} → ${Math.round(droopAfter)} rpm.`
+          ? `${bothMeasuredDroop ? "Governor hold" : "Headspeed steadiness"} is about the same (${measureWord} ${Math.round(droopAfter)} rpm).`
+          : `${bothMeasuredDroop ? "Headspeed hold" : "Headspeed steadiness"} got ${described.word}: ${measureWord} ${Math.round(droopBefore)} → ${Math.round(droopAfter)} rpm.`
     });
   }
 

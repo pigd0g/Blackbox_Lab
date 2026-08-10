@@ -78,6 +78,11 @@ export function computeGovernorScore({ droopPercent, rmsError }) {
   );
 }
 
+// Every result carries an explicit capability so downstream UI
+// renders scope from state, never from guessing at null scores:
+//   "full"        — target + headspeed: droop and score are real
+//   "partial"     — headspeed only: stability, never droop, no score
+//   "unavailable" — not enough telemetry to judge anything
 export function analyzeGovernorLab({
   timeSeconds,
   headspeed,
@@ -123,6 +128,7 @@ export function analyzeGovernorLab({
     return {
       score: null,
       status: "insufficient",
+      capability: "unavailable",
       hasRotorSpeedData: flightPhase.hasRotorSpeedData !== false,
       movedDuringRecording:
         flightPhase.movedDuringRecording ?? null,
@@ -396,6 +402,7 @@ export function analyzeGovernorLab({
   return {
     score,
     status,
+    capability: "full",
     story,
 
     droopRpm:
@@ -525,6 +532,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     return {
       score: null,
       status: "insufficient",
+      capability: "unavailable",
       mode: "headspeed-hold",
       hasRotorSpeedData: false,
       movedDuringRecording: null,
@@ -560,6 +568,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     return {
       score: null,
       status: "insufficient",
+      capability: "unavailable",
       mode: "headspeed-hold",
       hasRotorSpeedData: true,
       movedDuringRecording: null,
@@ -645,6 +654,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
   return {
     score: null,
     status,
+    capability: "partial",
     mode: "headspeed-hold",
     hasRotorSpeedData: true,
     story,
@@ -659,6 +669,10 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     stableSampleCount: meanCount,
     stableSegments: [],
     metrics: [
+      {
+        label: "Analysis scope",
+        value: "Partial — headspeed stability only"
+      },
       {
         label: "Average headspeed",
         value: `${Math.round(meanRpm)} rpm`

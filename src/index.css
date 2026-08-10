@@ -444,6 +444,7 @@ pre {
 .status-text-good { border-left: 3px solid var(--good); padding-left: 12px; }
 .status-text-watch { border-left: 3px solid var(--watch); padding-left: 12px; }
 .status-text-attention { border-left: 3px solid var(--attention); padding-left: 12px; }
+.status-text-insufficient { border-left: 3px solid var(--ink-soft, #5d6d7e); padding-left: 12px; }
 
 .metric-grid {
   display: grid;

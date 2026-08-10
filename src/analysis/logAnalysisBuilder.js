@@ -315,6 +315,36 @@ if (targetRpm < 300) {
     }))
     .sort((a, b) => a.targetRpm - b.targetRpm);
 }
+// The one System Scores line where missing telemetry must not
+// masquerade as a judged governor: a score renders as "/100" only
+// when it is a real number earned against a real target. A
+// headspeed-only log says so in words, and anything unjudged says
+// "Not scored" — never a quality label.
+export function describeGovernorSystemScore(governor) {
+  if (!governor) {
+    return "N/A";
+  }
+
+  if (governor.capability === "partial") {
+    return "Partial — headspeed stability only (no governor target logged)";
+  }
+
+  if (
+    Number.isFinite(governor.score) &&
+    governor.status !== "Unavailable" &&
+    governor.status !== "No Active Flight Data" &&
+    governor.status !== "Target Unavailable"
+  ) {
+    return `${governor.score}/100 — ${governor.status}`;
+  }
+
+  return `Not scored — ${
+    governor.status === "insufficient"
+      ? "insufficient telemetry"
+      : governor.status
+  }`;
+}
+
 export function buildLogAnalysis({
   fileType,
   lines,
@@ -843,12 +873,8 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       Governor Performance: ${
   flightAnalysis
-    ? flightAnalysis.governor.status === "Unavailable" ||
-      flightAnalysis.governor.status === "No Active Flight Data"||
-      flightAnalysis.governor.status === "Target Unavailable"
-      ? `N/A — ${flightAnalysis.governor.status}`
-      : `${flightAnalysis.governor.score}/100 — ${flightAnalysis.governor.status}`
-         : "N/A"
+    ? describeGovernorSystemScore(flightAnalysis.governor)
+    : "N/A"
     }<br>
 
       <br>
@@ -880,7 +906,15 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       ${
         flightAnalysis
-          ? `${flightAnalysis.governor.score > 0 ? "✓" : "⚠"} ${flightAnalysis.governor.finding}`
+          ? `${
+              flightAnalysis.governor.score > 0 ||
+              (flightAnalysis.governor.capability === "partial" &&
+                flightAnalysis.governor.status === "good")
+                ? "✓"
+                : flightAnalysis.governor.capability === "partial"
+                  ? "△"
+                  : "⚠"
+            } ${flightAnalysis.governor.finding}`
           : "✗ Governor analysis unavailable."
       }<br>
     `;

@@ -181,6 +181,8 @@ const escStory = el("escStory");
 const escMetrics = el("escMetrics");
 
 const droopContextCard = el("droopContextCard");
+const droopContextTitle = el("droopContextTitle");
+const droopContextHint = el("droopContextHint");
 const droopGovBlock = el("droopGovBlock");
 const chartDroopRpm = el("chartDroopRpm");
 const chartDroopDrive = el("chartDroopDrive");
@@ -1823,7 +1825,26 @@ function renderGovernorEvidence(dataset) {
 
   droopContextCard.hidden = false;
 
-  const markers = [{ x: droopTime, label: "worst droop" }];
+  // Droop is measured against a target. Without one, the same
+  // moment is the largest short-term swing — the card says which
+  // it is showing, and the target/error traces stay off the chart.
+  const hasTarget =
+    dataset.labs.governor?.capability === "full";
+
+  if (droopContextTitle) {
+    droopContextTitle.textContent = hasTarget
+      ? "The Worst Droop, In Context"
+      : "The Largest Swing, In Context";
+  }
+
+  if (droopContextHint) {
+    droopContextHint.textContent = hasTarget
+      ? "The seconds around the biggest dip, lined up on one clock — zoom any chart and the others follow. Read top to bottom: what the rotor did, what the pilot and governor asked for, and what the power system delivered."
+      : "The seconds around the largest short-term headspeed swing, lined up on one clock — zoom any chart and the others follow. No governor target is logged, so this shows steadiness, not droop against a target.";
+  }
+
+  const markerLabel = hasTarget ? "worst droop" : "largest swing";
+  const markers = [{ x: droopTime, label: markerLabel }];
 
   const targetValues = dataset.governorTarget ?? [];
   const actualValues = dataset.headspeed ?? [];
@@ -1838,11 +1859,15 @@ function renderGovernorEvidence(dataset) {
     chartDroopRpm,
     dataset,
     window,
-    [
-      { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
-      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
-      { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
-    ],
+    hasTarget
+      ? [
+          { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
+          { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
+          { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
+        ]
+      : [
+          { label: "headspeed", values: actualValues, color: CHART_COLORS[1] }
+        ],
     { yLabel: "rpm", markers, linkGroup: "droopSync" }
   );
 
@@ -2392,7 +2417,10 @@ function renderAllCharts(dataset) {
           ? [
               {
                 x: dataset.labs.governor.droopTimeSeconds,
-                label: "worst droop"
+                label:
+                  dataset.labs.governor.capability === "full"
+                    ? "worst droop"
+                    : "largest swing"
               }
             ]
           : []
@@ -3229,7 +3257,7 @@ function refreshHistoryScreen(selectedCraft) {
 
   historyTrendCard.hidden = false;
   trendChart(chartTrendVibration, "vibrationPeak", "vibration peak");
-  trendChart(chartTrendDroop, "droopRpm", "worst droop (rpm)");
+  trendChart(chartTrendDroop, "droopRpm", "largest RPM deviation");
 
   // ---- flights table ----
   historyTableCard.hidden = false;
@@ -3240,7 +3268,7 @@ function refreshHistoryScreen(selectedCraft) {
   historyTable.innerHTML = `
     <tr>
       <th>Date</th><th>Log</th><th>Length</th><th>Vibration</th>
-      <th>Droop</th><th>Tracking</th><th>Sag</th><th>IR est.</th><th></th>
+      <th>RPM dev.</th><th>Tracking</th><th>Sag</th><th>IR est.</th><th></th>
     </tr>
     ${entries
       .map(

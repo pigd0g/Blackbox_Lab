@@ -32,7 +32,11 @@ function chartImage(entry) {
 const STATUS = {
   good: { color: "#1e8449", soft: "#e9f7ef", word: "Looks good" },
   watch: { color: "#b9770e", soft: "#fdf3e3", word: "Worth watching" },
-  attention: { color: "#c0392b", soft: "#fdedec", word: "Needs attention" }
+  attention: { color: "#c0392b", soft: "#fdedec", word: "Needs attention" },
+  // A status the map has never heard of must read as unjudged,
+  // never borrow "Looks good" — missing data limits the
+  // conclusion, it does not upgrade it.
+  insufficient: { color: "#5d6d7e", soft: "#eef1f4", word: "Not evaluated" }
 };
 
 function escapeHtml(text) {
@@ -131,7 +135,7 @@ export function buildReportHtml({
 
   const cardsHtml = (verdict?.cards ?? [])
     .map((card) => {
-      const status = STATUS[card.status] ?? STATUS.good;
+      const status = STATUS[card.status] ?? STATUS.insufficient;
 
       return `
       <div class="verdict" style="border-left-color:${status.color};background:${status.soft};">
@@ -153,7 +157,7 @@ export function buildReportHtml({
   const labsHtml = (labs ?? [])
     .filter((lab) => lab && lab.analysis)
     .map((lab) => {
-      const status = STATUS[lab.analysis.status] ?? STATUS.good;
+      const status = STATUS[lab.analysis.status] ?? STATUS.insufficient;
 
       const tiles = lab.analysis.metrics
         .map(
