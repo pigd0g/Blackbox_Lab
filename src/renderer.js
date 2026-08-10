@@ -77,6 +77,12 @@ function noteAction(action) {
   lastUserAction = action;
 }
 import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
+import {
+  readPilotInput,
+  createStickDisplay,
+  getStickMode,
+  setStickMode
+} from "./ui/stickDisplay.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
@@ -181,6 +187,77 @@ const governorStory = el("governorStory");
 const governorMetrics = el("governorMetrics");
 const escStory = el("escStory");
 const escMetrics = el("escMetrics");
+
+// ---- pilot-input (stick) insets ----
+// One reading of the rcCommand columns per flight; each inset
+// binds its own canvas. A log without rcCommand simply shows no
+// pilot-input evidence.
+let currentPilotInput = null;
+const stickControllers = new Map();
+
+function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom }) {
+  const wrap = el(wrapId);
+  const canvas = el(canvasId);
+
+  if (!wrap || !canvas) return;
+
+  stickControllers.get(canvasId)?.stop();
+  stickControllers.delete(canvasId);
+
+  if (!currentPilotInput?.available || !currentDataset || !Number.isFinite(anchorTime)) {
+    wrap.hidden = true;
+    return;
+  }
+
+  const controller = createStickDisplay(canvas, {
+    dataset: currentDataset,
+    pilotInput: currentPilotInput
+  });
+
+  if (!controller) {
+    wrap.hidden = true;
+    return;
+  }
+
+  wrap.hidden = false;
+  stickControllers.set(canvasId, controller);
+
+  if (playFrom && Number.isFinite(playFrom.min) && Number.isFinite(playFrom.max)) {
+    controller.playWindow(playFrom.min, playFrom.max, { restTime: anchorTime });
+  } else {
+    controller.showTime(anchorTime);
+  }
+
+  // Hovering any of the linked charts scrubs the sticks to the
+  // hovered moment; leaving parks them back on the anchor.
+  for (const chartElement of chartElements ?? []) {
+    if (!chartElement || chartElement.__stickHoverWired === canvasId) continue;
+    chartElement.__stickHoverWired = canvasId;
+
+    chartElement.addEventListener("mousemove", () => {
+      const chart = chartElement.__blackboxLabChart;
+      const active = stickControllers.get(canvasId);
+      if (!chart || !active || chart.cursor.idx == null) return;
+      const t = chart.data?.[0]?.[chart.cursor.idx];
+      if (Number.isFinite(t)) {
+        active.stop();
+        active.showTime(t);
+      }
+    });
+
+    chartElement.addEventListener("mouseleave", () => {
+      const active = stickControllers.get(canvasId);
+      const anchor = chartElement.__stickAnchorTime;
+      if (active && Number.isFinite(anchor)) {
+        active.showTime(anchor);
+      }
+    });
+  }
+
+  for (const chartElement of chartElements ?? []) {
+    if (chartElement) chartElement.__stickAnchorTime = anchorTime;
+  }
+}
 
 const droopContextCard = el("droopContextCard");
 const droopContextTitle = el("droopContextTitle");
@@ -337,6 +414,16 @@ function applyAdvancedMode(enabled) {
 }
 
 applyAdvancedMode(localStorage.getItem("blackboxLabAdvanced") === "1");
+
+// ---- transmitter stick mode (pilot-input display) ----
+const stickModeSelect = el("stickModeSelect");
+
+if (stickModeSelect) {
+  stickModeSelect.value = String(getStickMode());
+  stickModeSelect.addEventListener("change", () => {
+    setStickMode(Number(stickModeSelect.value));
+  });
+}
 
 advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
@@ -1512,6 +1599,7 @@ const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
 function hideEventDetail() {
   const detail = el("pidEventDetail");
   if (detail) detail.hidden = true;
+  stickControllers.get("pidEventSticks")?.stop();
 }
 
 function showEventDetail(event) {
@@ -1578,6 +1666,16 @@ function showEventDetail(event) {
   if (chart && chart.root?.isConnected && window) {
     chart.setScale("x", window);
   }
+
+  // The pilot's hands beside the machine's answer: replay the
+  // event window once, then park at the command moment.
+  mountStickInset({
+    wrapId: "pidEventSticksWrap",
+    canvasId: "pidEventSticks",
+    chartElements: [chartElement],
+    anchorTime: event.t,
+    playFrom: window
+  });
 
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -1920,10 +2018,20 @@ function renderGovernorEvidence(dataset) {
 
   if (!window) {
     droopContextCard.hidden = true;
+    const droopWrap = el("droopSticksWrap");
+    if (droopWrap) droopWrap.hidden = true;
     return;
   }
 
   droopContextCard.hidden = false;
+
+  mountStickInset({
+    wrapId: "droopSticksWrap",
+    canvasId: "droopSticks",
+    chartElements: [chartDroopRpm, chartDroopDrive, chartDroopPower],
+    anchorTime: droopTime,
+    playFrom: null
+  });
 
   // Droop is measured against a target. Without one, the same
   // moment is the largest short-term swing — the card says which
@@ -2252,10 +2360,31 @@ function renderEscEvidence(dataset) {
       3
     );
 
+    if (!window) {
+      const escWrap = el("escSticksWrap");
+      if (escWrap) escWrap.hidden = true;
+    }
+
     if (window) {
       const markers = [
         { x: biggest.event.peakSeconds, label: "peak load" }
       ];
+
+      // The collective tells the load story better than any
+      // sentence — pilot input at the peak, scrubbed by hover.
+      mountStickInset({
+        wrapId: "escSticksWrap",
+        canvasId: "escSticks",
+        chartElements: [
+          chartLoadOutput,
+          chartLoadCollective,
+          chartLoadPower,
+          chartLoadWatts,
+          chartLoadTemp
+        ],
+        anchorTime: biggest.event.peakSeconds,
+        playFrom: null
+      });
 
       renderSyncedChart(
         chartLoadOutput,
@@ -2897,6 +3026,9 @@ function analyzeFlight(flightIndex) {
   });
 
   currentDataset = buildDataset(lines, pidAnalysis);
+  currentPilotInput = currentDataset
+    ? readPilotInput(currentDataset)
+    : null;
 
   renderFlightEvents(
     buildFlightEvents({

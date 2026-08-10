@@ -289,6 +289,23 @@ const { mkdirSync } = require("node:fs");
     );
   }
   console.log("event detail ok: in place, chart scaled —", detailState.explain);
+
+  // The event's stick inset replays the pilot's hands; give the
+  // one-shot replay a moment, then require a painted canvas.
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const eventSticks = await window.evaluate(() => ({
+    visible:
+      document.getElementById("pidEventSticksWrap")?.hidden === false,
+    rendered:
+      document.getElementById("pidEventSticks")?.dataset
+        .stickRendered === "1"
+  }));
+  if (!eventSticks.visible || !eventSticks.rendered) {
+    throw new Error(
+      "event stick inset missing: " + JSON.stringify(eventSticks)
+    );
+  }
+  console.log("event sticks ok: pilot input replayed beside the evidence");
   await window.screenshot({ path: "smoke-shots/15-flight-events.png" });
   await window.click('.nav-button[data-target="history"]');
   await window.waitForTimeout(300);
@@ -499,6 +516,23 @@ const { mkdirSync } = require("node:fs");
     throw new Error("lab help did not close");
   }
   console.log("lab help ok: opens in place, governor content, closes");
+
+  // Pilot-input inset: the governor droop card shows the sticks
+  // at the marked moment (the Bell sample carries rcCommand).
+  const stickState = await window.evaluate(() => ({
+    wrapVisible:
+      document.getElementById("droopSticksWrap")?.hidden === false,
+    rendered:
+      document.getElementById("droopSticks")?.dataset.stickRendered ===
+      "1"
+  }));
+  if (!stickState.wrapVisible || !stickState.rendered) {
+    throw new Error(
+      "governor stick inset missing: " + JSON.stringify(stickState)
+    );
+  }
+  await window.screenshot({ path: "smoke-shots/13d-gov-sticks.png" });
+  console.log("stick inset ok: governor droop card shows pilot input");
 
   // Advanced mode reveals them, with live chart data in the
   // evidence views (the zero-width guard must have held).

@@ -789,6 +789,12 @@
           <div id="pidEventsList"></div>
           <div id="pidEventDetail" hidden>
             <p class="event-detail-explain" id="pidEventExplain"></p>
+            <div class="stick-inset" id="pidEventSticksWrap" hidden>
+              <canvas id="pidEventSticks" width="250" height="132"></canvas>
+              <p class="stick-inset-caption">Your hands during this event
+                — replayed once, then parked at the command. Hover the
+                chart to scrub.</p>
+            </div>
             <div class="chart-container" id="pidEventChart"></div>
           </div>
         </section>
@@ -867,6 +873,11 @@
             to bottom: what the rotor did, what the pilot and
             governor asked for, and what the power system delivered.
           </p>
+          <div class="stick-inset" id="droopSticksWrap" hidden>
+            <canvas id="droopSticks" width="250" height="132"></canvas>
+            <p class="stick-inset-caption" id="droopSticksCaption">Pilot
+              input at the marked moment — hover any chart to scrub.</p>
+          </div>
           <div class="chart-container" id="chartDroopRpm">
           </div>
           <div class="chart-container" id="chartDroopDrive">
@@ -932,6 +943,12 @@
             The biggest event on one clock — zoom any chart and the
             others follow.
           </p>
+          <div class="stick-inset" id="escSticksWrap" hidden>
+            <canvas id="escSticks" width="250" height="132"></canvas>
+            <p class="stick-inset-caption">Pilot input at peak load —
+              the collective tells the story. Hover any chart to
+              scrub.</p>
+          </div>
           <div class="chart-container" id="chartLoadOutput">
           </div>
           <div class="chart-container" id="chartLoadCollective">
@@ -1116,6 +1133,23 @@ current demand; the steady downward slope is normal discharge.
         <section class="hero">
           <h2>Settings</h2>
           <p>Simple first. Deeper when you want it.</p>
+        </section>
+
+        <section class="card">
+          <h3>Transmitter</h3>
+          <label class="toggle-row">
+            <span>
+              <strong>Stick mode</strong> — how the pilot-input
+              display arranges the gimbals. Mode 2 (collective on
+              the left) is the common default.
+            </span>
+            <select id="stickModeSelect">
+              <option value="1">Mode 1</option>
+              <option value="2">Mode 2</option>
+              <option value="3">Mode 3</option>
+              <option value="4">Mode 4</option>
+            </select>
+          </label>
         </section>
 
         <section class="card">
