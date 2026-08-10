@@ -467,6 +467,39 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("peek ok: reveals, teaches, hides again");
 
+  // Lab help: the "? How to use this Lab" control opens the
+  // guide's per-Lab card in place, keeps the current screen and
+  // analysis, and closes again.
+  await window.click(
+    'section[data-screen="governor"] .lab-help-link'
+  );
+  const helpState = await window.evaluate(() => ({
+    open: !document.getElementById("labHelpOverlay").hidden,
+    hasContent: document
+      .getElementById("labHelpBody")
+      .textContent.includes("Full vs partial"),
+    principle: document
+      .getElementById("labHelpBody")
+      .textContent.includes("One principle"),
+    screen: document.querySelector("[data-screen].screen-active")
+      ?.dataset.screen
+  }));
+  if (!helpState.open || !helpState.hasContent || !helpState.principle) {
+    throw new Error("lab help did not open with governor content: " + JSON.stringify(helpState));
+  }
+  if (helpState.screen !== "governor") {
+    throw new Error("lab help changed the active screen: " + helpState.screen);
+  }
+  await window.screenshot({ path: "smoke-shots/13c-lab-help.png" });
+  await window.click("#labHelpClose");
+  const helpClosed = await window.evaluate(
+    () => document.getElementById("labHelpOverlay").hidden
+  );
+  if (!helpClosed) {
+    throw new Error("lab help did not close");
+  }
+  console.log("lab help ok: opens in place, governor content, closes");
+
   // Advanced mode reveals them, with live chart data in the
   // evidence views (the zero-width guard must have held).
   await window.click('.nav-button[data-target="settings"]');

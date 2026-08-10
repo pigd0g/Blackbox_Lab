@@ -260,6 +260,68 @@ el("sidebarVersion").textContent = `v${APP_VERSION}`;
 // so they can never disagree.
 const sidebarAdvancedToggle = el("sidebarAdvancedToggle");
 
+
+// ======================================================
+// LAB HELP — "? How to use this Lab" on every Lab page.
+// The content lives ONCE, in the How-to-Use screen's
+// per-Lab cards; the overlay clones it in place, so the
+// pilot never leaves the analysis and the explanation
+// can never drift from the guide.
+// ======================================================
+
+const labHelpOverlay = el("labHelpOverlay");
+const labHelpBody = el("labHelpBody");
+
+function openLabHelp(key) {
+  const sourceCard = el(`labHelp-${key}`);
+  const principle = el("labHelp-principle");
+
+  if (!labHelpOverlay || !labHelpBody || !sourceCard) {
+    return;
+  }
+
+  labHelpBody.innerHTML = "";
+  labHelpBody.appendChild(sourceCard.cloneNode(true));
+
+  if (principle) {
+    labHelpBody.appendChild(principle.cloneNode(true));
+  }
+
+  // Cloned ids must not duplicate the guide screen's.
+  labHelpBody
+    .querySelectorAll("[id]")
+    .forEach((node) => node.removeAttribute("id"));
+
+  labHelpOverlay.hidden = false;
+}
+
+function closeLabHelp() {
+  if (labHelpOverlay) {
+    labHelpOverlay.hidden = true;
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const link = event.target.closest(".lab-help-link");
+
+  if (link) {
+    openLabHelp(link.dataset.labHelp);
+    return;
+  }
+
+  if (event.target === labHelpOverlay) {
+    closeLabHelp();
+  }
+});
+
+el("labHelpClose")?.addEventListener("click", closeLabHelp);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && labHelpOverlay && !labHelpOverlay.hidden) {
+    closeLabHelp();
+  }
+});
+
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
   localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");

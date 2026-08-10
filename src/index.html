@@ -346,6 +346,168 @@
           </p>
         </section>
 
+
+        <section class="card lab-help-topic" id="labHelp-filter">
+          <h3>Filter Lab — how to use it</h3>
+          <p><strong>What it does.</strong> Reads the vibration
+            spectrum of your gyro signal, names each peak's likely
+            source from the rotor's own frequencies, and measures how
+            much of each peak your Rotorflight filters remove.</p>
+          <p><strong>What it uses.</strong> The gyro traces — raw
+            (before filtering) and filtered (what the control loop
+            actually sees). Headspeed improves source naming.</p>
+          <p><strong>How to read it.</strong> Four separate things,
+            in order: what was <em>detected</em> (an observation, not
+            a diagnosis), what the <em>filters</em> do with it, whether
+            anything meaningful <em>reaches the control loop</em>, and
+            only then a <em>recommendation</em>. A raw peak that the
+            filters remove almost completely, with a clean filtered
+            signal, is a healthy, managed state — most helicopters
+            live there.</p>
+          <p><strong>What it cannot prove.</strong> A frequency match
+            names a source <em>territory</em> — "main rotor 1/rev",
+            "motor/bearing territory" — it never proves a specific
+            part has failed. Vibration physically exists even when
+            filters manage it; filters protect the control loop, not
+            the bearings.</p>
+          <p><strong>When to act.</strong> Mechanics first when a
+            strong peak is poorly filtered, keeps growing across
+            flights, or shows up in the filtered trace. Peaks below
+            ~20&nbsp;Hz are an airframe story — no gyro filter may
+            touch that band.</p>
+          <p><strong>Partial telemetry.</strong> Without a separate
+            raw gyro trace, filter effectiveness cannot be measured —
+            the Lab says so instead of guessing.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-pid">
+          <h3>PID Lab — how to use it</h3>
+          <p><strong>What it does.</strong> Measures how faithfully
+            the helicopter follows your commands: the gyro line
+            against the setpoint line, plus every distinct stick
+            command as a Flight Event with its overshoot and settling
+            behaviour.</p>
+          <p><strong>What it uses.</strong> Setpoint and gyro per
+            axis. More clean, distinct commands in the flight mean
+            higher confidence — gentle cruising gives the Lab little
+            to judge.</p>
+          <p><strong>How to read it.</strong> <em>Tracking</em> — how
+            closely the response follows the ask. <em>Overshoot</em> —
+            going past the target before coming back.
+            <em>Settling</em> — how long the response hunts before it
+            calms. Click any event card to see the exact chart window
+            behind its numbers.</p>
+          <p><strong>What it cannot prove.</strong> One unusual event
+            is not tuning feedback — wind, a bump, or an aggressive
+            input can produce it. Patterns across comparable commands
+            are what matter. The score alone is not the story.</p>
+          <p><strong>When to act.</strong> Change one thing at a
+            time, fly again, and let Compare Flights judge the
+            difference.</p>
+          <p><strong>Partial telemetry.</strong> Without rotor speed
+            the Lab still reads tracking from motion, with its
+            confidence capped and stated.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-governor">
+          <h3>Governor Lab — how to use it</h3>
+          <p><strong>What it does.</strong> Judges how steadily the
+            rotor held its speed through the flight.</p>
+          <p><strong>Full vs partial.</strong> With a logged governor
+            <em>target</em>, the Lab measures true droop — how far the
+            rotor fell below what was commanded — and scores it. With
+            headspeed only (ESC or external governor), there is no
+            target to compare against: the Lab reads
+            <em>steadiness</em> against the rotor's own trend, uses
+            "swing" instead of "droop", and does not produce a score.
+            A missing target is a telemetry fact, never a governor
+            fault.</p>
+          <p><strong>How to read it.</strong> Sustained dips matter;
+            single noisy samples do not. Spool-up, spool-down and
+            commanded shutdowns are excluded on purpose.</p>
+          <p><strong>When to act.</strong> A deep sustained dip with
+            the motor output already at its ceiling is a power-system
+            limit — see the ESC Lab before touching governor gain.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-esc">
+          <h3>ESC Lab — how to use it</h3>
+          <p><strong>What it does.</strong> Shows how hard the power
+            system worked: output and headroom, current, voltage and
+            temperature, with the flight's highest-load moments lined
+            up on one clock and a cause named for each.</p>
+          <p><strong>What it uses.</strong> ESC telemetry fields.
+            Which checks can run depends on which fields your ESC
+            actually reports — anything missing is named as missing,
+            not counted against the aircraft.</p>
+          <p><strong>How to read it.</strong> "At the limit" means no
+            headroom left; "battery sag" means voltage gave way under
+            load; "collective load" means the dip answered a hard
+            pitch input — a response to the load, not necessarily a
+            weak pack.</p>
+          <p><strong>When to act.</strong> Repeated at-the-limit
+            moments in normal flying are the signal worth acting on —
+            gearing, headspeed or power-system headroom.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-battery">
+          <h3>Battery Lab — how to use it</h3>
+          <p><strong>What it does.</strong> What the flight cost your
+            pack: voltage under load, sag, estimated internal
+            resistance, and per-cell numbers.</p>
+          <p><strong>What it uses.</strong> Pack voltage; current and
+            capacity where the ESC reports them. Missing current data
+            limits what can be concluded — the Lab says which checks
+            were possible.</p>
+          <p><strong>How to read it.</strong> Sag under load is
+            normal; the trend across flights is the health signal.
+            Rising internal resistance across sessions means the pack
+            is aging — expect softer punch before anything fails
+            outright.</p>
+          <p><strong>When to act.</strong> Judge packs across
+            flights in the Health Record, not from one hard flight on
+            a cold day.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-compare">
+          <h3>Compare Flights — how to use it</h3>
+          <p><strong>What it does.</strong> Before vs after, one
+            sentence per topic: did your change help?</p>
+          <p><strong>How to read it.</strong> Compare like with like —
+            same aircraft, same headspeed, similar flying. Small
+            differences read as "about the same" on purpose: they are
+            noise, not news.</p>
+          <p><strong>What it cannot prove.</strong> One flight is not
+            a trend. Two very different flights (hover test vs 3D)
+            will differ everywhere, and none of it means your change
+            caused it.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-history">
+          <h3>Health Record — how to use it</h3>
+          <p><strong>What it does.</strong> Files every analyzed
+            flight under its aircraft and watches the trends no
+            single flight can show — vibration creeping up, a pack
+            aging, a tune drifting.</p>
+          <p><strong>How to read it.</strong> One physical flight is
+            one row. Re-analyzing the same log after an update
+            refreshes that row — it never adds a second flight.
+            Trends appear after four flights; more flights, steadier
+            trends.</p>
+          <p><strong>When to act.</strong> A warning here is a
+            direction over time, not an emergency: check the named
+            metric's chart, then look at the machine.</p>
+        </section>
+
+        <section class="card lab-help-topic" id="labHelp-principle">
+          <h3>One principle, everywhere</h3>
+          <p><strong>Full telemetry → full analysis. Partial
+            telemetry → supported conclusions only. Insufficient
+            telemetry → not evaluated.</strong> A missing signal
+            limits what Blackbox Lab may conclude — it does not mean
+            something is wrong with your helicopter.</p>
+        </section>
+
         <section class="card">
           <h3>Words you'll meet (no jargon left behind)</h3>
           <p class="glossary">
@@ -506,6 +668,7 @@
         <section class="hero">
           <h2>Filter Lab</h2>
           <p>Find the noise, understand the noise, filter the noise.</p>
+          <button class="lab-help-link" data-lab-help="filter" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -591,6 +754,7 @@
         <section class="hero">
           <h2>PID Lab</h2>
           <p>How faithfully your helicopter follows your hands.</p>
+          <button class="lab-help-link" data-lab-help="pid" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -668,6 +832,7 @@
         <section class="hero">
           <h2>Governor Lab</h2>
           <p>Is your rotor speed a rock or a rollercoaster?</p>
+          <button class="lab-help-link" data-lab-help="governor" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -725,6 +890,7 @@
         <section class="hero">
           <h2>ESC Lab</h2>
           <p>Cruising, or living at the limit?</p>
+          <button class="lab-help-link" data-lab-help="esc" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -795,6 +961,7 @@
         <section class="hero">
           <h2>Battery Lab</h2>
           <p>What the flight really cost your pack.</p>
+          <button class="lab-help-link" data-lab-help="battery" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -824,6 +991,7 @@ current demand; the steady downward slope is normal discharge.
         <section class="hero">
           <h2>Compare Flights</h2>
           <p>Did your change help? Before vs after, in plain words.</p>
+          <button class="lab-help-link" data-lab-help="compare" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -877,6 +1045,7 @@ current demand; the steady downward slope is normal discharge.
         <section class="hero">
           <h2>Health Record</h2>
           <p>Your helicopter over time — trends no single flight can show.</p>
+          <button class="lab-help-link" data-lab-help="history" aria-label="How to use this Lab">?&nbsp;&nbsp;How to use this Lab</button>
         </section>
 
         <section class="card">
@@ -1029,6 +1198,18 @@ current demand; the steady downward slope is normal discharge.
 
   <!-- Load progress: shown when a log is opened from any screen
        other than Home, where the inline status is not visible. -->
+
+  <!-- In-place Lab help: content is CLONED from the guide screen's
+       per-Lab cards (single source), shown without leaving the
+       current analysis. -->
+  <div class="overlay" id="labHelpOverlay" hidden>
+    <div class="overlay-dialog lab-help-dialog">
+      <button class="overlay-close" id="labHelpClose"
+        title="Close" aria-label="Close help">✕</button>
+      <div id="labHelpBody"></div>
+    </div>
+  </div>
+
   <div class="overlay" id="loadProgress" hidden>
     <div class="overlay-dialog load-dialog">
       <div class="load-spinner" id="loadSpinner" aria-hidden="true"></div>

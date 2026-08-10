@@ -1558,3 +1558,35 @@ section[data-screen="history"] .flight-picker .secondary-button {
   flex: none;
   white-space: nowrap;
 }
+
+/* ---- Lab help ("? How to use this Lab") ---- */
+.lab-help-link {
+  margin-top: 10px;
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--line, rgba(127, 183, 255, 0.25));
+  border-radius: 14px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.lab-help-link:hover,
+.lab-help-link:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+.lab-help-dialog {
+  max-width: 620px;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.lab-help-dialog .lab-help-topic {
+  border: none;
+  padding: 0 4px;
+  margin: 0 0 6px 0;
+  background: none;
+}
