@@ -298,6 +298,243 @@ document.addEventListener("click", (event) => {
 // the charts, never their owner.
 // ======================================================
 
+
+// ------------------------------------------------------
+// Replay graph stack — the pilot builds the working view.
+// Curated presets, one shared timeline (linked zoom), the
+// layout remembered across sessions. This stack is also
+// the layout a future video export will render.
+// ------------------------------------------------------
+
+const REPLAY_LAYOUT_KEY = "blackboxLabReplayLayout";
+const REPLAY_DEFAULT_LAYOUT = ["tracking-roll", "headspeed", "throttle", "power"];
+
+const REPLAY_GRAPH_PRESETS = [
+  {
+    key: "tracking-roll",
+    label: "Roll: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[0\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[0\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "tracking-pitch",
+    label: "Pitch: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[1\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[1\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "tracking-yaw",
+    label: "Yaw: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[2\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[2\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "gyro",
+    label: "Gyro (filtered, all axes)",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^gyroADC\[0\]$/i], color: CHART_COLORS[0] },
+      { patterns: [/^gyroADC\[1\]$/i], color: CHART_COLORS[1] },
+      { patterns: [/^gyroADC\[2\]$/i], color: CHART_COLORS[2] }
+    ])
+  },
+  {
+    key: "gyro-raw",
+    label: "Gyro (unfiltered)",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^gyroUnfilt\[0\]$/i, /^gyroRAW\[0\]$/i], color: CHART_COLORS[0] },
+      { patterns: [/^gyroUnfilt\[1\]$/i, /^gyroRAW\[1\]$/i], color: CHART_COLORS[1] },
+      { patterns: [/^gyroUnfilt\[2\]$/i, /^gyroRAW\[2\]$/i], color: CHART_COLORS[2] }
+    ])
+  },
+  {
+    key: "headspeed",
+    label: "Headspeed & governor target",
+    yLabel: "rpm",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^governorTarget$/i, /^govTarget$/i], color: CHART_COLORS[0] },
+      { patterns: [/^headspeed$/i, /^erpm/i], color: CHART_COLORS[1] }
+    ])
+  },
+  {
+    key: "collective",
+    label: "Collective",
+    yLabel: "collective",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[3\]$/i], color: CHART_COLORS[5] }
+    ])
+  },
+  {
+    key: "throttle",
+    label: "Motor output (%)",
+    yLabel: "output (%)",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^motor\[0\]$/i], color: CHART_COLORS[3], convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]$/i], color: CHART_COLORS[4], convert: toThrottlePercent }
+    ])
+  },
+  {
+    key: "power",
+    label: "Voltage & current",
+    yLabel: "V · A",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^EscV$/i, /^vbatLatest$/i], color: CHART_COLORS[0], convert: toVolts },
+      { patterns: [/^EscI$/i, /^amperageLatest$/i], color: CHART_COLORS[1], convert: toAmps }
+    ])
+  }
+];
+
+function presetSeries(dataset, entries) {
+  const series = [];
+
+  for (const entry of entries) {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+    if (!column) continue;
+
+    const raw = dataset.columnValues(column);
+    series.push({
+      label: column,
+      values: decimate(entry.convert ? entry.convert(raw) : raw),
+      color: entry.color
+    });
+  }
+
+  return series;
+}
+
+function loadReplayLayout() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(REPLAY_LAYOUT_KEY));
+    if (Array.isArray(stored) && stored.length > 0) {
+      return stored.filter((key) =>
+        REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key)
+      );
+    }
+  } catch {
+    // fall through to the default
+  }
+  return [...REPLAY_DEFAULT_LAYOUT];
+}
+
+function saveReplayLayout(layout) {
+  localStorage.setItem(REPLAY_LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function renderReplayStack(dataset) {
+  const stack = el("replayGraphStack");
+  const addSelect = el("replayAddGraph");
+
+  if (!stack) return;
+
+  const layout = loadReplayLayout();
+  stack.innerHTML = "";
+
+  if (!dataset) {
+    stack.innerHTML =
+      '<p class="chart-empty">Open a log to build your replay view.</p>';
+    return;
+  }
+
+  for (const key of layout) {
+    const preset = REPLAY_GRAPH_PRESETS.find((entry) => entry.key === key);
+    if (!preset) continue;
+
+    const series = preset.series(dataset);
+
+    const row = document.createElement("div");
+    row.className = "replay-graph-row";
+    row.innerHTML = `
+      <div class="replay-graph-head">
+        <span>${preset.label}</span>
+        <span class="replay-graph-tools">
+          <button data-stack-move="-1" data-stack-key="${key}" title="Move up">▲</button>
+          <button data-stack-move="1" data-stack-key="${key}" title="Move down">▼</button>
+          <button data-stack-remove="${key}" title="Remove">✕</button>
+        </span>
+      </div>
+      <div class="chart-container"></div>
+    `;
+    stack.appendChild(row);
+
+    const container = row.querySelector(".chart-container");
+
+    if (series.length === 0) {
+      container.innerHTML =
+        '<p class="chart-empty">This log has no data for this chart.</p>';
+      continue;
+    }
+
+    renderTimeSeriesChart(container, {
+      timeSeconds: decimate(dataset.timeSeconds),
+      series,
+      yLabel: preset.yLabel,
+      height: 170,
+      linkGroup: "replayStack"
+    });
+  }
+
+  // The add-menu offers what is not already in the stack.
+  if (addSelect) {
+    addSelect.innerHTML = "";
+    for (const preset of REPLAY_GRAPH_PRESETS) {
+      if (layout.includes(preset.key)) continue;
+      const option = document.createElement("option");
+      option.value = preset.key;
+      option.textContent = preset.label;
+      addSelect.appendChild(option);
+    }
+    addSelect.disabled = addSelect.options.length === 0;
+    const addButton = el("replayAddButton");
+    if (addButton) addButton.disabled = addSelect.options.length === 0;
+  }
+}
+
+el("replayAddButton")?.addEventListener("click", () => {
+  const addSelect = el("replayAddGraph");
+  if (!addSelect || !addSelect.value) return;
+
+  const layout = loadReplayLayout();
+  layout.push(addSelect.value);
+  saveReplayLayout(layout);
+  renderReplayStack(currentDataset);
+  replay.playheads = [];
+});
+
+el("replayGraphStack")?.addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-stack-remove]");
+  const move = event.target.closest("[data-stack-move]");
+
+  if (!remove && !move) return;
+
+  const layout = loadReplayLayout();
+
+  if (remove) {
+    saveReplayLayout(layout.filter((key) => key !== remove.dataset.stackRemove));
+  } else {
+    const key = move.dataset.stackKey;
+    const delta = Number(move.dataset.stackMove);
+    const index = layout.indexOf(key);
+    const target = index + delta;
+    if (index === -1 || target < 0 || target >= layout.length) return;
+    [layout[index], layout[target]] = [layout[target], layout[index]];
+    saveReplayLayout(layout);
+  }
+
+  renderReplayStack(currentDataset);
+  replay.playheads = [];
+});
+
+
 const replay = {
   time: 0,
   duration: 0,
@@ -340,6 +577,8 @@ function setupReplay(dataset, pilotInput, flightEvents) {
   ui.card.hidden = false;
   replay.duration = dataset.timeSeconds[dataset.timeSeconds.length - 1];
 
+  renderReplayStack(dataset);
+
   // The sticks follow when the log recorded the pilot's hands;
   // without rcCommand the transport still runs, sticks hidden.
   replay.sticks =
@@ -380,7 +619,7 @@ function replayCollectPlayheads() {
   replay.playheads = [];
 
   document
-    .querySelectorAll('section[data-screen="viewer"] .chart-container')
+    .querySelectorAll('section[data-screen="replay"] .chart-container')
     .forEach((element) => {
       const chart = element.__blackboxLabChart;
       if (!chart || !chart.over || !chart.over.isConnected) return;

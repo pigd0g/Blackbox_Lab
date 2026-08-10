@@ -1745,3 +1745,68 @@ section[data-screen="history"] .flight-picker .secondary-button {
   pointer-events: none;
   z-index: 4;
 }
+
+/* ---- Replay graph stack ---- */
+.replay-stack-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.replay-add-label {
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+#replayAddGraph {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.replay-add-btn {
+  background: rgba(111, 178, 255, 0.12);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.replay-add-btn:hover:not(:disabled) {
+  background: rgba(111, 178, 255, 0.22);
+}
+
+.replay-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.replay-graph-row {
+  margin-bottom: 14px;
+}
+
+.replay-graph-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.replay-graph-tools button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.replay-graph-tools button:hover {
+  color: var(--ink);
+}

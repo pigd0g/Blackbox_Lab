@@ -145,6 +145,19 @@ const { mkdirSync } = require("node:fs");
 
   // Replay transport: play advances the clock, the playhead line
   // appears inside viewer charts, sticks follow, pause holds.
+  await window.click('.nav-button[data-target="replay"]');
+  await window.waitForTimeout(500);
+  const stackState = await window.evaluate(() => ({
+    rows: document.querySelectorAll(".replay-graph-row").length,
+    charts: document.querySelectorAll(
+      'section[data-screen="replay"] .chart-container canvas'
+    ).length
+  }));
+  if (stackState.rows === 0 || stackState.charts === 0) {
+    throw new Error("replay stack empty: " + JSON.stringify(stackState));
+  }
+  console.log("replay stack ok:", stackState.rows, "graphs");
+
   const replayBefore = await window.evaluate(() =>
     document.getElementById("replayTime")?.textContent
   );
@@ -153,7 +166,7 @@ const { mkdirSync } = require("node:fs");
   const replayState = await window.evaluate(() => ({
     time: document.getElementById("replayTime")?.textContent,
     playheads: document.querySelectorAll(
-      'section[data-screen="viewer"] .replay-playhead'
+      'section[data-screen="replay"] .replay-playhead'
     ).length,
     sticksRendered:
       document.getElementById("replaySticks")?.dataset.stickRendered ===
@@ -172,6 +185,8 @@ const { mkdirSync } = require("node:fs");
     );
   }
   await window.screenshot({ path: "smoke-shots/17-replay.png" });
+  await window.click('.nav-button[data-target="viewer"]');
+  await window.waitForTimeout(300);
   console.log(
     "replay ok:",
     replayState.time,
@@ -525,7 +540,7 @@ const { mkdirSync } = require("node:fs");
   // what-am-I-looking-at paragraph, deeper text folded behind
   // the summary — the one explanation home per screen.
   const introState = await window.evaluate(() => {
-    const screens = ["viewer", "filter", "pid", "governor", "esc", "battery", "compare", "history", "reports"];
+    const screens = ["viewer", "replay", "filter", "pid", "governor", "esc", "battery", "compare", "history", "reports"];
     return screens.map((name) => ({
       name,
       present: Boolean(
@@ -537,7 +552,7 @@ const { mkdirSync } = require("node:fs");
   if (missingIntros.length) {
     throw new Error("screen intros missing: " + missingIntros.map((entry) => entry.name).join(", "));
   }
-  console.log("screen intros ok: 9/9 pages introduce themselves");
+  console.log("screen intros ok: 10/10 pages introduce themselves");
 
   // Pilot-input inset: the governor droop card shows the sticks
   // at the marked moment (the Bell sample carries rcCommand).

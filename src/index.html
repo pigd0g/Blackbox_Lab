@@ -18,6 +18,7 @@
       <button class="nav-button" id="openLogButton">Open Blackbox Log
         <span class="nav-lock" id="openLogLock" hidden>🔒</span></button>
       <button class="nav-button" data-target="viewer">Log Viewer</button>
+      <button class="nav-button" data-target="replay">Replay</button>
       <button class="nav-button" data-target="filter">Filter Lab</button>
       <button class="nav-button" data-target="pid">PID Lab</button>
       <button class="nav-button" data-target="governor">Governor Lab</button>
@@ -388,39 +389,6 @@
           </details>
         </div>
 
-        <section class="card" id="replayCard" hidden>
-          <h3>Replay</h3>
-          <p class="chart-hint">Fly the log again: the playhead runs
-            through every chart on this page while the sticks show
-            the pilot's hands. Drag the timeline to seek — colored
-            ticks mark the Flight Events.</p>
-          <div class="replay-row">
-            <div class="stick-col">
-              <canvas id="replaySticks" width="320" height="170"></canvas>
-            </div>
-            <div class="replay-controls">
-              <div class="replay-buttons">
-                <button id="replayPlay" class="replay-play"
-                  aria-label="Play or pause">▶</button>
-                <select id="replaySpeed" aria-label="Playback speed">
-                  <option value="0.25">0.25×</option>
-                  <option value="0.5">0.5×</option>
-                  <option value="1" selected>1×</option>
-                  <option value="2">2×</option>
-                </select>
-                <span class="replay-time" id="replayTime">0.0 / 0.0 s</span>
-                <span class="replay-readout" id="replayReadout"></span>
-              </div>
-              <div class="replay-timeline">
-                <div class="replay-ticks" id="replayTicks"></div>
-                <input type="range" id="replayScrub" min="0" max="1000"
-                  value="0" step="1" aria-label="Timeline" />
-              </div>
-            </div>
-          </div>
-        </section>
-
-
         <section class="card">
           <h3>Gyro</h3>
           <p class="chart-hint">
@@ -550,6 +518,74 @@
           </p>
           <div class="chart-container" id="chartPower">
             <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ REPLAY ============ -->
+      <section data-screen="replay">
+        <section class="hero">
+          <h2>Replay</h2>
+          <p>Fly the log again — your charts, your timeline.</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page plays the flight back like a video edit:
+            stack the charts you want to study, then run the
+            playhead through all of them at once while the sticks
+            show the pilot's hands.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Add or remove graphs to build your own working view —
+              the layout is remembered for next time. All charts
+              share one timeline: drag to zoom in any of them and
+              the others follow, double-click to reset. The colored
+              ticks on the timeline are the Flight Events; drag the
+              playhead straight to one to watch the moment. Playback
+              speed is yours, and everything here — the graphs, the
+              sticks, the readouts — is exactly what a future video
+              export will render over your flight footage.</p>
+          </details>
+        </div>
+
+        <section class="card">
+          <div class="replay-stack-controls">
+            <label for="replayAddGraph" class="replay-add-label">Add graph</label>
+            <select id="replayAddGraph"></select>
+            <button id="replayAddButton" class="replay-add-btn">+ Add</button>
+          </div>
+          <div id="replayGraphStack"></div>
+        </section>
+
+        <section class="card" id="replayCard" hidden>
+          <h3>Replay</h3>
+          <p class="chart-hint">Fly the log again: the playhead runs
+            through every chart on this page while the sticks show
+            the pilot's hands. Drag the timeline to seek — colored
+            ticks mark the Flight Events.</p>
+          <div class="replay-row">
+            <div class="stick-col">
+              <canvas id="replaySticks" width="320" height="170"></canvas>
+            </div>
+            <div class="replay-controls">
+              <div class="replay-buttons">
+                <button id="replayPlay" class="replay-play"
+                  aria-label="Play or pause">▶</button>
+                <select id="replaySpeed" aria-label="Playback speed">
+                  <option value="0.25">0.25×</option>
+                  <option value="0.5">0.5×</option>
+                  <option value="1" selected>1×</option>
+                  <option value="2">2×</option>
+                </select>
+                <span class="replay-time" id="replayTime">0.0 / 0.0 s</span>
+                <span class="replay-readout" id="replayReadout"></span>
+              </div>
+              <div class="replay-timeline">
+                <div class="replay-ticks" id="replayTicks"></div>
+                <input type="range" id="replayScrub" min="0" max="1000"
+                  value="0" step="1" aria-label="Timeline" />
+              </div>
+            </div>
           </div>
         </section>
       </section>
