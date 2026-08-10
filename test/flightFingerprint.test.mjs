@@ -23,6 +23,7 @@ import {
   loadHistory,
   recordFlight
 } from "../src/analysis/craftHistory.js";
+import * as craftHistoryModule from "../src/analysis/craftHistory.js";
 
 function memoryStorage() {
   const store = new Map();
@@ -255,4 +256,162 @@ test("two legacy rows of one file become one row", () => {
   assert.equal(collapsed.length, 1);
   assert.equal(collapsed[0].trackingScore, 91);
   assert.equal(collapsed[0].vibrationPeak, 2.2);
+});
+
+// ------------------------------------------------------
+// The re-analysis hole (issue: same physical flight as
+// duplicate rows): identity must survive the software
+// changing how it reads dates, samples or scores.
+// ------------------------------------------------------
+
+test("a re-analysis that learned the flight's date folds into one row", () => {
+  // The reported record: an older build filed the flight with no
+  // usable date; a newer build reads the date from the log header.
+  // Same duration, same sample count, different date fields — one
+  // physical flight, and the newer analysis speaks for it.
+  const collapsed = collapseDuplicateFlights([
+    {
+      fileName: "md500e_20260000_000000.bbl",
+      flightDateMs: null,
+      durationSeconds: 102.9,
+      sampleCount: 443_549,
+      trackingScore: 98,
+      vibrationPeak: 4.7,
+      recordedAtMs: 1_000
+    },
+    {
+      fileName: "md500e_20260000_000000.bbl",
+      flightDateMs: Date.UTC(2026, 4, 16),
+      durationSeconds: 102.9,
+      sampleCount: 443_549,
+      trackingScore: 87,
+      vibrationPeak: 3.8,
+      droopRpm: 38.1,
+      recordedAtMs: 2_000
+    }
+  ]);
+
+  assert.equal(collapsed.length, 1, "one physical flight, one row");
+  assert.equal(collapsed[0].trackingScore, 87);
+  assert.ok(isFinite(collapsed[0].flightDateMs));
+});
+
+test("the source hash is the authority in both directions", () => {
+  const { sameFlight } = craftHistoryModule;
+
+  // Same bytes: same flight, whatever else disagrees.
+  assert.ok(
+    sameFlight(
+      {
+        fileName: "a.bbl",
+        sourceHash: "fnv1a-abc-100",
+        durationSeconds: 102.9,
+        flightDateMs: Date.UTC(2026, 4, 16)
+      },
+      {
+        fileName: "renamed.csv",
+        sourceHash: "fnv1a-abc-100",
+        durationSeconds: 102.9,
+        flightDateMs: null
+      }
+    )
+  );
+
+  // Different bytes: two flights, however alike their shape.
+  assert.ok(
+    !sameFlight(
+      {
+        fileName: "a.bbl",
+        sourceHash: "fnv1a-abc-100",
+        durationSeconds: 102.9,
+        sampleCount: 100
+      },
+      {
+        fileName: "a.bbl",
+        sourceHash: "fnv1a-def-100",
+        durationSeconds: 102.9,
+        sampleCount: 100
+      }
+    )
+  );
+});
+
+test("two trustworthy dates that disagree veto a shape match", () => {
+  const { sameFlight } = craftHistoryModule;
+
+  assert.ok(
+    !sameFlight(
+      {
+        fileName: "hover-one.bbl",
+        durationSeconds: 102.9,
+        sampleCount: 102_720,
+        flightDateMs: Date.UTC(2026, 4, 16, 19, 27, 2)
+      },
+      {
+        fileName: "hover-two.bbl",
+        durationSeconds: 102.9,
+        sampleCount: 102_720,
+        flightDateMs: Date.UTC(2026, 4, 17, 9, 0, 0)
+      }
+    )
+  );
+});
+
+test("migrateHistory folds stored duplicates once, on startup", () => {
+  const { migrateHistory } = craftHistoryModule;
+  const storage = memoryStorage();
+
+  storage.setItem(
+    "blackboxLabCraftHistory",
+    JSON.stringify({
+      md500e: [
+        {
+          fileName: "md500e_20260000_000000.bbl",
+          flightDateMs: null,
+          durationSeconds: 102.9,
+          sampleCount: 443_549,
+          trackingScore: 98
+        },
+        {
+          fileName: "md500e_20260000_000000.bbl",
+          flightDateMs: Date.UTC(2026, 4, 16),
+          durationSeconds: 102.9,
+          sampleCount: 443_549,
+          trackingScore: 87
+        },
+        {
+          fileName: "other.bbl",
+          flightDateMs: Date.UTC(2026, 4, 17),
+          durationSeconds: 240.1,
+          sampleCount: 240_100,
+          trackingScore: 91
+        }
+      ]
+    })
+  );
+
+  assert.equal(migrateHistory(storage), true, "duplicates were found");
+
+  const flights = loadHistory(storage)["md500e"];
+  assert.equal(flights.length, 2, "3 rows, 2 physical flights");
+
+  assert.equal(
+    migrateHistory(storage),
+    false,
+    "a clean record is left untouched"
+  );
+});
+
+test("hashing is line-boundary aware and stable", () => {
+  const { hashFlightLines } = craftHistoryModule;
+
+  assert.equal(
+    hashFlightLines(["loopIteration,time", "1,2"]),
+    hashFlightLines(["loopIteration,time", "1,2"])
+  );
+  assert.notEqual(
+    hashFlightLines(["ab", "c"]),
+    hashFlightLines(["a", "bc"])
+  );
+  assert.equal(hashFlightLines([]), null);
 });

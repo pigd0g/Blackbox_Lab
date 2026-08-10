@@ -82,6 +82,8 @@ import {
   loadHistory,
   recordFlight,
   buildHistoryEntry,
+  hashFlightLines,
+  migrateHistory,
   assessTrends,
   deleteFlight,
   clearHistory,
@@ -2852,6 +2854,9 @@ function analyzeFlight(flightIndex) {
 
     const entry = buildHistoryEntry({
       fileName: file.name,
+      // The selected flight's own lines, so each flight of a
+      // multi-flight file carries its own identity.
+      sourceHash: hashFlightLines(currentFlightLines),
       flightDateMs: resolveFlightDateMs(
         currentFlightLines,
         file.lastModified
@@ -3183,6 +3188,10 @@ compareSampleButton.addEventListener("click", async () => {
 // ======================================================
 // 09. HEALTH RECORD (per-craft history)
 // ======================================================
+
+// Records written by earlier builds may already hold the same
+// flight twice; fold those once, before the record is first shown.
+migrateHistory(localStorage);
 
 function refreshHistoryScreen(selectedCraft) {
   const history = loadHistory(localStorage);

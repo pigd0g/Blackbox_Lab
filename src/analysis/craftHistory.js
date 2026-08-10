@@ -12,8 +12,146 @@
 //
 // ======================================================
 
+import { isPlausibleFlightDate } from "./metadataReader.js";
+
 const STORAGE_KEY = "blackboxLabCraftHistory";
 const MAXIMUM_FLIGHTS_PER_CRAFT = 200;
+
+// ------------------------------------------------------
+// Physical-flight identity
+//
+// A flight's identity must survive re-analysis: scores,
+// dates and sample handling all change as the software
+// improves, and any of them inside the identity turns an
+// app update into a duplicate row. The source bytes are
+// the one thing an update cannot touch, so their hash is
+// the authority; shape (duration + sample count) is the
+// heuristic for records written before hashing existed;
+// and two plausible dates that disagree veto a merge —
+// better a duplicate kept than a real flight lost.
+// ------------------------------------------------------
+
+// Cheap stable content hash (FNV-1a over every line). Runs once per
+// analysis on the selected flight's own lines, so each flight of a
+// multi-flight file carries its own identity.
+export function hashFlightLines(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return null;
+  }
+
+  let hash = 0x811c9dc5;
+
+  for (const line of lines) {
+    const text = String(line);
+
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+
+    // Line boundary, so ["ab","c"] and ["a","bc"] differ.
+    hash ^= 10;
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `fnv1a-${(hash >>> 0).toString(16)}-${lines.length}`;
+}
+
+export function sameFlight(a, b) {
+  if (!a || !b) {
+    return false;
+  }
+
+  // The source bytes are the flight: equal hashes are one recording
+  // whatever it is named or dated; differing hashes are two.
+  if (a.sourceHash && b.sourceHash) {
+    return a.sourceHash === b.sourceHash;
+  }
+
+  const durationA = Number(a.durationSeconds);
+  const durationB = Number(b.durationSeconds);
+
+  if (
+    !Number.isFinite(durationA) ||
+    durationA <= 0 ||
+    !Number.isFinite(durationB) ||
+    durationB <= 0 ||
+    Math.abs(durationA - durationB) > 0.05
+  ) {
+    return false;
+  }
+
+  const samplesA = Number(a.sampleCount);
+  const samplesB = Number(b.sampleCount);
+  const bothCounted =
+    Number.isFinite(samplesA) &&
+    samplesA > 0 &&
+    Number.isFinite(samplesB) &&
+    samplesB > 0;
+
+  const dateA = isPlausibleFlightDate(a.flightDateMs)
+    ? Number(a.flightDateMs)
+    : null;
+  const dateB = isPlausibleFlightDate(b.flightDateMs)
+    ? Number(b.flightDateMs)
+    : null;
+
+  if (bothCounted) {
+    if (samplesA !== samplesB) {
+      return false;
+    }
+
+    // Same shape, but two trustworthy dates that disagree are two
+    // flights. A missing or implausible date never vetoes — that is
+    // exactly the re-analysis case this identity exists to survive.
+    if (
+      dateA !== null &&
+      dateB !== null &&
+      Math.abs(dateA - dateB) > 120_000
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Without both sample counts: equal trustworthy dates decide.
+  if (dateA !== null && dateB !== null) {
+    return Math.abs(dateA - dateB) < 2_000;
+  }
+
+  // Legacy fallback, unchanged from the pre-hash record: an entry
+  // too old to describe itself is matched by the name it arrived
+  // under (duration already agreed above).
+  return (
+    normalizeFileName(a.fileName) === normalizeFileName(b.fileName)
+  );
+}
+
+// Which of two rows describing one flight should speak for it:
+// the one recorded latest, then the better-described one.
+function keeperRank(entry) {
+  return [
+    Number.isFinite(Number(entry.recordedAtMs))
+      ? Number(entry.recordedAtMs)
+      : 0,
+    entry.sourceHash ? 1 : 0,
+    isPlausibleFlightDate(entry.flightDateMs) ? 1 : 0
+  ];
+}
+
+function betterKeeper(a, b) {
+  const rankA = keeperRank(a);
+  const rankB = keeperRank(b);
+
+  for (let i = 0; i < rankA.length; i += 1) {
+    if (rankA[i] !== rankB[i]) {
+      return rankA[i] > rankB[i] ? a : b;
+    }
+  }
+
+  return a;
+}
 
 export function loadHistory(storage) {
   try {
@@ -32,7 +170,8 @@ export function buildHistoryEntry({
   fileName,
   flightDateMs,
   durationSeconds,
-  dataset
+  dataset,
+  sourceHash = null
 }) {
   const peak = (() => {
     if (!dataset.spectra || dataset.spectra.length === 0) {
@@ -60,6 +199,12 @@ export function buildHistoryEntry({
   return {
     fileName,
     flightDateMs,
+    // Identity of the source recording itself — survives renames,
+    // re-exports and every future change to the analysis.
+    sourceHash,
+    // When this analysis was filed, so a re-analysis knows it
+    // supersedes the row it replaces.
+    recordedAtMs: Date.now(),
     durationSeconds:
       Math.round((durationSeconds ?? 0) * 10) / 10,
     // How many samples the flight holds. Part of what identifies a
@@ -81,6 +226,10 @@ export function buildHistoryEntry({
 
 /**
  * What identifies a flight, independent of its file name.
+ *
+ * Retained as the claimability check; live identity decisions run
+ * through sameFlight(), which prefers the source hash and treats
+ * the date as a veto rather than as part of the identity.
  *
  * A pilot who copies, renames or re-exports a log is holding the same
  * flight, and the record should say so rather than showing it twice
@@ -169,26 +318,11 @@ if (craftKey === "Unknown craft") {
     history[craftKey] = [];
   }
 
-  // The same flight under a second name is still one flight. Identity
-  // comes from the flight itself where it can be established, and from
-  // the file name only where it cannot — which also keeps records
-  // written before flights carried a fingerprint working.
-  const incomingFingerprint = flightFingerprint(entry);
-
-  const duplicate = history[craftKey].find((existing) => {
-    if (incomingFingerprint) {
-      const existingFingerprint = flightFingerprint(existing);
-
-      if (existingFingerprint) {
-        return existingFingerprint === incomingFingerprint;
-      }
-    }
-
-    return (
-      normalizeFileName(existing.fileName) ===
-      normalizeFileName(entry.fileName)
-    );
-  });
+  // The same flight under a second name — or under a second
+  // analysis by a newer build — is still one flight.
+  const duplicate = history[craftKey].find((existing) =>
+    sameFlight(existing, entry)
+  );
 
   if (duplicate) {
     // Keep the name the flight was first filed under: the record reads
@@ -257,82 +391,27 @@ if (craftKey === "Unknown craft") {
 }
 
 export function collapseDuplicateFlights(flights = []) {
-  const byFingerprint = new Map();
-  const collapsed = [];
-
-  for (const flight of flights) {
-    const fingerprint = flightFingerprint(flight);
-
-    if (!fingerprint) {
-      collapsed.push(flight);
-      continue;
-    }
-
-    const existing = byFingerprint.get(fingerprint);
-
-    if (!existing) {
-      byFingerprint.set(fingerprint, flight);
-      collapsed.push(flight);
-      continue;
-    }
-
-    // Same flight: keep the entry already in the record and fill any
-    // gaps from the copy, so nothing measured is lost in the merge.
-    for (const [key, value] of Object.entries(flight)) {
-      if (
-        (existing[key] === null || existing[key] === undefined) &&
-        value !== null &&
-        value !== undefined
-      ) {
-        existing[key] = value;
-      }
-    }
-  }
-
-  // Identity falls back to the file name exactly the way recording
-  // does: an entry written before flights carried a fingerprint can
-  // never match by fingerprint, so a record holding {old analysis,
-  // new analysis} of one source file kept both forever — two dates,
-  // two scores, one physical flight counted twice in every trend.
-  // The fingerprinted entry is the newer, better-described analysis:
-  // it stays, and the legacy entry only fills its gaps. Entries that
-  // BOTH carry fingerprints are left alone here — same-named flights
-  // from a multi-flight file are genuinely different flights.
-  const withoutFingerprint = collapsed.filter(
-    (flight) => !flightFingerprint(flight)
-  );
-
   const survivors = [];
 
-  for (const flight of collapsed) {
-    if (flightFingerprint(flight)) {
+  for (const flight of flights) {
+    const twinIndex = survivors.findIndex((candidate) =>
+      sameFlight(candidate, flight)
+    );
+
+    if (twinIndex === -1) {
       survivors.push(flight);
       continue;
     }
 
-    const modern = collapsed.find(
-      (candidate) =>
-        flightFingerprint(candidate) &&
-        normalizeFileName(candidate.fileName) ===
-          normalizeFileName(flight.fileName)
-    );
+    // One physical flight, two rows: the later, better-described
+    // analysis speaks for it, and the other only fills the gaps it
+    // left — nothing measured is lost, nothing stale survives as a
+    // second observation.
+    const keeper = betterKeeper(survivors[twinIndex], flight);
+    const filler =
+      keeper === survivors[twinIndex] ? flight : survivors[twinIndex];
 
-    const earlierLegacyTwin = withoutFingerprint.find(
-      (candidate) =>
-        candidate !== flight &&
-        survivors.includes(candidate) &&
-        normalizeFileName(candidate.fileName) ===
-          normalizeFileName(flight.fileName)
-    );
-
-    const keeper = modern ?? earlierLegacyTwin;
-
-    if (!keeper) {
-      survivors.push(flight);
-      continue;
-    }
-
-    for (const [key, value] of Object.entries(flight)) {
+    for (const [key, value] of Object.entries(filler)) {
       if (
         (keeper[key] === null || keeper[key] === undefined) &&
         value !== null &&
@@ -341,9 +420,36 @@ export function collapseDuplicateFlights(flights = []) {
         keeper[key] = value;
       }
     }
+
+    // The record keeps reading as the flight it first filed.
+    keeper.fileName = survivors[twinIndex].fileName;
+    survivors[twinIndex] = keeper;
   }
 
   return survivors;
+}
+
+// Records written by earlier builds may already hold duplicates.
+// One pass on startup folds them without waiting for the same log
+// to be opened again.
+export function migrateHistory(storage) {
+  const history = loadHistory(storage);
+  let changed = false;
+
+  for (const [craft, flights] of Object.entries(history)) {
+    const collapsed = collapseDuplicateFlights(flights);
+
+    if (collapsed.length !== flights.length) {
+      history[craft] = collapsed;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveHistory(storage, history);
+  }
+
+  return changed;
 }
 
 export function deleteFlight(storage, craftName, fileName) {
