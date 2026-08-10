@@ -15,6 +15,7 @@
 // ======================================================
 
 import { VIBRATION_FLOOR_HZ } from "./dsp/fft.js";
+import { assessVibrationConclusion } from "./vibrationSeverity.js";
 
 function averageOf(values) {
   if (!values || values.length === 0) {
@@ -33,7 +34,7 @@ function averageOf(values) {
 // ------------------------------------------------------
 // Vibration verdict — from the noise spectrum peaks
 // ------------------------------------------------------
-function vibrationVerdict(spectra, headspeedRpm) {
+function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
   if (!spectra || spectra.length === 0) {
     return null;
   }
@@ -79,39 +80,56 @@ function vibrationVerdict(spectra, headspeedRpm) {
   const magnitudeLabel = peakMagnitude.toFixed(1);
   const hzLabel = peakHz.toFixed(0);
 
-  if (peakMagnitude > 8) {
-    return {
-      key: "vibration",
-      title: "Vibration",
-      status: "attention",
-      headline: `Strong vibration at ${hzLabel} Hz`,
-      detail: `The biggest shake (amplitude ${magnitudeLabel}) comes from ${source}.`,
-      action: "Fix the mechanics before touching filters: balance the blades, check head damping and bearings. Filters hide vibration — they don't cure it.",
-      screen: "filter",
-      evidence: "Noise Spectrum chart, Filter Lab"
-    };
-  }
+  // Filtering evidence for THIS peak, when the advisor measured it:
+  // raw amplitude alone never decides the verdict again.
+  const advisorRow =
+    filterAdvice?.rows?.find(
+      (row) => Math.abs(row.hz - peakHz) <= 3
+    ) ?? null;
 
-  if (peakMagnitude > 3) {
-    return {
-      key: "vibration",
-      title: "Vibration",
-      status: "watch",
-      headline: `Moderate vibration at ${hzLabel} Hz`,
-      detail: `Noticeable but not alarming (amplitude ${magnitudeLabel}); it comes from ${source}.`,
-      action: "Worth a look at blade balance next time you're at the bench; no urgency.",
-      screen: "filter",
-      evidence: "Noise Spectrum chart, Filter Lab"
-    };
-  }
+  const conclusion = assessVibrationConclusion({
+    rawMagnitude: peakMagnitude,
+    hz: peakHz,
+    source,
+    reductionPercent: advisorRow?.reductionPercent ?? null,
+    residualMagnitude: advisorRow?.filteredMagnitude ?? null,
+    trackingConcern: Number.isFinite(pidAnalysis?.score)
+      ? pidAnalysis.score < 70
+      : null
+  });
+
+  // Detection stays sensitive; the card's status follows the
+  // evidence-gated conclusion. A managed strong peak stays visible
+  // as "watch" — filters do not remove vibration from bearings.
+  const status =
+    conclusion.level === "strong" || conclusion.level === "suspected"
+      ? "attention"
+      : conclusion.level === "review" ||
+          (conclusion.managed && peakMagnitude > 8)
+        ? "watch"
+        : "good";
+
+  const headline =
+    conclusion.level === "observed" && peakMagnitude > 3
+      ? `Vibration at ${hzLabel} Hz — managed by filtering`
+      : peakMagnitude > 8
+        ? `Strong vibration at ${hzLabel} Hz`
+        : peakMagnitude > 3
+          ? `Vibration at ${hzLabel} Hz`
+          : "Vibration levels look healthy";
+
+  const detail =
+    peakMagnitude > 3
+      ? `${conclusion.detected} ${conclusion.filtering} ${conclusion.impact}`
+      : `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz — a clean, well-balanced machine.`;
 
   return {
     key: "vibration",
     title: "Vibration",
-    status: "good",
-    headline: "Vibration levels look healthy",
-    detail: `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz — a clean, well-balanced machine.`,
-    action: "Nothing to do — keep it this way.",
+    status,
+    headline,
+    detail,
+    action: conclusion.recommendation,
     screen: "filter",
     evidence: "Noise Spectrum chart, Filter Lab"
   };
@@ -608,7 +626,8 @@ export function buildFlightVerdict({
   vbat,
   pidAnalysis,
   labs,
-  anchorHeadspeedRpm
+  anchorHeadspeedRpm,
+  filterAdvice = null
 }) {
   // Peak naming needs the rotor speed the machine flew at. The
   // caller passes the stable-flight mean when one exists; the
@@ -622,7 +641,7 @@ export function buildFlightVerdict({
       : null);
 
   const cards = [
-  vibrationVerdict(spectra, governedHeadspeed),
+  vibrationVerdict(spectra, governedHeadspeed, filterAdvice, pidAnalysis),
   rotorSpeedVerdictFromLab(labs?.governor),
   tuningVerdict(pidAnalysis),
   powerVerdictFromLab(labs?.esc),

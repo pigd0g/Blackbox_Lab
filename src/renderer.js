@@ -1204,7 +1204,8 @@ if (sampleRate && hasSpectrumRuns) {
   vbat,
   pidAnalysis,
   labs,
-  anchorHeadspeedRpm: governedHeadspeed
+  anchorHeadspeedRpm: governedHeadspeed,
+  filterAdvice
 });
 
   // Evidence that zooms to the moment: attach a focus

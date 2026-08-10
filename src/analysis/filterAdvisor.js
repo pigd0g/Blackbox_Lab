@@ -224,10 +224,23 @@ if (structuralRows.length > 0) {
 }
 
 // ---- mechanics before filters ----
+// A prominent peak that the filters demonstrably contain (strong
+// measured reduction, quiet residual) is an observation to monitor,
+// not a mechanical alarm — the frequency match names a source
+// TERRITORY, it does not diagnose a failed part. Mechanics-first
+// wording is reserved for peaks the filters are not containing.
 if (isStrongProminentPeak && !biggest.belowFilterBand) {
+  const biggestIsManaged =
+    Number.isFinite(biggest.reductionPercent) &&
+    biggest.reductionPercent >= 90 &&
+    Number.isFinite(biggest.filteredMagnitude) &&
+    biggest.filteredMagnitude < 1.5;
+
   recommendations.push({
-    priority: "first",
-    text: `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first — blade balance and tracking, head damping, bearings, shafts, and mounting — then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
+    priority: biggestIsManaged ? "gentle" : "first",
+    text: biggestIsManaged
+      ? `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is prominent in the raw gyro, but the filters are containing it: ${biggest.reductionPercent}% removed, ${biggest.filteredMagnitude} remaining. Vibration is present and being managed successfully — no change recommended. The physical vibration still exists in the airframe, so keep an eye on this peak's trend across flights and review mechanically if it grows.`
+      : `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first — blade balance and tracking, head damping, bearings, shafts, and mounting — then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
   });
 }
 
