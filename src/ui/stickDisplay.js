@@ -138,30 +138,34 @@ export function mapStickPositions(frame, mode, scales) {
   const yaw = clamp(frame.yaw / scales.yaw);
   const collective = clamp(frame.collective / scales.collective);
 
+  // The label carries the live value, the way a pilot reads a
+  // transmitter monitor: axis name + current deflection.
+  const value = (name, raw) => `${name} ${Math.round(raw)}`;
+
   switch (Number(mode)) {
     case 1:
       return {
         left: { x: yaw, y: pitch },
         right: { x: roll, y: collective },
-        labels: { left: ["Yaw", "Pitch"], right: ["Roll", "Col"] }
+        labels: { left: [value("Yaw", frame.yaw), value("Pitch", frame.pitch)], right: [value("Roll", frame.roll), value("Col", frame.collective)] }
       };
     case 3:
       return {
         left: { x: roll, y: pitch },
         right: { x: yaw, y: collective },
-        labels: { left: ["Roll", "Pitch"], right: ["Yaw", "Col"] }
+        labels: { left: [value("Roll", frame.roll), value("Pitch", frame.pitch)], right: [value("Yaw", frame.yaw), value("Col", frame.collective)] }
       };
     case 4:
       return {
         left: { x: roll, y: collective },
         right: { x: yaw, y: pitch },
-        labels: { left: ["Roll", "Col"], right: ["Yaw", "Pitch"] }
+        labels: { left: [value("Roll", frame.roll), value("Col", frame.collective)], right: [value("Yaw", frame.yaw), value("Pitch", frame.pitch)] }
       };
     default:
       return {
         left: { x: yaw, y: collective },
         right: { x: roll, y: pitch },
-        labels: { left: ["Yaw", "Col"], right: ["Roll", "Pitch"] }
+        labels: { left: [value("Yaw", frame.yaw), value("Col", frame.collective)], right: [value("Roll", frame.roll), value("Pitch", frame.pitch)] }
       };
   }
 }
@@ -176,7 +180,7 @@ const COLORS = {
   crosshair: "rgba(127, 183, 255, 0.28)",
   dot: "#ffc46b",
   trail: "255, 255, 255",
-  label: "#7e93b8"
+  label: "#b9c9e6"
 };
 
 function drawGimbal(ctx, cx, cy, radius, position, trail) {
@@ -266,7 +270,7 @@ export function drawStickFrame(canvas, positions, options = {}) {
 
   if (options.labels !== false && positions.labels) {
     ctx.fillStyle = COLORS.label;
-    ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
+    ctx.font = "11px 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(
       positions.labels.left.join(" · "),
