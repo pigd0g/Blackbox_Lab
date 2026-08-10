@@ -1559,36 +1559,45 @@ section[data-screen="history"] .flight-picker .secondary-button {
   white-space: nowrap;
 }
 
-/* ---- Lab help ("? How to use this Lab") ---- */
-.lab-help-link {
-  margin-top: 10px;
-  align-self: flex-start;
-  background: none;
-  border: 1px solid var(--line, rgba(127, 183, 255, 0.25));
-  border-radius: 14px;
-  color: var(--ink-muted);
-  font-size: 13px;
-  padding: 3px 12px;
+/* ---------------- screen intros ---------------- */
+/* One small "what you're looking at" paragraph per screen,
+   with the deeper explanation folded behind a summary. */
+
+.screen-intro {
+  max-width: 880px;
+  margin: -8px 0 22px 0;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+}
+
+.screen-intro > p {
+  margin: 0;
+}
+
+.screen-intro details {
+  margin-top: 6px;
+}
+
+.screen-intro summary {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 13.5px;
   cursor: pointer;
+  user-select: none;
 }
 
-.lab-help-link:hover,
-.lab-help-link:focus-visible {
-  color: var(--ink);
-  border-color: var(--ink-muted);
+.screen-intro summary:hover {
+  text-decoration: underline;
 }
 
-.lab-help-dialog {
-  max-width: 620px;
-  max-height: 92vh;
-  overflow-y: auto;
-}
-
-.lab-help-dialog .lab-help-topic {
-  border: none;
-  padding: 0 4px;
-  margin: 0 0 6px 0;
-  background: none;
+.screen-intro details p {
+  margin: 8px 0 0 0;
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  background: rgba(111, 178, 255, 0.05);
+  border-left: 3px solid var(--line);
+  border-radius: 0 8px 8px 0;
 }
 
 /* ---- Pilot-input (stick) insets ---- */
