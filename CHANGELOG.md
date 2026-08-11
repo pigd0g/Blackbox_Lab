@@ -1,3 +1,70 @@
+## v1.0.0 — Blackbox Lab
+
+The first full release. Everything below grew out of months of test
+rounds on real flights — MD500E, Bell 222UT, nitro machines, ESC- and
+externally-governed models — and out of the issues those rounds
+surfaced.
+
+### The big ones
+
+- **Replay.** A new tab that plays the flight back like a video edit:
+  stack the charts you want from nine presets (per-axis target vs
+  gyro, filtered/raw gyro, headspeed & target, collective, motor
+  output, voltage & current), reorder them freely — the layout is
+  remembered. One shared timeline: the playhead runs through every
+  chart at once, Flight Events sit as colored ticks on the scrub bar,
+  live headspeed/voltage readouts follow, playback speed 0.25×–2×.
+- **Pilot input on screen.** Transmitter-style stick displays with
+  live deflection numbers — in Replay, and beside the evidence in the
+  PID event view (replays the pilot's hands through each event),
+  the Governor worst-droop card and the ESC peak-load card, all
+  hover-scrubbed with their charts. Stick mode (1–4) is a Settings
+  choice and the display labels the mode it renders with.
+- **Home redesign.** Verdict cards as a tile grid, Flight Events as a
+  clickable timeline with in-place evidence, the 3×3 tuning matrix,
+  chart maximize, and a friendlier welcome screen.
+- **Evidence-first analysis language.** Every Lab now separates what
+  was detected from what it means: Filter Lab distinguishes
+  detection, filtering effectiveness, control impact and
+  recommendation (a well-filtered peak reads "managed by filtering",
+  never as a fault); Governor Lab reports full, partial
+  (headspeed-only — stability and swing, never "droop" without a
+  target) or not-evaluated; scores are never shown without the
+  evidence to back them.
+- **Fleet-calibrated scoring.** Filter, PID tracking and governor
+  scores are calibrated against hundreds of real contributed flights
+  — continuous scales anchored to what real machines actually do,
+  instead of thresholds guessed from one log.
+
+### Also new since v0.3.9
+
+- Screen intros on every analysis page — a what-am-I-looking-at
+  paragraph with the deeper explanation folded behind it, now
+  carrying each Lab's help (what it uses, what it cannot prove, how
+  partial telemetry changes the conclusion).
+- Flight Events with stable identity end to end: card, description,
+  chart window and technical findings always describe the same
+  event; the window always contains the event.
+- Health Record: one physical flight is one row — re-analysis after
+  an update refreshes the row instead of adding a duplicate;
+  existing duplicates fold together on first launch.
+- Contribution schema v1: content-hash dedup, consent snapshot,
+  anonymization report, per-craft CLI-dump attachment with a strict
+  allowlist scrubber, craft cards, upload ledger.
+- Error reporting: a crash offers a one-click, flight-data-free
+  report (or copy-to-clipboard) — once per distinct failure.
+- Per-headspeed-bank breakdowns in PID and Filter Labs, governor and
+  ESC evidence views, collective-load cause on ESC events, craft
+  identity panel with dump-driven prefill, per-flight delete in the
+  Health Record, English document language throughout.
+
+### Changed
+
+- **License: GPL-3.0** — in line with the wider Rotorflight and
+  Betaflight ecosystem.
+- Advanced mode: nothing is invisible — advanced blocks are always
+  present, folded; the sidebar switch pre-opens them.
+
 ## v0.3.7 — release plumbing
 
 ### Added
