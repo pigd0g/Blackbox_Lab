@@ -11,9 +11,64 @@ import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  hasUsableRotorSpeed
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
+
+// Does this log carry a governor target, or only rotor speed?
+// Models on an ESC or external governor log the second without the
+// first, and the column may be present but empty.
+function hasRealGovernorTarget(governorTargetValues) {
+  return (
+    Array.isArray(governorTargetValues) &&
+    governorTargetValues.some((value) => Number(value) > 0)
+  );
+}
+
+// The headspeed a pilot is holding, with the measurement noise taken
+// out. For a governed model the flight controller states its target
+// outright; for an ungoverned one, the steady value the rotor actually
+// runs at is the closest honest equivalent — but only once smoothed.
+// Raw rotor speed jitters by tens of rpm sample to sample, and that
+// jitter is what fragments one real headspeed into dozens of profile
+// buckets and reads as a governor changing its mind.
+function smoothRotorSpeed(values, windowSamples) {
+  const half = Math.max(1, Math.round(windowSamples / 2));
+  const smoothed = new Array(values.length).fill(null);
+
+  let runningTotal = 0;
+  let runningCount = 0;
+
+  for (let index = 0; index < values.length + half; index += 1) {
+    if (index < values.length) {
+      const entering = Number(values[index]);
+      if (Number.isFinite(entering)) {
+        runningTotal += entering;
+        runningCount += 1;
+      }
+    }
+
+    const leavingIndex = index - 2 * half;
+
+    if (leavingIndex >= 0) {
+      const leaving = Number(values[leavingIndex]);
+      if (Number.isFinite(leaving)) {
+        runningTotal -= leaving;
+        runningCount -= 1;
+      }
+    }
+
+    const writeIndex = index - half;
+
+    if (writeIndex >= 0 && writeIndex < values.length && runningCount > 0) {
+      smoothed[writeIndex] = runningTotal / runningCount;
+    }
+  }
+
+  return smoothed;
+}
+
 function detectHeadspeedProfiles(
   headspeedValues,
   governorTargetValues,
@@ -29,6 +84,15 @@ function detectHeadspeedProfiles(
 ) {
   return [];
 }
+const targetIsReal = hasRealGovernorTarget(governorTargetValues);
+
+// Without a real target there is nothing to hand the phase detector:
+// it already falls back to reading rotor speed on its own, and giving
+// it a target copied from the measurement is actively worse than
+// giving it none. The transition filter exists to drop the moments a
+// governor switches banks, so a "target" that jitters with the sensor
+// looks like a governor changing its mind on every sample and takes
+// the whole flight out with it.
 const stableFlightPhase =
   rowAlignedSamples.length > 0
     ? detectStableFlightPhase({
@@ -38,9 +102,9 @@ const stableFlightPhase =
         headspeed: rowAlignedSamples.map(
           (sample) => sample.measuredRpm
         ),
-        governorTarget: rowAlignedSamples.map(
-          (sample) => sample.targetRpm
-        )
+        governorTarget: targetIsReal
+          ? rowAlignedSamples.map((sample) => sample.targetRpm)
+          : []
       })
     : null;
 
@@ -49,7 +113,7 @@ const stableSampleIndexes =
     stableFlightPhase?.stableIndexes || []
   );
 
-const profileSamples =
+const rawProfileSamples =
   rowAlignedSamples.length > 0
     ? rowAlignedSamples
     : headspeedValues.map((measuredRpm, index) => ({
@@ -60,6 +124,54 @@ const profileSamples =
     ? Number(governorTargetValues[index])
     : Number(measuredRpm)
       }));
+
+// Profiles are grouped by target, so an ungoverned model needs its
+// stand-in target smoothed before grouping — otherwise one steady
+// 1700 rpm scatters across every 10-rpm bucket between 1600 and 1800
+// and no single bucket holds enough samples to count as a profile.
+// A real bank change moves the smoothed value too, so distinct
+// headspeeds stay distinct.
+const profileSamples = (() => {
+  if (targetIsReal || rawProfileSamples.length === 0) {
+    return rawProfileSamples;
+  }
+
+  const times = rawProfileSamples.map((sample) => sample.timeSeconds);
+  const firstTime = times.find((value) => Number.isFinite(value));
+  const lastTime = [...times]
+    .reverse()
+    .find((value) => Number.isFinite(value));
+
+  const span =
+    Number.isFinite(firstTime) && Number.isFinite(lastTime)
+      ? lastTime - firstTime
+      : 0;
+
+  const samplesPerSecond =
+    span > 0 ? rawProfileSamples.length / span : 1000;
+
+  // Two seconds: long enough to flatten sensor noise, short enough
+  // that a deliberate headspeed change still shows up as one.
+  const windowSamples = Math.max(
+    5,
+    Math.min(
+      Math.round(samplesPerSecond * 2),
+      Math.floor(rawProfileSamples.length / 2)
+    )
+  );
+
+  const smoothed = smoothRotorSpeed(
+    rawProfileSamples.map((sample) => sample.measuredRpm),
+    windowSamples
+  );
+
+  return rawProfileSamples.map((sample, index) => ({
+    ...sample,
+    targetRpm: Number.isFinite(smoothed[index])
+      ? smoothed[index]
+      : sample.measuredRpm
+  }));
+})();
 
  const sampleCount = profileSamples.length;
 
@@ -147,10 +259,53 @@ if (targetRpm < 300) {
   }
  
 
-  return Array.from(profileGroups.values())
+  // A stated target lands on one bucket every time, so governed logs
+  // group correctly as they are. A derived target is a measurement,
+  // and a measurement sitting near a bucket edge falls either side of
+  // it — one steady headspeed arriving as two half-populated buckets,
+  // both then too small to survive the minimum. Merge neighbours back
+  // together first, and merge against the running cluster mean rather
+  // than the previous bucket so a slow drift cannot chain distinct
+  // headspeeds into one.
+  const grouped = Array.from(profileGroups.values()).sort(
+    (first, second) => first.targetRpm - second.targetRpm
+  );
+
+  const merged = targetIsReal
+    ? grouped
+    : grouped.reduce((clusters, candidate) => {
+        const open = clusters[clusters.length - 1];
+
+        const tolerance = open
+          ? Math.max(30, open.targetRpm * 0.02)
+          : 0;
+
+        if (open && candidate.targetRpm - open.targetRpm <= tolerance) {
+          const total = open.sampleCount + candidate.sampleCount;
+
+          open.targetRpm =
+            (open.targetRpm * open.sampleCount +
+              candidate.targetRpm * candidate.sampleCount) /
+            total;
+          open.measuredTotal += candidate.measuredTotal;
+          open.sampleCount = total;
+          open.sampleIndexes = open.sampleIndexes.concat(
+            candidate.sampleIndexes
+          );
+          open.minimumRpm = Math.min(open.minimumRpm, candidate.minimumRpm);
+          open.maximumRpm = Math.max(open.maximumRpm, candidate.maximumRpm);
+
+          return clusters;
+        }
+
+        clusters.push({ ...candidate });
+        return clusters;
+      }, []);
+
+  return merged
     .filter((profile) => profile.sampleCount >= 1000)
     .map((profile) => ({
-      targetRpm: profile.targetRpm,
+      targetRpm: Math.round(profile.targetRpm),
       averageRpm:
         profile.measuredTotal / profile.sampleCount,
       minimumRpm: profile.minimumRpm,
@@ -160,6 +315,36 @@ if (targetRpm < 300) {
     }))
     .sort((a, b) => a.targetRpm - b.targetRpm);
 }
+// The one System Scores line where missing telemetry must not
+// masquerade as a judged governor: a score renders as "/100" only
+// when it is a real number earned against a real target. A
+// headspeed-only log says so in words, and anything unjudged says
+// "Not scored" — never a quality label.
+export function describeGovernorSystemScore(governor) {
+  if (!governor) {
+    return "N/A";
+  }
+
+  if (governor.capability === "partial") {
+    return "Partial — headspeed stability only (no governor target logged)";
+  }
+
+  if (
+    Number.isFinite(governor.score) &&
+    governor.status !== "Unavailable" &&
+    governor.status !== "No Active Flight Data" &&
+    governor.status !== "Target Unavailable"
+  ) {
+    return `${governor.score}/100 — ${governor.status}`;
+  }
+
+  return `Not scored — ${
+    governor.status === "insufficient"
+      ? "insufficient telemetry"
+      : governor.status
+  }`;
+}
+
 export function buildLogAnalysis({
   fileType,
   lines,
@@ -316,12 +501,124 @@ const alignedHeadspeedSamples = headspeedSamples
     Number.isFinite(sample.targetRpm)
   );
      
+// Airframe motion, used only when no rotor speed was logged.
+// It lets the app tell "no RPM sensor" apart from "this was a
+// bench run and the model never moved".
+const gyroActivityByRow = (() => {
+  // Adapter headers may arrive quoted ("gyroADC[0]") — strip the
+  // quotes before comparing, or quoted logs silently lose their
+  // motion signal.
+  const unquoted = (header) =>
+    String(header).trim().replace(/^"|"$/g, "").toLowerCase();
+
+  const axisSamples = [0, 1, 2]
+    .map((axis) => {
+      const columnName =
+        headers.find(
+          (header) => unquoted(header) === `gyroadc[${axis}]`
+        ) ??
+        headers.find(
+          (header) => unquoted(header) === `gyroraw[${axis}]`
+        ) ??
+        null;
+
+      return columnName
+        ? getColumnSamples(
+            lines,
+            telemetryHeaderIndex,
+            columnName
+          )
+        : [];
+    })
+    .filter((samples) => samples.length > 0);
+
+  if (axisSamples.length === 0) {
+    return null;
+  }
+
+  const totals = new Map();
+
+  for (const samples of axisSamples) {
+    for (const sample of samples) {
+      const value = Number(sample.value);
+
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+
+      totals.set(
+        sample.rowIndex,
+        (totals.get(sample.rowIndex) ?? 0) + Math.abs(value)
+      );
+    }
+  }
+
+  return totals;
+})();
+
 const headspeedProfiles =
   detectHeadspeedProfiles(
     headspeedValues,
     governorTargetValues,
     alignedHeadspeedSamples
   );
+
+// Without rotor-speed data there are no headspeed profiles, but
+// stick-following needs none of that: the tracking checks only need
+// to know WHEN the machine was flying. Airframe motion answers it,
+// so a no-RPM log still earns a tuning read — labelled as such, and
+// with its confidence capped by the missing rotor context.
+const motionProfiles = (() => {
+  if (
+    headspeedProfiles.length > 0 ||
+    !gyroActivityByRow ||
+    hasUsableRotorSpeed(headspeedValues)
+  ) {
+    return [];
+  }
+
+  const rows = [...gyroActivityByRow.entries()]
+    .map(([rowIndex, activityValue]) => ({
+      rowIndex,
+      activityValue,
+      timeSeconds: timeByRow.get(rowIndex)
+    }))
+    .filter((row) => Number.isFinite(row.timeSeconds))
+    .sort((a, b) => a.rowIndex - b.rowIndex);
+
+  if (rows.length < 100) {
+    return [];
+  }
+
+  const motionPhase = detectStableFlightPhase({
+    timeSeconds: rows.map((row) => row.timeSeconds),
+    headspeed: [],
+    governorTarget: [],
+    activity: rows.map((row) => row.activityValue)
+  });
+
+  const stableIndexes = motionPhase.stableIndexes ?? [];
+
+  if (stableIndexes.length < 1000) {
+    return [];
+  }
+
+  return [
+    {
+      targetRpm: null,
+      basis: "motion",
+      sampleCount: stableIndexes.length,
+      sampleIndexes: stableIndexes.map(
+        (position) => rows[position].rowIndex
+      )
+    }
+  ];
+})();
+
+const pidProfiles =
+  headspeedProfiles.length > 0
+    ? headspeedProfiles
+    : motionProfiles;
 
 
       const keyHeaders = [
@@ -425,58 +722,9 @@ const headspeedProfiles =
 pidAnalysis = analyzePids(
   analysisContext,
   lines,
- headspeedProfiles
+  pidProfiles
 );
-// Airframe motion, used only when no rotor speed was logged.
-// It lets the app tell "no RPM sensor" apart from "this was a
-// bench run and the model never moved".
-const gyroActivityByRow = (() => {
-  const axisSamples = [0, 1, 2]
-    .map((axis) => {
-      const columnName =
-        headers.find(
-          (header) =>
-            header.toLowerCase() === `gyroadc[${axis}]`
-        ) ??
-        headers.find(
-          (header) =>
-            header.toLowerCase() === `gyroraw[${axis}]`
-        ) ??
-        null;
 
-      return columnName
-        ? getColumnSamples(
-            lines,
-            telemetryHeaderIndex,
-            columnName
-          )
-        : [];
-    })
-    .filter((samples) => samples.length > 0);
-
-  if (axisSamples.length === 0) {
-    return null;
-  }
-
-  const totals = new Map();
-
-  for (const samples of axisSamples) {
-    for (const sample of samples) {
-      const value = Number(sample.value);
-
-      if (!Number.isFinite(value)) {
-        continue;
-      }
-
-      totals.set(
-        sample.rowIndex,
-        (totals.get(sample.rowIndex) ?? 0) + Math.abs(value)
-      );
-    }
-  }
-
-  return totals;
-})();
 
 const governorLabSamples = headspeedSamples
   .map((sample) => ({
@@ -625,12 +873,8 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       Governor Performance: ${
   flightAnalysis
-    ? flightAnalysis.governor.status === "Unavailable" ||
-      flightAnalysis.governor.status === "No Active Flight Data"||
-      flightAnalysis.governor.status === "Target Unavailable"
-      ? `N/A — ${flightAnalysis.governor.status}`
-      : `${flightAnalysis.governor.score}/100 — ${flightAnalysis.governor.status}`
-         : "N/A"
+    ? describeGovernorSystemScore(flightAnalysis.governor)
+    : "N/A"
     }<br>
 
       <br>
@@ -662,7 +906,15 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       ${
         flightAnalysis
-          ? `${flightAnalysis.governor.score > 0 ? "✓" : "⚠"} ${flightAnalysis.governor.finding}`
+          ? `${
+              flightAnalysis.governor.score > 0 ||
+              (flightAnalysis.governor.capability === "partial" &&
+                flightAnalysis.governor.status === "good")
+                ? "✓"
+                : flightAnalysis.governor.capability === "partial"
+                  ? "△"
+                  : "⚠"
+            } ${flightAnalysis.governor.finding}`
           : "✗ Governor analysis unavailable."
       }<br>
     `;
@@ -676,7 +928,9 @@ const governorLabAnalysis = analyzeGovernorLab({
     extraSummary = `
       File Type: ${fileType}<br>
       Status: Settings file detected<br>
-      Next: CLI Reader will extract governor, filters, PIDs, ports, GPS, and receiver setup.
+      Settings belong to a helicopter rather than to a flight: open the
+      flight they go with, then add this file from the model card on
+      Home. Names and identifiers are removed before anything is kept.
     `;
 
 

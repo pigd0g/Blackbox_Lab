@@ -62,6 +62,70 @@ function describeChange(change, lowerIsBetter, absoluteDelta, minimumDelta) {
   };
 }
 
+/**
+ * Whether two tracking scores rest on enough evidence to be subtracted
+ * from one another.
+ *
+ * A flight with almost no clean command responses still produces a
+ * score; comparing it with a well-flown one measures how much each was
+ * measured, not how each flew.
+ */
+export function comparableEvidence(beforeConfidence, afterConfidence) {
+  const thin = (confidence) =>
+    confidence?.level === "Low" || confidence?.level === "Insufficient";
+
+  const beforeThin = thin(beforeConfidence);
+  const afterThin = thin(afterConfidence);
+
+  if (!beforeThin && !afterThin) {
+    return { comparable: true, reason: "" };
+  }
+
+  if (beforeThin && afterThin) {
+    return {
+      comparable: false,
+      reason: "neither flight recorded enough clean stick movements to measure tracking from."
+    };
+  }
+
+  return {
+    comparable: false,
+    reason: beforeThin
+      ? "the earlier flight did not record enough clean stick movements to measure tracking from."
+      : "the later flight did not record enough clean stick movements to measure tracking from."
+  };
+}
+
+/**
+ * Are these two flights the same helicopter?
+ *
+ * Comparing a change means holding the machine still and varying one
+ * thing. Two different helicopters differ in every way at once, so the
+ * numbers are worth showing but the difference is not a verdict on
+ * anything the pilot did.
+ *
+ * Unknown names are treated as the same aircraft: a log without a
+ * craft name is common, and refusing to compare on that basis would
+ * take a working feature away from the pilots most likely to need it.
+ */
+export function sameAircraft(beforeCraft, afterCraft) {
+  const clean = (name) => {
+    const text = String(name ?? "").trim();
+    return !text || text === "Not found" || text === "Unknown craft"
+      ? null
+      : text.toLowerCase();
+  };
+
+  const before = clean(beforeCraft);
+  const after = clean(afterCraft);
+
+  if (!before || !after) {
+    return { known: false, same: true, before, after };
+  }
+
+  return { known: true, same: before === after, before, after };
+}
+
 export function compareFlights(baseline, comparison) {
   const rows = [];
 
@@ -105,15 +169,26 @@ export function compareFlights(baseline, comparison) {
       8
     );
 
+    // "Droop" is a target-relative word. If either flight lacks a
+    // governor target, the number being compared is a short-term
+    // swing against the rotor's own trend, and the row says so.
+    const bothMeasuredDroop =
+      govBefore.capability === "full" &&
+      govAfter.capability === "full";
+
+    const measureWord = bothMeasuredDroop
+      ? "worst droop"
+      : "largest swing";
+
     rows.push({
       title: "Headspeed hold",
       direction: described.direction,
-      before: `${Math.round(droopBefore)} rpm worst droop`,
-      after: `${Math.round(droopAfter)} rpm worst droop`,
+      before: `${Math.round(droopBefore)} rpm ${measureWord}`,
+      after: `${Math.round(droopAfter)} rpm ${measureWord}`,
       sentence:
         described.direction === "same"
-          ? `Governor hold is about the same (worst droop ${Math.round(droopAfter)} rpm).`
-          : `Headspeed hold got ${described.word}: worst droop ${Math.round(droopBefore)} → ${Math.round(droopAfter)} rpm.`
+          ? `${bothMeasuredDroop ? "Governor hold" : "Headspeed steadiness"} is about the same (${measureWord} ${Math.round(droopAfter)} rpm).`
+          : `${bothMeasuredDroop ? "Headspeed hold" : "Headspeed steadiness"} got ${described.word}: ${measureWord} ${Math.round(droopBefore)} → ${Math.round(droopAfter)} rpm.`
     });
   }
 
@@ -122,24 +197,45 @@ export function compareFlights(baseline, comparison) {
   const scoreAfter = comparison.pidScore;
 
   if (Number.isFinite(scoreBefore) && Number.isFinite(scoreAfter)) {
-    const change = percentChange(scoreBefore, scoreAfter);
-    const described = describeChange(
-      change,
-      false,
-      scoreAfter - scoreBefore,
-      5
+    // A tracking score is only as solid as the clean command responses
+    // it was measured from. Subtracting a well-evidenced score from a
+    // barely-evidenced one produces a confident-looking number that
+    // describes the evidence gap, not the flying — so where either
+    // side is thin, the difference is reported and left uncounted
+    // rather than called better or worse.
+    const evidence = comparableEvidence(
+      baseline.pidConfidence,
+      comparison.pidConfidence
     );
 
-    rows.push({
-      title: "Tracking",
-      direction: described.direction,
-      before: `${scoreBefore}/100`,
-      after: `${scoreAfter}/100`,
-      sentence:
-        described.direction === "same"
-          ? `Stick tracking is about the same (${scoreAfter}/100).`
-          : `Stick tracking got ${described.word}: ${scoreBefore} → ${scoreAfter} points.`
-    });
+    if (evidence.comparable) {
+      const change = percentChange(scoreBefore, scoreAfter);
+      const described = describeChange(
+        change,
+        false,
+        scoreAfter - scoreBefore,
+        5
+      );
+
+      rows.push({
+        title: "Tracking",
+        direction: described.direction,
+        before: `${scoreBefore}/100`,
+        after: `${scoreAfter}/100`,
+        sentence:
+          described.direction === "same"
+            ? `Stick tracking is about the same (${scoreAfter}/100).`
+            : `Stick tracking got ${described.word}: ${scoreBefore} → ${scoreAfter} points.`
+      });
+    } else {
+      rows.push({
+        title: "Tracking",
+        direction: "unknown",
+        before: `${scoreBefore}/100`,
+        after: `${scoreAfter}/100`,
+        sentence: `Tracking cannot be compared here: ${evidence.reason} Both numbers are shown, but the difference between them would not mean anything.`
+      });
+    }
   }
 
   // ---- battery sag ----
@@ -169,17 +265,40 @@ export function compareFlights(baseline, comparison) {
 
   const better = rows.filter((row) => row.direction === "better").length;
   const worse = rows.filter((row) => row.direction === "worse").length;
+  const uncomparable = rows.filter(
+    (row) => row.direction === "unknown"
+  ).length;
+
+  // "Consider reverting it" tells a pilot to undo work. It has to rest
+  // on something measured on both sides — with nothing comparable to
+  // count, the honest answer is that this pair does not answer the
+  // question, not a direction to act on. The same applies when the two
+  // flights are different helicopters: every number will differ, and
+  // none of it is a verdict on a change.
+  const comparedRows = better + worse;
+  const aircraft = sameAircraft(baseline.craftName, comparison.craftName);
 
   const summary =
     rows.length === 0
       ? "Not enough shared data between the two flights to compare."
-      : worse === 0 && better > 0
-        ? "Your change helped — nothing got worse. That's a keeper."
-        : better === 0 && worse > 0
-          ? "This change went the wrong way — consider reverting it."
-          : better > 0 && worse > 0
-            ? "Mixed result: some things improved, others got worse. Trade-off territory."
-            : "No meaningful change between these two flights.";
+      : !aircraft.same
+        ? `These flights are different helicopters (${aircraft.before} and ${aircraft.after}), so the figures below describe two machines rather than a change to one.`
+        : comparedRows === 0
+          ? uncomparable > 0
+            ? "These two flights cannot be compared usefully — see the rows below for what was missing."
+            : "No meaningful change between these two flights."
+          : worse === 0 && better > 0
+            ? "Your change helped — nothing got worse. That's a keeper."
+            : better === 0 && worse > 0
+              ? "This change went the wrong way — consider reverting it."
+              : "Mixed result: some things improved, others got worse. Trade-off territory.";
 
-  return { rows, summary, better, worse };
+  return {
+    rows,
+    summary,
+    better,
+    worse,
+    uncomparable,
+    sameAircraft: aircraft.same
+  };
 }

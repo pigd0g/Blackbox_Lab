@@ -31,7 +31,7 @@ body {
   font-family: "Segoe UI", system-ui, Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.55;
 }
 
@@ -53,8 +53,68 @@ body {
   flex-direction: column;
 }
 
-.sidebar-footer {
+/* Always-visible advanced-mode switch: same state as the
+   Settings checkbox, driven by body.advanced-mode. */
+.sidebar-advanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
   margin-top: auto;
+  margin-bottom: 4px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sidebar-advanced:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.sidebar-advanced-switch {
+  flex: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.sidebar-advanced-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+body.advanced-mode .sidebar-advanced {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+body.advanced-mode .sidebar-advanced-switch {
+  background: var(--accent-strong);
+}
+
+body.advanced-mode .sidebar-advanced-switch::after {
+  transform: translateX(14px);
+  background: var(--ink);
+}
+
+.sidebar-footer {
+  margin-top: 14px;
   padding-top: 22px;
   border-top: 1px solid var(--line-soft);
   display: flex;
@@ -64,24 +124,24 @@ body {
 
 .credit-line {
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .credit-name {
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .credit-sub {
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
   margin-top: 3px;
 }
 
 .sidebar-version {
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 8px;
   opacity: 0.8;
 }
@@ -96,12 +156,12 @@ body {
 .tagline {
   color: var(--accent);
   margin: 4px 0 26px 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 button {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
 }
 
@@ -150,7 +210,7 @@ button {
 .hero p {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .card {
@@ -180,7 +240,7 @@ button {
 .label {
   display: block;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 2px;
@@ -199,7 +259,7 @@ pre {
   padding: 12px 14px;
   overflow-x: auto;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 /* ---------------- buttons ---------------- */
@@ -253,13 +313,13 @@ pre {
 .file-status {
   margin-top: 12px;
   color: var(--ink-muted);
-  font-size: 13.5px;
+  font-size: 14.5px;
 }
 
 .decode-info {
   margin-top: 8px;
   color: var(--accent);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* ---------------- flight picker ---------------- */
@@ -277,7 +337,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: 10px;
   width: 100%;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* ---------------- verdict ---------------- */
@@ -288,7 +348,7 @@ pre {
 }
 
 .verdict-summary {
-  font-size: 17px;
+  font-size: 18px;
   color: var(--ink);
   margin: 0 0 14px 0;
 }
@@ -325,7 +385,7 @@ pre {
 
 .verdict-item-status {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
 }
@@ -335,19 +395,19 @@ pre {
 .status-attention .verdict-item-status { color: var(--attention); }
 
 .verdict-item-headline {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 650;
   margin-bottom: 4px;
 }
 
 .verdict-item-detail {
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .verdict-item-action {
   margin-top: 8px;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--ink-soft);
   background: rgba(111, 178, 255, 0.07);
   border-left: 3px solid var(--accent);
@@ -367,7 +427,7 @@ pre {
   color: var(--accent);
   border-radius: 999px;
   padding: 7px 16px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .verdict-jump:hover {
@@ -377,13 +437,14 @@ pre {
 /* ---------------- labs ---------------- */
 
 .lab-story {
-  font-size: 16px;
+  font-size: 17px;
   color: var(--ink);
 }
 
 .status-text-good { border-left: 3px solid var(--good); padding-left: 12px; }
 .status-text-watch { border-left: 3px solid var(--watch); padding-left: 12px; }
 .status-text-attention { border-left: 3px solid var(--attention); padding-left: 12px; }
+.status-text-insufficient { border-left: 3px solid var(--ink-soft, #5d6d7e); padding-left: 12px; }
 
 .metric-grid {
   display: grid;
@@ -400,7 +461,7 @@ pre {
 }
 
 .metric-tile strong {
-  font-size: 16px;
+  font-size: 17px;
 }
 
 /* ---------------- charts ---------------- */
@@ -412,7 +473,7 @@ pre {
 
 .chart-container .u-legend {
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .chart-empty {
@@ -422,7 +483,7 @@ pre {
 
 .chart-hint {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: 14px;
   margin: 2px 0 0 0;
 }
 
@@ -432,7 +493,7 @@ details.drilldown summary,
 details.advanced-block summary {
   cursor: pointer;
   color: var(--accent);
-  font-size: 14px;
+  font-size: 15px;
   padding: 4px 0;
   user-select: none;
 }
@@ -442,12 +503,64 @@ details.advanced-block[open] summary {
   margin-bottom: 12px;
 }
 
+/* THE RULE: advanced data never disappears without a trace.
+   Advanced blocks are ALWAYS present — folded to their summary
+   for beginners (the visible handle), pre-opened when Advanced
+   mode is on. */
 details.advanced-block {
-  display: none;
+  display: block;
 }
 
-body.advanced-mode details.advanced-block {
+details.advanced-block > summary {
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+}
+
+details.advanced-block > summary:hover {
+  text-decoration: underline;
+}
+
+/* Numbers, tables, evidence views and per-bank detail are
+   advanced-mode territory; beginners keep verdicts, stories,
+   recommendations and the main charts. Hidden via :not() so
+   elements keep their natural display (grid, table…) when
+   advanced mode reveals them. */
+body:not(.advanced-mode) [data-screen]:not(.peek-advanced) .advanced-only {
+  display: none !important;
+}
+
+/* Peek: one page at a time, the link under the verdict
+   reveals this screen's advanced content without leaving
+   beginner mode — and teaches where the permanent switch
+   lives. Pointless while advanced mode is on. */
+[data-screen].peek-advanced details.advanced-block,
+[data-screen].peek-advanced details.drilldown {
   display: block;
+}
+
+.peek-advanced-row {
+  margin: -6px 0 18px 2px;
+  font-size: 13px;
+}
+
+.peek-advanced-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.peek-advanced-note {
+  color: var(--ink-muted);
+  margin-left: 8px;
+}
+
+body.advanced-mode .peek-advanced-row {
+  display: none;
 }
 
 /* ---------------- settings ---------------- */
@@ -502,7 +615,7 @@ body.advanced-mode details.advanced-block {
 
 .compare-row-delta {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
 }
@@ -510,16 +623,17 @@ body.advanced-mode details.advanced-block {
 .direction-better .compare-row-delta { color: var(--good); }
 .direction-worse .compare-row-delta { color: var(--attention); }
 .direction-same .compare-row-delta { color: var(--ink-muted); }
+.direction-unknown .compare-row-delta { color: var(--ink-muted); font-style: italic; }
 
 .compare-row-sentence {
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: 15px;
   margin-top: 4px;
 }
 
 .compare-row-values {
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
   margin-top: 4px;
 }
 
@@ -532,7 +646,7 @@ body.advanced-mode details.advanced-block {
 .history-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .history-table th {
@@ -556,7 +670,7 @@ body.advanced-mode details.advanced-block {
   border: none;
   color: var(--ink-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 6px;
   border-radius: 6px;
   line-height: 1;
@@ -581,7 +695,7 @@ body.advanced-mode details.advanced-block {
   border-radius: 10px;
   padding: 10px 12px;
   background: var(--card-soft);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ink-soft);
 }
 
@@ -599,7 +713,7 @@ body.advanced-mode details.advanced-block {
 
 .quality-warning {
   margin-top: 10px;
-  font-size: 13.5px;
+  font-size: 14.5px;
   color: var(--ink-soft);
   background: rgba(242, 193, 78, 0.08);
   border-left: 3px solid var(--watch);
@@ -611,7 +725,7 @@ body.advanced-mode details.advanced-block {
 
 .advisor-recommendation {
   margin-top: 10px;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--ink-soft);
   background: rgba(111, 178, 255, 0.07);
   border-left: 3px solid var(--accent);
@@ -643,9 +757,114 @@ body.advanced-mode details.advanced-block {
 
 .contribute-status {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: 14px;
   margin: 10px 0 0 0;
   min-height: 18px;
+}
+
+/* ---------------- craft dump (unlock step) ---------------- */
+
+.craft-card-dump {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.craft-card-dump textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.craft-card-dump .button-row {
+  margin: 8px 0 0 0;
+}
+
+/* The read-back panel: the moment the dump is read must be
+   unmissable — a verdict-style panel, never muted footnote
+   text. */
+.craft-dump-result {
+  margin-top: 10px;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  background: rgba(111, 178, 255, 0.07);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+}
+
+.craft-dump-result strong {
+  color: var(--ink);
+}
+
+.craft-dump-result.good {
+  border-left-color: var(--good);
+}
+
+.craft-dump-result.warn {
+  border-left-color: var(--watch);
+}
+
+/* Fields the dump just filled flash green for a moment. */
+.field-flash {
+  background: rgba(62, 207, 142, 0.28) !important;
+  transition: background 1.2s ease;
+}
+
+.unlock-card[hidden] {
+  display: none;
+}
+
+.unlock-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: var(--line);
+  background: linear-gradient(180deg, rgba(111, 178, 255, 0.08), var(--card));
+}
+
+.unlock-card h3 {
+  margin-bottom: 4px;
+}
+
+.unlock-card p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.unlock-card .primary-button {
+  flex: none;
+}
+
+/* ---------------- craft card ---------------- */
+
+.craft-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 15px;
+}
+
+.craft-card-row select,
+.craft-card-row input {
+  width: 180px;
+  padding: 8px 12px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 15px;
 }
 
 .overlay {
@@ -699,7 +918,11 @@ body.advanced-mode details.advanced-block {
 }
 
 .overlay-dialog {
+  position: relative;
   width: min(520px, 92vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -719,11 +942,13 @@ body.advanced-mode details.advanced-block {
 
 .overlay-privacy {
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .overlay-actions {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-top: 16px;
 }
@@ -750,7 +975,7 @@ body.advanced-mode details.advanced-block {
 
 .overlay-footnote {
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 13px;
   margin: 12px 0 0 0;
 }
 
@@ -758,7 +983,7 @@ body.advanced-mode details.advanced-block {
 
 .nav-lock {
   float: right;
-  font-size: 12px;
+  font-size: 13px;
   opacity: 0.85;
 }
 
@@ -855,7 +1080,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   max-width: 560px;
   margin: 0 auto 26px auto;
   color: var(--ink-soft);
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .welcome-actions {
@@ -871,7 +1096,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border: none;
   border-radius: 999px;
   padding: 15px 30px;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   box-shadow: 0 8px 24px rgba(62, 207, 142, 0.28);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
@@ -888,7 +1113,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 15px 26px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .welcome-secondary:hover {
@@ -898,13 +1123,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .welcome-drop-hint {
   color: var(--ink-muted);
-  font-size: 13.5px;
+  font-size: 14.5px;
   margin: 16px 0 0 0;
 }
 
 .welcome-status {
   color: var(--warm);
-  font-size: 14px;
+  font-size: 15px;
   min-height: 20px;
   margin: 8px 0 0 0;
 }
@@ -930,12 +1155,12 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .welcome-step strong {
   color: var(--ink);
-  font-size: 14.5px;
+  font-size: 15.5px;
 }
 
 .welcome-step span:last-child {
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 .welcome-step-num {
@@ -945,7 +1170,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #06281a;
   background: linear-gradient(180deg, var(--warm), var(--warm-deep));
@@ -964,7 +1189,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   padding: 11px 16px;
   margin-bottom: 16px;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .update-banner[hidden] { display: none; }
@@ -977,7 +1202,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border-radius: 999px;
   padding: 7px 16px;
   font-weight: 650;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .update-banner-button:hover { background: #55dba0; }
@@ -986,7 +1211,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   background: transparent;
   border: none;
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: 15px;
   padding: 4px 6px;
 }
 
@@ -1009,7 +1234,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   gap: 16px;
   flex-wrap: wrap;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .chart-stat i {
@@ -1029,7 +1254,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .chart-footer-hint {
   margin-left: auto;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
   letter-spacing: 0.3px;
   white-space: nowrap;
   opacity: 0.8;
@@ -1045,4 +1270,552 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .nav-lock:hover {
   background: rgba(111, 178, 255, 0.12);
+}
+
+/* A real close control for dialogs, top-right — sticky so
+   it stays reachable while a tall dialog scrolls. */
+.overlay-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: -8px -8px 0 0;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.overlay-close:hover {
+  color: var(--ink);
+}
+
+/* Decline/defer actions are quiet text links on the left;
+   the continue action is the button on the right. */
+.overlay-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.overlay-link:hover {
+  color: var(--ink-soft);
+}
+
+/* ---------------- layout: grids & maximize ---------------- */
+/* Full width is for narrative and deep-dives; grids are for
+   scannable collections of same-shaped things. */
+
+.verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 10px;
+}
+
+.verdict-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 160px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--card-soft);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.verdict-tile:hover {
+  border-color: var(--line);
+  transform: translateY(-1px);
+}
+
+/* The whole card carries its verdict — a quiet wash of the
+   status color, dot kept for redundancy. */
+.verdict-tile.status-good {
+  background: linear-gradient(180deg, rgba(62, 207, 142, 0.09), var(--card-soft) 65%);
+  border-color: rgba(62, 207, 142, 0.28);
+}
+
+.verdict-tile.status-watch {
+  background: linear-gradient(180deg, rgba(242, 193, 78, 0.10), var(--card-soft) 65%);
+  border-color: rgba(242, 193, 78, 0.32);
+}
+
+.verdict-tile.status-attention {
+  background: linear-gradient(180deg, rgba(255, 138, 107, 0.12), var(--card-soft) 65%);
+  border-color: rgba(255, 138, 107, 0.38);
+}
+
+.verdict-tile .verdict-item-top {
+  margin-bottom: 4px;
+}
+
+.verdict-tile-evidence {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.verdict-tile-headline {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Events on a timeline: time is the natural axis. A visible
+   track with connector dots makes it read as a timeline, not
+   a scrollbar; the cards stand portrait like playing cards. */
+.events-timeline {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px 4px 26px 4px;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent calc(100% - 13px),
+      var(--line-soft) calc(100% - 13px),
+      var(--line-soft) calc(100% - 11px),
+      transparent calc(100% - 11px)
+    );
+}
+
+.event-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  min-height: 118px;
+  padding: 12px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--card-soft);
+  color: var(--ink-soft);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.event-card::after {
+  /* connector dot down to the timeline track */
+  content: "";
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.event-card:hover {
+  border-color: var(--line);
+  transform: translateY(-2px);
+}
+
+.event-card.selected {
+  border-color: var(--accent);
+}
+
+.event-card-time {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.event-card-axis {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.event-card-metric {
+  font-size: 14px;
+  margin-top: auto;
+}
+
+.event-card.chip-overshoot {
+  border-color: var(--attention);
+}
+
+.event-card.chip-overshoot .event-card-metric,
+.event-card.chip-overshoot::after {
+  color: var(--attention);
+  background: var(--attention);
+}
+
+.event-card.chip-overshoot .event-card-metric {
+  background: none;
+}
+
+.event-card.chip-slow {
+  border-color: var(--watch);
+}
+
+.event-card.chip-slow .event-card-metric {
+  color: var(--watch);
+}
+
+.event-card.chip-slow::after {
+  background: var(--watch);
+}
+
+.event-card.chip-clean {
+  opacity: 0.8;
+}
+
+.event-card.chip-clean .event-card-metric {
+  color: var(--good);
+}
+
+.event-detail-explain {
+  margin: 14px 0 10px 0;
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  background: rgba(111, 178, 255, 0.05);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+}
+
+/* The tuning matrix and its expandable cells. */
+.matrix-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 12px;
+}
+
+.chart-cell {
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(18, 32, 58, 0.45);
+}
+
+.chart-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.chart-cell h4 {
+  margin: 0 0 6px 0;
+}
+
+.chart-cell.chart-max {
+  grid-column: 1 / -1;
+}
+
+.chart-max-btn {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 5;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.chart-max-btn:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--card);
+}
+
+/* Health Record: model selector and its edit button share one
+   line instead of colliding. */
+section[data-screen="history"] .flight-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+section[data-screen="history"] .flight-picker select {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+}
+
+section[data-screen="history"] .flight-picker .secondary-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ---------------- screen intros ---------------- */
+/* One small "what you're looking at" paragraph per screen,
+   with the deeper explanation folded behind a summary. */
+
+.screen-intro {
+  max-width: 880px;
+  margin: -8px 0 22px 0;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+}
+
+.screen-intro > p {
+  margin: 0;
+}
+
+.screen-intro details {
+  margin-top: 6px;
+}
+
+.screen-intro summary {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 13.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.screen-intro summary:hover {
+  text-decoration: underline;
+}
+
+.screen-intro details p {
+  margin: 8px 0 0 0;
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  background: rgba(111, 178, 255, 0.05);
+  border-left: 3px solid var(--line);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ---- Pilot-input (stick) insets ---- */
+.stick-inset {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0 6px 0;
+}
+
+.stick-inset canvas {
+  flex: 0 0 auto;
+  background: rgba(10, 17, 30, 0.55);
+  border: 1px solid rgba(127, 183, 255, 0.14);
+  border-radius: 10px;
+}
+
+.stick-inset-caption {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  max-width: 340px;
+}
+
+.stick-replay-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  background: none;
+  border: 1px solid var(--line, rgba(127, 183, 255, 0.25));
+  border-radius: 12px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.stick-replay-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+.stick-inset {
+  align-items: flex-start;
+}
+
+.stick-inset .stick-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Replay transport (Log Viewer) ---- */
+.replay-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.replay-controls {
+  flex: 1 1 320px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replay-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.replay-play {
+  width: 44px;
+  height: 36px;
+  font-size: 15px;
+  background: rgba(111, 178, 255, 0.12);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.replay-play:hover {
+  background: rgba(111, 178, 255, 0.22);
+}
+
+#replaySpeed {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.replay-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+.replay-readout {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.replay-timeline {
+  position: relative;
+  padding-top: 8px;
+}
+
+.replay-ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  pointer-events: none;
+}
+
+.replay-tick {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+
+.replay-tick.tick-clean { background: var(--good, #58c08a); opacity: 0.7; }
+.replay-tick.tick-overshoot { background: var(--attention, #ff7a6b); }
+.replay-tick.tick-slow { background: var(--watch, #ffc46b); }
+
+#replayScrub {
+  width: 100%;
+  accent-color: #ffc46b;
+}
+
+.replay-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 196, 107, 0.85);
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ---- Replay graph stack ---- */
+.replay-stack-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.replay-add-label {
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+#replayAddGraph {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.replay-add-btn {
+  background: rgba(111, 178, 255, 0.12);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.replay-add-btn:hover:not(:disabled) {
+  background: rgba(111, 178, 255, 0.22);
+}
+
+.replay-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.replay-graph-row {
+  margin-bottom: 14px;
+}
+
+.replay-graph-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.replay-graph-tools button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.replay-graph-tools button:hover {
+  color: var(--ink);
+}
+
+/* The transport stays in reach while the stack scrolls — the
+   timeline of a video editor, pinned. */
+#replayCard {
+  position: sticky;
+  top: -20px;
+  z-index: 20;
+  box-shadow: 0 8px 22px rgba(4, 9, 18, 0.45);
 }

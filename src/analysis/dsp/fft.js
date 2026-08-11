@@ -163,6 +163,42 @@ export function computeNoiseSpectrum(samples, sampleRateHz, options = {}) {
   };
 }
 
+// Below this frequency a gyro spectrum shows the pilot flying,
+// not the machine shaking: stick inputs and slow maneuvers put
+// their energy here, and no verdict, marker or advisor reads
+// anything below it. Every consumer of "the strongest peak"
+// shares this floor so they can never disagree about which
+// axis carries the vibration story.
+export const VIBRATION_FLOOR_HZ = 10;
+
+// The largest magnitude at or above `minimumHz` — the peak that
+// is allowed to speak for vibration. A plain max over the whole
+// spectrum is dominated by near-DC maneuver energy and picks the
+// most-flown axis, not the most-shaking one.
+export function peakMagnitudeAbove(
+  spectrum,
+  minimumHz = VIBRATION_FLOOR_HZ
+) {
+  if (!spectrum) {
+    return 0;
+  }
+
+  const { frequencies, magnitudes } = spectrum;
+  let peak = 0;
+
+  for (let i = 0; i < frequencies.length; i += 1) {
+    if (
+      frequencies[i] >= minimumHz &&
+      Number.isFinite(magnitudes[i]) &&
+      magnitudes[i] > peak
+    ) {
+      peak = magnitudes[i];
+    }
+  }
+
+  return peak;
+}
+
 // Estimate the sample rate from the time column (microseconds).
 export function estimateSampleRate(timeValuesMicroseconds) {
   if (!timeValuesMicroseconds || timeValuesMicroseconds.length < 2) {
@@ -178,4 +214,92 @@ export function estimateSampleRate(timeValuesMicroseconds) {
   }
 
   return (timeValuesMicroseconds.length - 1) / spanSeconds;
+}
+
+// ------------------------------------------------------
+// computeNoiseSpectrumOverRuns(runs, sampleRateHz, options)
+//
+// One 4-second slice is a coin flip: an intermittent shake
+// lands inside it on one flight and outside it on the next,
+// and two logs of the same machine tell different stories.
+// This averages Welch spectra across every stable run the
+// flight offers — same bins, power-weighted by how many
+// segments each run contributed — so the noise picture is
+// the flight's, not the slice's.
+// ------------------------------------------------------
+export function computeNoiseSpectrumOverRuns(runs, sampleRateHz, options = {}) {
+  if (!Array.isArray(runs) || !Number.isFinite(sampleRateHz)) {
+    return null;
+  }
+
+  const usable = runs.filter(
+    (run) => run && run.length >= 64
+  );
+
+  if (usable.length === 0) {
+    return null;
+  }
+
+  const longest = usable.reduce(
+    (best, run) => Math.max(best, run.length),
+    0
+  );
+
+  const maxSegment = options.segmentSize ?? 4096;
+
+  // Every run must share one segment size or the bins differ
+  // and cannot be averaged. The longest run sets it; shorter
+  // runs that cannot fill one segment sit this out.
+  let segmentSize = 64;
+
+  while (segmentSize * 2 <= Math.min(longest, maxSegment)) {
+    segmentSize *= 2;
+  }
+
+  const half = segmentSize / 2;
+  const power = new Float64Array(half);
+  let totalSegments = 0;
+  let frequencies = null;
+
+  for (const run of usable) {
+    if (run.length < segmentSize) {
+      continue;
+    }
+
+    const spectrum = computeNoiseSpectrum(run, sampleRateHz, {
+      segmentSize
+    });
+
+    if (!spectrum || spectrum.segmentSize !== segmentSize) {
+      continue;
+    }
+
+    for (let bin = 0; bin < half; bin += 1) {
+      power[bin] +=
+        spectrum.magnitudes[bin] *
+        spectrum.magnitudes[bin] *
+        spectrum.segments;
+    }
+
+    totalSegments += spectrum.segments;
+    frequencies = spectrum.frequencies;
+  }
+
+  if (totalSegments === 0 || !frequencies) {
+    return null;
+  }
+
+  const magnitudes = new Float64Array(half);
+
+  for (let bin = 0; bin < half; bin += 1) {
+    magnitudes[bin] = Math.sqrt(power[bin] / totalSegments);
+  }
+
+  return {
+    frequencies,
+    magnitudes,
+    segmentSize,
+    segments: totalSegments,
+    sampleRateHz
+  };
 }

@@ -9,6 +9,22 @@
 //
 // ======================================================
 
+// A column can exist and still carry nothing: a model flown
+// without its RPM wire logs headspeed as constant zero, a dead
+// current sensor logs zero amps for the whole flight. A
+// capability chip built on mere column presence then promises
+// "fully measurable" for an analysis that has nothing to
+// measure — so capability flags are computed from this, never
+// from Boolean(column).
+export function columnCarriesData(values) {
+  return (
+    Array.isArray(values) &&
+    values.some(
+      (value) => Number.isFinite(value) && value !== 0
+    )
+  );
+}
+
 export function assessLogQuality({
   sampleRateHz,
   durationSeconds,
@@ -120,9 +136,11 @@ export function assessLogQuality({
   const missing = capabilities.filter((c) => c.level === "missing").length;
   const partial = capabilities.filter((c) => c.level === "partial").length;
 
+  // The chips speak about DATA, not about conclusions — the
+  // analyses rate their own confidence from what they measure.
   const summary =
     missing === 0 && partial === 0 && warnings.length === 0
-      ? "This log is excellent — every analysis runs at full confidence."
+      ? "This log is excellent — every analysis has the data it needs."
       : missing === 0
         ? "Good log — a few analyses run with reduced confidence (details below)."
         : "This log limits some analyses — the notes below say what to enable for the full picture.";

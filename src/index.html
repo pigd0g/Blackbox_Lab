@@ -18,6 +18,7 @@
       <button class="nav-button" id="openLogButton">Open Blackbox Log
         <span class="nav-lock" id="openLogLock" hidden>🔒</span></button>
       <button class="nav-button" data-target="viewer">Log Viewer</button>
+      <button class="nav-button" data-target="replay">Replay</button>
       <button class="nav-button" data-target="filter">Filter Lab</button>
       <button class="nav-button" data-target="pid">PID Lab</button>
       <button class="nav-button" data-target="governor">Governor Lab</button>
@@ -27,6 +28,15 @@
       <button class="nav-button" data-target="history">Health Record</button>
       <button class="nav-button" data-target="reports">Reports</button>
       <button class="nav-button" data-target="settings">Settings</button>
+
+      <!-- Advanced mode lives in Settings too, but pilots kept
+           missing it there — this switch is always in view. -->
+      <button class="sidebar-advanced" id="sidebarAdvancedToggle"
+        aria-pressed="false"
+        title="Show raw telemetry blocks and technical detail everywhere. Off = beginner mode: verdicts, charts and plain language only.">
+        <span>Advanced mode</span>
+        <span class="sidebar-advanced-switch" aria-hidden="true"></span>
+      </button>
 
       <div class="sidebar-footer">
         <span class="credit-line">A passion project by</span>
@@ -171,6 +181,22 @@
           <div id="verdictCards"></div>
         </section>
 
+        <!-- The unlock nudge: shown while this craft has no CLI
+             dump attached yet. One click opens the craft panel. -->
+        <section class="card unlock-card" id="unlockDumpCard" hidden>
+          <div class="unlock-card-text">
+            <h3>Unlock setup-aware insights</h3>
+            <p>
+              Add this model's CLI settings (<code>dump all</code>)
+              once — the analysis learns your exact setup, and your
+              model card fills itself in.
+            </p>
+          </div>
+          <button class="primary-button" id="unlockDumpButton">
+            Add CLI settings
+          </button>
+        </section>
+
         <section class="card" id="qualityCard" hidden>
           <h3>What This Log Can Tell Us</h3>
           <p id="qualitySummary"></p>
@@ -249,11 +275,20 @@
         <section class="card">
           <h3>1 · Get your log</h3>
           <p>
-            In the Rotorflight Configurator, open the
-            <strong>Blackbox</strong> tab and save your flight log to
-            your computer. It will be a <strong>.bbl</strong> file —
-            that's the raw recording, and Blackbox Lab reads it
-            directly. (CSV exports work too.)
+            Connect your flight controller, then in the Rotorflight
+            Configurator open the <strong>Blackbox</strong> tab and
+            click <strong>Save flight log to file</strong>. You get a
+            <strong>.bbl</strong> file — the raw recording — and
+            Blackbox Lab reads it directly. (CSV exports work too.)
+          </p>
+          <p>
+            Good to know: logging must be enabled on the Blackbox tab
+            before the flight (a dataflash chip or SD card on the
+            flight controller records it). One file can hold several
+            flights — Blackbox Lab lets you pick. When the flash
+            fills up, download what you want to keep, then use
+            <strong>Erase flash</strong> in the Configurator to make
+            room for the next session.
           </p>
         </section>
 
@@ -297,7 +332,7 @@
             Flights</strong>: before vs after, and one sentence per
             topic tells you whether your change helped. Meanwhile the
             <strong>Health Record</strong> quietly tracks every
-            analyzed flight per craft and warns you when vibration or
+            analyzed flight per model and warns you when vibration or
             droop trends the wrong way across sessions.
           </p>
         </section>
@@ -311,6 +346,7 @@
             second pair of eyes.
           </p>
         </section>
+
 
         <section class="card">
           <h3>Words you'll meet (no jargon left behind)</h3>
@@ -334,6 +370,25 @@
           <p>Your flight, drawn. Drag to zoom, double-click to reset.</p>
         </section>
 
+        <div class="screen-intro">
+          <p>These charts are the raw recordings from your flight
+            controller, drawn along the flight's timeline — the same
+            data every verdict and every Lab conclusion is built
+            from.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Each chart is one group of recorded signals. The gyro
+              charts show how fast the helicopter was actually
+              rotating; setpoint traces show what your sticks asked
+              for — the closer they follow each other, the better the
+              tune. Headspeed is rotor rpm, throttle is what the ESC
+              was told, and the battery chart shows pack voltage
+              reacting to load. Drag across any chart to zoom in on a
+              moment (the min/max readouts follow your window), and
+              double-click to see the whole flight again.</p>
+          </details>
+        </div>
+
         <section class="card">
           <h3>Gyro</h3>
           <p class="chart-hint">
@@ -345,76 +400,91 @@
         </section>
 
         <section class="card">
-          <h3>Roll Tuning</h3>
+          <h3>Tuning — Roll · Pitch · Yaw</h3>
           <p class="chart-hint">
-            What you asked for versus what you got — the heart of tuning.
-            The closer the lines hug, the better the tune.
+            What you asked for versus what you got, all three axes
+            side by side — the closer the lines hug, the better the
+            tune. The ⤢ button on any chart makes it full width.
           </p>
-          <div class="chart-container" id="chartTracking">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
-          <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
-            <p class="chart-hint">
-              Feedforward check — if the gyro follows the target while
-              the I-term stays near zero, feedforward is carrying the
-              maneuver, exactly as Rotorflight intends.
-            </p>
-            <div class="chart-container" id="chartFfRoll">
-              <p class="chart-empty">Open a log to see this chart.</p>
+          <div class="matrix-row">
+            <div class="chart-cell">
+              <h4>Roll</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTracking">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
             </div>
+            <div class="chart-cell">
+              <h4>Pitch</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTrackingPitch">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
+            </div>
+            <div class="chart-cell">
+              <h4>Yaw</h4>
+              <button class="chart-max-btn" title="Toggle full width">⤢</button>
+              <div class="chart-container" id="chartTrackingYaw">
+                <p class="chart-empty">Open a log to see this chart.</p>
+              </div>
+            </div>
+          </div>
+
+          <details class="advanced-block" open>
+            <summary>Advanced: feedforward check</summary>
             <p class="chart-hint">
-              Term balance — which controller term is doing the work.
-              Watch for I wind-up, D-term buzz, and whether term
-              activity lines up with your commands.
+              If the gyro follows the target while the I-term stays
+              near zero, feedforward is carrying the maneuver —
+              exactly as Rotorflight intends.
             </p>
-            <div class="chart-container" id="chartTermsRoll">
-              <p class="chart-empty">Open a log to see this chart.</p>
+            <div class="matrix-row">
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfRoll">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfPitch">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartFfYaw">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
             </div>
           </details>
-        </section>
 
-        <section class="card">
-          <h3>Pitch Tuning</h3>
-          <p class="chart-hint">
-            Target versus response on the pitch axis.
-          </p>
-          <div class="chart-container" id="chartTrackingPitch">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
           <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
+            <summary>Advanced: term balance</summary>
             <p class="chart-hint">
-              Feedforward check and term balance, pitch axis.
+              Which controller term is doing the work — watch for I
+              wind-up, D-term buzz, and whether term activity lines
+              up with your commands.
             </p>
-            <div class="chart-container" id="chartFfPitch">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-            <div class="chart-container" id="chartTermsPitch">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-          </details>
-        </section>
-
-        <section class="card">
-          <h3>Yaw Tuning</h3>
-          <p class="chart-hint">
-            Target versus response on the tail — the axis that shows
-            mechanical and tune problems first.
-          </p>
-          <div class="chart-container" id="chartTrackingYaw">
-            <p class="chart-empty">Open a log to see this chart.</p>
-          </div>
-          <details class="advanced-block" open>
-            <summary>Advanced: feedforward &amp; term balance</summary>
-            <p class="chart-hint">
-              Feedforward check and term balance, yaw axis.
-            </p>
-            <div class="chart-container" id="chartFfYaw">
-              <p class="chart-empty">Open a log to see this chart.</p>
-            </div>
-            <div class="chart-container" id="chartTermsYaw">
-              <p class="chart-empty">Open a log to see this chart.</p>
+            <div class="matrix-row">
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsRoll">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsPitch">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
+              <div class="chart-cell">
+                <button class="chart-max-btn" title="Toggle full width">⤢</button>
+                <div class="chart-container" id="chartTermsYaw">
+                  <p class="chart-empty">Open a log to see this chart.</p>
+                </div>
+              </div>
             </div>
           </details>
         </section>
@@ -452,11 +522,118 @@
         </section>
       </section>
 
+      <!-- ============ REPLAY ============ -->
+      <section data-screen="replay">
+        <section class="hero">
+          <h2>Replay</h2>
+          <p>Fly the log again — your charts, your timeline.</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page plays the flight back like a video edit:
+            stack the charts you want to study, then run the
+            playhead through all of them at once while the sticks
+            show the pilot's hands.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Add or remove graphs to build your own working view —
+              the layout is remembered for next time. All charts
+              share one timeline: drag to zoom in any of them and
+              the others follow, double-click to reset. The colored
+              ticks on the timeline are the Flight Events; drag the
+              playhead straight to one to watch the moment. Playback
+              speed is yours, and everything here — the graphs, the
+              sticks, the readouts — is exactly what a future video
+              export will render over your flight footage.</p>
+          </details>
+        </div>
+
+        <section class="card" id="replayCard" hidden>
+          <h3>Replay</h3>
+          <p class="chart-hint">Fly the log again: the playhead runs
+            through every chart on this page while the sticks show
+            the pilot's hands. Drag the timeline to seek — colored
+            ticks mark the Flight Events.</p>
+          <div class="replay-row">
+            <div class="stick-col">
+              <canvas id="replaySticks" width="320" height="170"></canvas>
+            </div>
+            <div class="replay-controls">
+              <div class="replay-buttons">
+                <button id="replayPlay" class="replay-play"
+                  aria-label="Play or pause">▶</button>
+                <select id="replaySpeed" aria-label="Playback speed">
+                  <option value="0.25">0.25×</option>
+                  <option value="0.5">0.5×</option>
+                  <option value="1" selected>1×</option>
+                  <option value="2">2×</option>
+                </select>
+                <span class="replay-time" id="replayTime">0.0 / 0.0 s</span>
+                <span class="replay-readout" id="replayReadout"></span>
+              </div>
+              <div class="replay-timeline">
+                <div class="replay-ticks" id="replayTicks"></div>
+                <input type="range" id="replayScrub" min="0" max="1000"
+                  value="0" step="1" aria-label="Timeline" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="replay-stack-controls" id="replayStackControls">
+            <label for="replayAddGraph" class="replay-add-label">Add graph</label>
+            <select id="replayAddGraph"></select>
+            <button id="replayAddButton" class="replay-add-btn">+ Add</button>
+          </div>
+          <div id="replayGraphStack"></div>
+        </section>
+
+      </section>
+
       <!-- ============ FILTER LAB ============ -->
       <section data-screen="filter">
         <section class="hero">
           <h2>Filter Lab</h2>
           <p>Find the noise, understand the noise, filter the noise.</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page is about vibration: how much your helicopter
+            shakes, at which frequencies, and how well your filters
+            calm that shaking before it reaches the control loops.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>The spectrum chart sorts the gyro signal by frequency
+              instead of time — a tall peak means something is
+              vibrating at that frequency. Peaks are labelled by
+              their likely source: a peak at the main rotor's
+              once-per-revolution usually points at blade balance or
+              tracking, higher multiples at the drivetrain or tail.
+              Where both raw and filtered traces are logged, the gap
+              between them is your filters doing their job — and the
+              Filter Advisor below measures exactly that, then
+              suggests what to change. Mechanical fixes come first:
+              filtering a shake away in software never removes it
+              from the airframe.</p>
+            <p>Four things are kept separate here: what was
+              <em>detected</em> (an observation, not a diagnosis),
+              what the <em>filters</em> do with it, whether anything
+              meaningful <em>reaches the control loop</em>, and only
+              then a recommendation. A source match names a frequency
+              territory — never proof that a specific part has
+              failed — and vibration that is present but well
+              filtered is a normal, managed state. Without a separate
+              raw gyro trace, filter effectiveness cannot be
+              measured, and the page says so rather than guessing.</p>
+          </details>
+        </div>
+
+
+        <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="filterVerdictStory">Open a log
+            with gyro data to analyze vibration.</p>
         </section>
 
         <section class="card">
@@ -474,13 +651,20 @@
         <section class="card" id="filterAdvisorCard" hidden>
           <h3>Filter Advisor</h3>
           <p class="lab-story" id="filterAdvisorStory"></p>
-          <div class="table-scroll">
+          <div class="table-scroll advanced-only">
             <table class="history-table" id="filterAdvisorTable"></table>
           </div>
           <div id="filterAdvisorRecommendations"></div>
         </section>
 
-        <section class="card" id="filterProfileCard" hidden>
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
+        <section class="card advanced-only" id="filterProfileCard" hidden>
           <h3>Noise By Headspeed Profile</h3>
           <p class="chart-hint">
             Rotor harmonics move with rpm — a filter setup that is
@@ -531,7 +715,51 @@
           <p>How faithfully your helicopter follows your hands.</p>
         </section>
 
-        <section class="card" id="pidProfileCard" hidden>
+        <div class="screen-intro">
+          <p>This page measures tracking: how precisely the
+            helicopter did what your sticks asked. Everything here
+            comes from comparing the commanded rotation against what
+            the gyro actually recorded.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>For each axis — roll, pitch, yaw — the charts overlay
+              the target line (your command) with the gyro's answer.
+              A good tune keeps them close during moves and calm in
+              between. The score summarizes the whole flight; the
+              findings point at the axis with the most room to
+              improve. In Rotorflight, feedforward is meant to do
+              most of the work, so a busy feedforward trace is
+              healthy — what deserves attention is the I-term
+              carrying commands it shouldn't have to. A "review"
+              finding is an invitation to look at the evidence, not
+              an order to change values.</p>
+            <p>Flight Events below are single stick commands with
+              their overshoot and settling measured; click one to see
+              the exact moment behind its numbers. One unusual event
+              is not tuning feedback — wind or an aggressive input
+              can produce it; patterns across comparable commands are
+              what matter. Gentle cruising gives this page little to
+              judge, and the confidence note says so. Change one
+              thing at a time, fly again, and let Compare Flights
+              be the judge.</p>
+          </details>
+        </div>
+
+
+        <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="pidVerdictStory">Open a log with
+            setpoint and gyro data to analyze tracking.</p>
+        </section>
+
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
+        <section class="card advanced-only" id="pidProfileCard" hidden>
           <h3>Tracking By Headspeed Profile</h3>
           <p class="chart-hint">
             Helicopters behave differently at different headspeeds.
@@ -542,6 +770,25 @@
             <table class="history-table" id="pidProfileTable"></table>
           </div>
           <p class="chart-hint" id="pidProfileNote"></p>
+        </section>
+
+        <section class="card" id="pidEventsCard" hidden>
+          <h3>Flight Events</h3>
+          <p class="lab-story" id="pidEventsSummary"></p>
+          <div id="pidEventsList"></div>
+          <div id="pidEventDetail" hidden>
+            <p class="event-detail-explain" id="pidEventExplain"></p>
+            <div class="stick-inset" id="pidEventSticksWrap" hidden>
+              <div class="stick-col">
+              <canvas id="pidEventSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="pidEventSticks" title="Watch this event again at true speed.">▶&nbsp;Replay</button>
+              </div>
+              <p class="stick-inset-caption">Your hands during this event
+                — replayed once, then parked at the command. Hover the
+                chart to scrub.</p>
+            </div>
+            <div class="chart-container" id="pidEventChart"></div>
+          </div>
         </section>
 
         <section class="card" id="pidLabSection">
@@ -565,7 +812,7 @@
             </div>
           </div>
 
-          <div id="pidAnalysisFindings">
+          <div id="pidAnalysisFindings" class="advanced-only">
             No PID analysis loaded.
           </div>
 
@@ -585,15 +832,49 @@
           <p>Is your rotor speed a rock or a rollercoaster?</p>
         </section>
 
+        <div class="screen-intro">
+          <p>This page watches rotor speed: how steadily the governor
+            held your headspeed when the flight actually loaded it —
+            collective pumps, climbs, hard stops.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>The headline number is droop: how far the rotor dipped
+              below its target under load, measured only during
+              stable flight so spool-ups don't distort it. The charts
+              show target versus actual headspeed, and the
+              worst-droop view lines that moment up with throttle,
+              collective, current and voltage — so you can see
+              whether the dip came from governor gains, a soft pack,
+              or simply a very big demand. If you fly more than one
+              headspeed, each bank gets its own breakdown.</p>
+            <p>True droop needs a logged governor <em>target</em>.
+              A log with headspeed only (ESC or external governor)
+              still gets a steadiness read against the rotor's own
+              trend — worded as "swing", never scored as governor
+              performance. A missing target is a telemetry fact, not
+              a governor fault. And a deep dip with the motor output
+              already at its ceiling is a power-system limit — see
+              the ESC Lab before touching governor gain.</p>
+          </details>
+        </div>
+
+
         <section class="card">
           <h3>Verdict</h3>
           <p class="lab-story" id="governorStory">Open a log with headspeed data to analyze the governor.</p>
           <div class="metric-grid" id="governorMetrics"></div>
         </section>
 
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
+
         <section class="card">
-          <h3>Headspeed vs Target</h3>
-          <p class="chart-hint">
+          <h3 id="governorChartTitle">Headspeed vs Target</h3>
+          <p class="chart-hint" id="governorChartHint">
             Zoom into collective inputs — dips below the target line
             are droop.
           </p>
@@ -602,14 +883,22 @@
           </div>
         </section>
 
-        <section class="card" id="droopContextCard" hidden>
-          <h3>The Worst Droop, In Context</h3>
+        <section class="card advanced-only" id="droopContextCard" hidden>
+          <h3 id="droopContextTitle">The Worst Droop, In Context</h3>
           <p class="chart-hint" id="droopContextHint">
             The seconds around the biggest dip, lined up on one
             clock — zoom any chart and the others follow. Read top
             to bottom: what the rotor did, what the pilot and
             governor asked for, and what the power system delivered.
           </p>
+          <div class="stick-inset" id="droopSticksWrap" hidden>
+            <div class="stick-col">
+              <canvas id="droopSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="droopSticks" title="Play the seconds around the marked moment.">▶&nbsp;Replay</button>
+              </div>
+            <p class="stick-inset-caption" id="droopSticksCaption">Pilot
+              input at the marked moment — hover any chart to scrub.</p>
+          </div>
           <div class="chart-container" id="chartDroopRpm">
           </div>
           <div class="chart-container" id="chartDroopDrive">
@@ -635,11 +924,43 @@
           <p>Cruising, or living at the limit?</p>
         </section>
 
+        <div class="screen-intro">
+          <p>This page is the power system under load: motor output,
+            current draw, and how much headroom was left in the
+            flight's hardest moments.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>The highest-load lineup picks the flight's biggest
+              moments by current and stacks output, voltage, power
+              and temperature for each one, with a plain-language
+              cause: a demanding collective move, a sagging pack, or
+              the ESC genuinely running out of headroom. Output
+              sitting at or near 100% for stretches means there is
+              nothing left in reserve — worth knowing before asking
+              the machine for more.</p>
+            <p>Which checks can run depends on which fields your ESC
+              actually reports — anything missing is named as
+              missing, never counted against the aircraft. A dip
+              that answers a hard collective input is a response to
+              load, not necessarily a weak pack; repeated
+              at-the-limit moments in normal flying are the signal
+              worth acting on.</p>
+          </details>
+        </div>
+
+
         <section class="card">
           <h3>Verdict</h3>
           <p class="lab-story" id="escStory">Open a log with motor data to analyze the power system.</p>
           <div class="metric-grid" id="escMetrics"></div>
         </section>
+
+        <p class="peek-advanced-row">
+          <button class="peek-advanced-link">Show the advanced data behind this page</button>
+          <span class="peek-advanced-note" hidden>This is the
+            Advanced view — the sidebar switch makes it
+            permanent.</span>
+        </p>
 
         <section class="card">
           <h3>Throttle Output</h3>
@@ -652,7 +973,7 @@
           </div>
         </section>
 
-        <section class="card" id="loadEventsCard" hidden>
+        <section class="card advanced-only" id="loadEventsCard" hidden>
           <h3>Highest-Load Moments</h3>
           <p class="chart-hint">
             The hardest-working seconds of the flight, and why the
@@ -667,6 +988,15 @@
             The biggest event on one clock — zoom any chart and the
             others follow.
           </p>
+          <div class="stick-inset" id="escSticksWrap" hidden>
+            <div class="stick-col">
+              <canvas id="escSticks" width="320" height="170"></canvas>
+              <button class="stick-replay-btn" data-stick-replay="escSticks" title="Play the seconds around peak load.">▶&nbsp;Replay</button>
+              </div>
+            <p class="stick-inset-caption">Pilot input at peak load —
+              the collective tells the story. Hover any chart to
+              scrub.</p>
+          </div>
           <div class="chart-container" id="chartLoadOutput">
           </div>
           <div class="chart-container" id="chartLoadCollective">
@@ -679,7 +1009,7 @@
           </div>
         </section>
 
-        <section class="card" id="escProfileCard" hidden>
+        <section class="card advanced-only" id="escProfileCard" hidden>
           <h3>By Headspeed Profile</h3>
           <p class="chart-hint">
             Stable-flight averages per governor bank — how much
@@ -697,6 +1027,27 @@
           <h2>Battery Lab</h2>
           <p>What the flight really cost your pack.</p>
         </section>
+
+        <div class="screen-intro">
+          <p>This page is about the pack: how much the voltage sagged
+            under load, what the flight consumed, and an estimate of
+            internal resistance — the number that quietly grows as a
+            battery ages.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Sag is the voltage dip when current flows — some is
+              physics, but a pack that sags noticeably more than it
+              used to is telling you something. The internal
+              resistance estimate comes from how voltage and current
+              moved together across the flight; tracked over time in
+              the Health Record, it is one of the earliest signs of
+              an aging pack. Consumption needs a current sensor — if
+              the card says so, that telemetry simply wasn't in the
+              log. Judge packs across flights, not from one hard
+              flight on a cold day.</p>
+          </details>
+        </div>
+
 
         <section class="card">
           <h3>Verdict</h3>
@@ -727,6 +1078,27 @@ current demand; the steady downward slope is normal discharge.
           <p>Did your change help? Before vs after, in plain words.</p>
         </section>
 
+        <div class="screen-intro">
+          <p>This page answers one question: did your change help?
+            Two flights side by side — the one you have open as
+            "before", one more as "after" — compared topic by
+            topic.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Each row is one measurable thing — vibration,
+              headspeed hold, tracking, sag — with the verdict in a
+              sentence: improved, got worse, or unchanged. Small
+              differences within normal flight-to-flight variation
+              are called unchanged on purpose. The overlaid noise
+              spectrum shows both flights in one picture; shrinking
+              peaks are progress. Comparisons mean the most between
+              flights of the same craft, flown similarly, one change
+              apart — and if a file holds several flights, you pick
+              which one counts as the "after".</p>
+          </details>
+        </div>
+
+
         <section class="card">
           <h3>Set Up the Comparison</h3>
           <p>
@@ -745,7 +1117,7 @@ current demand; the steady downward slope is normal discharge.
               Open "After" Log
             </button>
             <button class="secondary-button" id="compareSampleButton" disabled>
-              Demo: compare with the clean sample
+              Demo: compare with a sample flight
             </button>
           </div>
 
@@ -780,15 +1152,41 @@ current demand; the steady downward slope is normal discharge.
           <p>Your helicopter over time — trends no single flight can show.</p>
         </section>
 
+        <div class="screen-intro">
+          <p>This page is your helicopter's history: every analyzed
+            flight is filed under its craft automatically, so slow
+            changes — a bearing wearing in, a pack aging, a tune
+            drifting — become visible before they bite.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Trends need at least four logged flights, then the
+              record starts speaking up: vibration creeping upward
+              across flights points at mechanics, rising governor
+              droop at a power system losing headroom, climbing
+              internal resistance at an aging pack. Everything on
+              this page stays on this computer. A flight that
+              shouldn't count — a crash, a bench run — can be removed
+              from the table without affecting anything else.</p>
+            <p>One physical flight is one row: re-analyzing the same
+              log after an update refreshes its row, it never adds a
+              second flight.</p>
+          </details>
+        </div>
+
+
         <section class="card">
-          <h3>Craft</h3>
+          <h3>Model</h3>
           <p>
             Every flight you analyze is filed automatically under its
-            craft name (from the log). Everything stays on this
+            model name (from the log). Everything stays on this
             computer.
           </p>
           <div class="flight-picker">
             <select id="historyCraftSelect"></select>
+            <button class="secondary-button" id="editCraftCardButton"
+              title="Size class, blades, power, headspeed, drive">
+              Edit model
+            </button>
           </div>
           <p class="lab-story" id="historyNote" style="margin-top:14px;">No flights recorded yet.</p>
           <div id="historyFindings"></div>
@@ -823,6 +1221,23 @@ current demand; the steady downward slope is normal discharge.
           <p>Your flight's story in one shareable file.</p>
         </section>
 
+        <div class="screen-intro">
+          <p>This page bundles the open flight's verdict, findings
+            and charts into a single HTML file — one thing to save
+            with the flight, or to hand to someone helping you
+            troubleshoot.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>The report is self-contained: it opens in any browser,
+              needs no internet and nothing installed, and prints
+              cleanly. It carries whatever the Labs found for this
+              flight — so a report generated after a good analysis is
+              the easiest way to ask a club mate or a forum "what
+              would you change?" without sending the raw log.</p>
+          </details>
+        </div>
+
+
         <section class="card">
           <h3>One-Click Flight Report</h3>
           <p>
@@ -844,6 +1259,23 @@ current demand; the steady downward slope is normal discharge.
         <section class="hero">
           <h2>Settings</h2>
           <p>Simple first. Deeper when you want it.</p>
+        </section>
+
+        <section class="card">
+          <h3>Transmitter</h3>
+          <label class="toggle-row">
+            <span>
+              <strong>Stick mode</strong> — how the pilot-input
+              display arranges the gimbals. Mode 2 (collective on
+              the left) is the common default.
+            </span>
+            <select id="stickModeSelect">
+              <option value="1">Mode 1</option>
+              <option value="2">Mode 2</option>
+              <option value="3">Mode 3</option>
+              <option value="4">Mode 4</option>
+            </select>
+          </label>
         </section>
 
         <section class="card">
@@ -887,10 +1319,18 @@ current demand; the steady downward slope is normal discharge.
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="contributeSetup" />
-              <span>Model &amp; tuning info — craft model and setup
-                values, so logs can be grouped by setup type.</span>
+              <span>Setup &amp; tuning info — tuning values and board
+                type, so logs can be grouped by setup. Your model's
+                name never leaves this computer.</span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="contributeDump" />
+              <span>CLI settings (<code>dump</code>) — scrubbed of
+                anything identifying; your settings help us improve
+                recommendations for your specific model.</span>
             </label>
           </div>
+
           <p class="contribute-status" id="contributeStatus"></p>
         </section>
 
@@ -918,6 +1358,7 @@ current demand; the steady downward slope is normal discharge.
 
   <!-- Load progress: shown when a log is opened from any screen
        other than Home, where the inline status is not visible. -->
+
   <div class="overlay" id="loadProgress" hidden>
     <div class="overlay-dialog load-dialog">
       <div class="load-spinner" id="loadSpinner" aria-hidden="true"></div>
@@ -931,6 +1372,105 @@ current demand; the steady downward slope is normal discharge.
           Stay on this page
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Craft class card: confirmed once per craft on first
+       analysis, editable later from the Health Record.
+       Local model info first, contribution metadata second. -->
+  <div class="overlay" id="craftCardAsk" hidden>
+    <div class="overlay-dialog">
+      <button class="overlay-close" id="craftCardClose"
+        title="Close">✕</button>
+      <h3 id="craftCardTitle">About your model</h3>
+      <p>
+        A few facts about this model make its flights comparable —
+        in your Health Record, and (only if you share logs) for
+        everyone's recommendations. Confirm once; edit any time
+        from the Health Record screen.
+      </p>
+      <label class="craft-card-row">
+        <span>Size class</span>
+        <select id="craftCardSize">
+          <option value="">—</option>
+          <option value="450">450</option>
+          <option value="500">500</option>
+          <option value="550">550</option>
+          <option value="600">600</option>
+          <option value="700">700</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Main blade length (mm)</span>
+        <input type="number" id="craftCardBlade" min="100" max="1200" />
+      </label>
+      <label class="craft-card-row">
+        <span>Power</span>
+        <select id="craftCardPower">
+          <option value="">—</option>
+          <option value="electric">electric</option>
+          <option value="nitro">nitro</option>
+          <option value="gasoline">gasoline</option>
+        </select>
+      </label>
+      <label class="craft-card-row">
+        <span>Typical headspeed (rpm)</span>
+        <input type="number" id="craftCardHeadspeed" min="500" max="4000" />
+      </label>
+      <label class="craft-card-row">
+        <span>Tail drive</span>
+        <select id="craftCardDrive">
+          <option value="">—</option>
+          <option value="direct">direct</option>
+          <option value="belt">belt</option>
+          <option value="torque_tube_tail">torque tube</option>
+        </select>
+      </label>
+
+      <!-- The unlock step: the craft's CLI dump fills the card
+           automatically and makes recommendations setup-aware. -->
+      <div class="craft-card-dump">
+        <p>
+          <strong>Go further:</strong> add this model's CLI settings
+          (<code>dump all</code>) — it fills the model card in
+          automatically and unlocks recommendations tuned to your
+          exact setup. Names, serials and anything identifying are
+          removed on the spot.
+        </p>
+        <textarea
+          id="craftDumpPaste"
+          rows="3"
+          spellcheck="false"
+          placeholder="# paste your Rotorflight `dump all` here…"
+        ></textarea>
+        <div class="button-row">
+          <button class="secondary-button" id="craftDumpReadButton">
+            Read configuration
+          </button>
+          <button class="secondary-button" id="craftDumpOpenButton">
+            …or read from a file
+          </button>
+        </div>
+        <input type="file" id="craftDumpFileInput" accept=".txt,.dump,.cli"
+          hidden />
+        <div class="craft-dump-result" id="craftDumpStatus" hidden></div>
+        <label class="toggle-row" id="dumpConsentRow" hidden>
+          <input type="checkbox" id="dumpConsentInline" checked />
+          <span>Share these scrubbed settings with my flights —
+            your settings help us improve recommendations for
+            your specific model.</span>
+        </label>
+      </div>
+
+      <div class="overlay-actions">
+        <button class="overlay-link" id="craftCardLater">Not now</button>
+        <button class="overlay-primary" id="craftCardSave">Save model</button>
+      </div>
+      <p class="overlay-footnote">
+        Pre-filled from your log where possible — please correct
+        anything that's off.
+      </p>
     </div>
   </div>
 
@@ -957,14 +1497,45 @@ current demand; the steady downward slope is normal discharge.
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askSetup" checked />
-        <span>Model &amp; tuning info</span>
+        <span>Setup &amp; tuning info — never your model's name</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="askDump" checked />
+        <span>Your CLI settings (<code>dump</code>), scrubbed of
+          anything identifying — your settings help us improve
+          recommendations for your specific model</span>
       </label>
       <div class="overlay-actions">
+        <button class="overlay-link" id="askNo">No thanks</button>
         <button class="overlay-primary" id="askYes">Yes, share anonymized logs</button>
-        <button class="overlay-secondary" id="askNo">No thanks</button>
       </div>
       <p class="overlay-footnote">
         You can change this anytime in Settings.
+      </p>
+    </div>
+  </div>
+
+  <div class="overlay" id="errorReportOverlay" hidden>
+    <div class="overlay-dialog">
+      <button class="overlay-close" id="errorReportClose"
+        title="Close">✕</button>
+      <h3>Something went wrong</h3>
+      <p id="errorReportIntro">
+        The app hit an unexpected error. Your log and your data are
+        fine.
+      </p>
+      <p class="overlay-privacy" id="errorReportSummary"></p>
+      <div class="overlay-actions">
+        <button class="overlay-link" id="errorReportCopy">
+          Copy details
+        </button>
+        <button class="overlay-primary" id="errorReportSend">
+          Send report
+        </button>
+      </div>
+      <p class="overlay-footnote">
+        The report contains the app version, the error details and
+        technical facts about the file — never your flight data.
       </p>
     </div>
   </div>

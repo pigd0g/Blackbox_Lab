@@ -12,10 +12,20 @@ import {
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import {
-  buildContribution,
+  buildContributionV1,
   describeContribution
 } from "./contribute/contributionBuilder.js";
-import { uploadContribution } from "./contribute/uploader.js";
+import { uploadContributionV1 } from "./contribute/uploader.js";
+import {
+  scrubDump,
+  looksLikeDump,
+  readDumpIdentity
+} from "./contribute/dumpScrubber.js";
+import { buildFingerprint } from "./contribute/fingerprint.js";
+import {
+  hasContributed,
+  recordContributed
+} from "./contribute/uploadLedger.js";
 import {
   CONTRIBUTE_ENDPOINT,
   CONTRIBUTE_APP_VERSION
@@ -24,10 +34,20 @@ import { APP_VERSION, checkForUpdate } from "./version.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
-import { getMetadataValue } from "./analysis/metadataReader.js";
+import {
+  getMetadataValue,
+  isPlausibleFlightDate,
+  resolveFlightDateMs
+} from "./analysis/metadataReader.js";
+import {
+  isSettingsDumpFile,
+  LARGEST_PLAUSIBLE_DUMP_BYTES
+} from "./analysis/fileIdentification.js";
 import {
   computeNoiseSpectrum,
-  estimateSampleRate
+  computeNoiseSpectrumOverRuns,
+  estimateSampleRate,
+  peakMagnitudeAbove
 } from "./analysis/dsp/fft.js";
 import {
   detectStableFlightPhase
@@ -35,15 +55,51 @@ import {
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
-import { assessLogQuality } from "./analysis/logQuality.js";
+import {
+  assessLogQuality,
+  columnCarriesData
+} from "./analysis/logQuality.js";
+import {
+  buildErrorBundle,
+  bundleFingerprint,
+  formatBundleText,
+  installErrorCapture,
+  alreadySent,
+  markSent,
+  sendErrorReport
+} from "./errorReport.js";
+
+// What the pilot last asked for — one line of context that turns
+// "it crashed" into a reproducible report.
+let lastUserAction = null;
+
+function noteAction(action) {
+  lastUserAction = action;
+}
+import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
+import {
+  readPilotInput,
+  createStickDisplay,
+  getStickMode,
+  setStickMode,
+  timeToRowIndex
+} from "./ui/stickDisplay.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
   recordFlight,
   buildHistoryEntry,
+  hashFlightLines,
+  migrateHistory,
   assessTrends,
   deleteFlight,
-  clearHistory
+  clearHistory,
+  getCraftCard,
+  saveCraftCard,
+  prefillCraftCard,
+  craftCardFromDump,
+  getCraftDump,
+  saveCraftDump
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import {
@@ -53,7 +109,8 @@ import {
   explainLoadEvent,
   isCollectiveDriven,
   groupByGovernorTarget,
-  longestConsecutiveRun
+  longestConsecutiveRun,
+  allConsecutiveRuns
 } from "./analysis/evidenceViews.js";
 import { analyzeProfileResponse } from "./analysis/profilePidBreakdown.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
@@ -122,6 +179,8 @@ const chartHeadspeed = el("chartHeadspeed");
 const chartPower = el("chartPower");
 const chartSpectrum = el("chartSpectrum");
 const chartGovernor = el("chartGovernor");
+const governorChartTitle = el("governorChartTitle");
+const governorChartHint = el("governorChartHint");
 const chartEsc = el("chartEsc");
 const chartBattery = el("chartBattery");
 
@@ -130,7 +189,569 @@ const governorMetrics = el("governorMetrics");
 const escStory = el("escStory");
 const escMetrics = el("escMetrics");
 
+// ---- pilot-input (stick) insets ----
+// One reading of the rcCommand columns per flight; each inset
+// binds its own canvas. A log without rcCommand simply shows no
+// pilot-input evidence.
+let currentPilotInput = null;
+const stickControllers = new Map();
+
+function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom }) {
+  const wrap = el(wrapId);
+  const canvas = el(canvasId);
+
+  if (!wrap || !canvas) return;
+
+  stickControllers.get(canvasId)?.controller.stop();
+  stickControllers.delete(canvasId);
+
+  if (!currentPilotInput?.available || !currentDataset || !Number.isFinite(anchorTime)) {
+    wrap.hidden = true;
+    return;
+  }
+
+  const controller = createStickDisplay(canvas, {
+    dataset: currentDataset,
+    pilotInput: currentPilotInput
+  });
+
+  if (!controller) {
+    wrap.hidden = true;
+    return;
+  }
+
+  wrap.hidden = false;
+
+  const replayWindow =
+    playFrom && Number.isFinite(playFrom.min) && Number.isFinite(playFrom.max)
+      ? playFrom
+      : { min: Math.max(0, anchorTime - 2.5), max: anchorTime + 2.5 };
+
+  stickControllers.set(canvasId, {
+    controller,
+    anchorTime,
+    replayWindow
+  });
+
+  if (playFrom) {
+    controller.playWindow(replayWindow.min, replayWindow.max, { restTime: anchorTime });
+  } else {
+    controller.showTime(anchorTime);
+  }
+
+  // Hovering any of the linked charts scrubs the sticks to the
+  // hovered moment; leaving parks them back on the anchor.
+  for (const chartElement of chartElements ?? []) {
+    if (!chartElement || chartElement.__stickHoverWired === canvasId) continue;
+    chartElement.__stickHoverWired = canvasId;
+
+    chartElement.addEventListener("mousemove", () => {
+      const chart = chartElement.__blackboxLabChart;
+      const active = stickControllers.get(canvasId);
+      if (!chart || !active || chart.cursor.idx == null) return;
+      const t = chart.data?.[0]?.[chart.cursor.idx];
+      if (Number.isFinite(t)) {
+        active.controller.stop();
+        active.controller.showTime(t);
+      }
+    });
+
+    chartElement.addEventListener("mouseleave", () => {
+      const active = stickControllers.get(canvasId);
+      const anchor = chartElement.__stickAnchorTime;
+      if (active && Number.isFinite(anchor)) {
+        active.controller.showTime(anchor);
+      }
+    });
+  }
+
+  for (const chartElement of chartElements ?? []) {
+    if (chartElement) chartElement.__stickAnchorTime = anchorTime;
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".stick-replay-btn");
+  if (!button) return;
+
+  const entry = stickControllers.get(button.dataset.stickReplay);
+  if (!entry) return;
+
+  entry.controller.playWindow(
+    entry.replayWindow.min,
+    entry.replayWindow.max,
+    { restTime: entry.anchorTime }
+  );
+});
+
+
+// ======================================================
+// REPLAY — fly the log again (Log Viewer transport)
+// ======================================================
+//
+// A video-editor timeline for the flight: play/pause and
+// speed, a scrub bar with the Flight Events as colored
+// ticks, a playhead running through every chart on the
+// viewer page, live readouts, and the stick display
+// following the pilot's hands. Scrubbing and chart zoom
+// stay exactly as they were — the playhead is a guest in
+// the charts, never their owner.
+// ======================================================
+
+
+// ------------------------------------------------------
+// Replay graph stack — the pilot builds the working view.
+// Curated presets, one shared timeline (linked zoom), the
+// layout remembered across sessions. This stack is also
+// the layout a future video export will render.
+// ------------------------------------------------------
+
+const REPLAY_LAYOUT_KEY = "blackboxLabReplayLayout";
+const REPLAY_DEFAULT_LAYOUT = ["tracking-roll", "headspeed", "throttle", "power"];
+
+const REPLAY_GRAPH_PRESETS = [
+  {
+    key: "tracking-roll",
+    label: "Roll: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[0\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[0\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "tracking-pitch",
+    label: "Pitch: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[1\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[1\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "tracking-yaw",
+    label: "Yaw: target vs gyro",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[2\]$/i], color: PRESET_COLORS.setpoint },
+      { patterns: [/^gyroADC\[2\]$/i], color: PRESET_COLORS.gyro }
+    ])
+  },
+  {
+    key: "gyro",
+    label: "Gyro (filtered, all axes)",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^gyroADC\[0\]$/i], color: CHART_COLORS[0] },
+      { patterns: [/^gyroADC\[1\]$/i], color: CHART_COLORS[1] },
+      { patterns: [/^gyroADC\[2\]$/i], color: CHART_COLORS[2] }
+    ])
+  },
+  {
+    key: "gyro-raw",
+    label: "Gyro (unfiltered)",
+    yLabel: "deg/s",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^gyroUnfilt\[0\]$/i, /^gyroRAW\[0\]$/i], color: CHART_COLORS[0] },
+      { patterns: [/^gyroUnfilt\[1\]$/i, /^gyroRAW\[1\]$/i], color: CHART_COLORS[1] },
+      { patterns: [/^gyroUnfilt\[2\]$/i, /^gyroRAW\[2\]$/i], color: CHART_COLORS[2] }
+    ])
+  },
+  {
+    key: "headspeed",
+    label: "Headspeed & governor target",
+    yLabel: "rpm",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^governorTarget$/i, /^govTarget$/i], color: CHART_COLORS[0] },
+      { patterns: [/^headspeed$/i, /^erpm/i], color: CHART_COLORS[1] }
+    ])
+  },
+  {
+    key: "collective",
+    label: "Collective",
+    yLabel: "collective",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^setpoint\[3\]$/i], color: CHART_COLORS[5] }
+    ])
+  },
+  {
+    key: "throttle",
+    label: "Motor output (%)",
+    yLabel: "output (%)",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^motor\[0\]$/i], color: CHART_COLORS[3], convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]$/i], color: CHART_COLORS[4], convert: toThrottlePercent }
+    ])
+  },
+  {
+    key: "power",
+    label: "Voltage & current",
+    yLabel: "V · A",
+    series: (dataset) => presetSeries(dataset, [
+      { patterns: [/^EscV$/i, /^vbatLatest$/i], color: CHART_COLORS[0], convert: toVolts },
+      { patterns: [/^EscI$/i, /^amperageLatest$/i], color: CHART_COLORS[1], convert: toAmps }
+    ])
+  }
+];
+
+function presetSeries(dataset, entries) {
+  const series = [];
+
+  for (const entry of entries) {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+    if (!column) continue;
+
+    const raw = dataset.columnValues(column);
+    series.push({
+      label: column,
+      values: decimate(entry.convert ? entry.convert(raw) : raw),
+      color: entry.color
+    });
+  }
+
+  return series;
+}
+
+function loadReplayLayout() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(REPLAY_LAYOUT_KEY));
+    // An EMPTY stored layout is a deliberate choice — the
+    // sticks-only view, the classic video-overlay composition.
+    // Only a record that never existed gets the default.
+    if (Array.isArray(stored)) {
+      return stored.filter((key) =>
+        REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key)
+      );
+    }
+  } catch {
+    // fall through to the default
+  }
+  return [...REPLAY_DEFAULT_LAYOUT];
+}
+
+function saveReplayLayout(layout) {
+  localStorage.setItem(REPLAY_LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function renderReplayStack(dataset) {
+  const stack = el("replayGraphStack");
+  const addSelect = el("replayAddGraph");
+
+  if (!stack) return;
+
+  const layout = loadReplayLayout();
+  stack.innerHTML = "";
+
+  const controls = el("replayStackControls");
+
+  if (!dataset) {
+    if (controls) controls.hidden = true;
+    stack.innerHTML =
+      '<p class="chart-empty">Open a log first — then stack the charts you want to replay here.</p>';
+    return;
+  }
+
+  if (controls) controls.hidden = false;
+
+  if (layout.length === 0) {
+    stack.innerHTML =
+      '<p class="chart-empty">Sticks-only view — no graphs stacked. The playhead, sticks and readouts still run above; add a graph anytime.</p>';
+  }
+
+  for (const key of layout) {
+    const preset = REPLAY_GRAPH_PRESETS.find((entry) => entry.key === key);
+    if (!preset) continue;
+
+    const series = preset.series(dataset);
+
+    const row = document.createElement("div");
+    row.className = "replay-graph-row";
+    row.innerHTML = `
+      <div class="replay-graph-head">
+        <span>${preset.label}</span>
+        <span class="replay-graph-tools">
+          <button data-stack-move="-1" data-stack-key="${key}" title="Move up">▲</button>
+          <button data-stack-move="1" data-stack-key="${key}" title="Move down">▼</button>
+          <button data-stack-remove="${key}" title="Remove">✕</button>
+        </span>
+      </div>
+      <div class="chart-container"></div>
+    `;
+    stack.appendChild(row);
+
+    const container = row.querySelector(".chart-container");
+
+    if (series.length === 0) {
+      container.innerHTML =
+        '<p class="chart-empty">This log has no data for this chart.</p>';
+      continue;
+    }
+
+    renderTimeSeriesChart(container, {
+      timeSeconds: decimate(dataset.timeSeconds),
+      series,
+      yLabel: preset.yLabel,
+      height: 170,
+      linkGroup: "replayStack"
+    });
+  }
+
+  // The add-menu offers what is not already in the stack.
+  if (addSelect) {
+    addSelect.innerHTML = "";
+    for (const preset of REPLAY_GRAPH_PRESETS) {
+      if (layout.includes(preset.key)) continue;
+      const option = document.createElement("option");
+      option.value = preset.key;
+      option.textContent = preset.label;
+      addSelect.appendChild(option);
+    }
+    addSelect.disabled = addSelect.options.length === 0;
+    const addButton = el("replayAddButton");
+    if (addButton) addButton.disabled = addSelect.options.length === 0;
+  }
+}
+
+el("replayAddButton")?.addEventListener("click", () => {
+  const addSelect = el("replayAddGraph");
+  if (!addSelect || !addSelect.value) return;
+
+  const layout = loadReplayLayout();
+  layout.push(addSelect.value);
+  saveReplayLayout(layout);
+  renderReplayStack(currentDataset);
+  replay.playheads = [];
+});
+
+// Before any log, the picker would offer graphs with nothing to
+// draw them from — the stack says what to do instead.
+renderReplayStack(null);
+
+el("replayGraphStack")?.addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-stack-remove]");
+  const move = event.target.closest("[data-stack-move]");
+
+  if (!remove && !move) return;
+
+  const layout = loadReplayLayout();
+
+  if (remove) {
+    saveReplayLayout(layout.filter((key) => key !== remove.dataset.stackRemove));
+  } else {
+    const key = move.dataset.stackKey;
+    const delta = Number(move.dataset.stackMove);
+    const index = layout.indexOf(key);
+    const target = index + delta;
+    if (index === -1 || target < 0 || target >= layout.length) return;
+    [layout[index], layout[target]] = [layout[target], layout[index]];
+    saveReplayLayout(layout);
+  }
+
+  renderReplayStack(currentDataset);
+  replay.playheads = [];
+});
+
+
+const replay = {
+  time: 0,
+  duration: 0,
+  rate: 1,
+  playing: false,
+  frameHandle: null,
+  lastTick: null,
+  sticks: null,
+  readout: null,
+  playheads: []
+};
+
+function replayElements() {
+  return {
+    card: el("replayCard"),
+    play: el("replayPlay"),
+    speed: el("replaySpeed"),
+    time: el("replayTime"),
+    readout: el("replayReadout"),
+    scrub: el("replayScrub"),
+    ticks: el("replayTicks"),
+    sticksCanvas: el("replaySticks")
+  };
+}
+
+function setupReplay(dataset, pilotInput, flightEvents) {
+  const ui = replayElements();
+
+  if (!ui.card) return;
+
+  replayPause();
+  replay.time = 0;
+  replay.playheads = [];
+
+  if (!dataset || !Array.isArray(dataset.timeSeconds) || dataset.timeSeconds.length < 2) {
+    ui.card.hidden = true;
+    return;
+  }
+
+  ui.card.hidden = false;
+  replay.duration = dataset.timeSeconds[dataset.timeSeconds.length - 1];
+
+  renderReplayStack(dataset);
+
+  // The sticks follow when the log recorded the pilot's hands;
+  // without rcCommand the transport still runs, sticks hidden.
+  replay.sticks =
+    pilotInput?.available
+      ? createStickDisplay(ui.sticksCanvas, { dataset, pilotInput })
+      : null;
+
+  const stickCol = ui.sticksCanvas?.closest(".stick-col");
+  if (stickCol) stickCol.hidden = !replay.sticks;
+
+  // Live readouts: headspeed and pack voltage at the playhead.
+  const voltageColumn = dataset.findColumnsIn([/^EscV$/i, /^vbatLatest$/i])[0] ?? null;
+  replay.readout = {
+    headspeed: Array.isArray(dataset.headspeed) ? dataset.headspeed : null,
+    volts: voltageColumn ? toVolts(dataset.columnValues(voltageColumn)) : null,
+    timeSeconds: dataset.timeSeconds
+  };
+
+  // Flight events as timeline ticks — the debrief on the scrub bar.
+  if (ui.ticks) {
+    ui.ticks.innerHTML = "";
+    for (const event of flightEvents?.events ?? []) {
+      if (!Number.isFinite(event.t) || replay.duration <= 0) continue;
+      const tick = document.createElement("span");
+      tick.className = `replay-tick tick-${event.verdict}`;
+      tick.style.left = `${(event.t / replay.duration) * 100}%`;
+      tick.title = `${event.axis} — ${event.t.toFixed(1)} s`;
+      ui.ticks.appendChild(tick);
+    }
+  }
+
+  if (ui.speed) replay.rate = Number(ui.speed.value) || 1;
+
+  replayUpdateUI();
+}
+
+function replayCollectPlayheads() {
+  replay.playheads = [];
+
+  document
+    .querySelectorAll('section[data-screen="replay"] .chart-container')
+    .forEach((element) => {
+      const chart = element.__blackboxLabChart;
+      if (!chart || !chart.over || !chart.over.isConnected) return;
+
+      let line = chart.over.querySelector(".replay-playhead");
+      if (!line) {
+        line = document.createElement("div");
+        line.className = "replay-playhead";
+        chart.over.appendChild(line);
+      }
+      replay.playheads.push({ chart, line });
+    });
+}
+
+function replayUpdateUI() {
+  const ui = replayElements();
+  const t = replay.time;
+
+  if (ui.time) {
+    ui.time.textContent = `${t.toFixed(1)} / ${replay.duration.toFixed(1)} s`;
+  }
+
+  if (ui.scrub && replay.duration > 0) {
+    ui.scrub.value = String(Math.round((t / replay.duration) * 1000));
+  }
+
+  if (ui.readout && replay.readout) {
+    const row = timeToRowIndex(replay.readout.timeSeconds, t);
+    const parts = [];
+    const rpm = replay.readout.headspeed?.[row];
+    const volts = replay.readout.volts?.[row];
+    if (Number.isFinite(rpm) && rpm > 0) parts.push(`${Math.round(rpm)} rpm`);
+    if (Number.isFinite(volts) && volts > 0) parts.push(`${volts.toFixed(1)} V`);
+    ui.readout.textContent = parts.join(" · ");
+  }
+
+  replay.sticks?.showTime(t);
+
+  for (const { chart, line } of replay.playheads) {
+    if (!chart.over.isConnected) continue;
+    const { min, max } = chart.scales.x;
+    if (min == null || t < min || t > max) {
+      line.style.display = "none";
+    } else {
+      line.style.display = "";
+      line.style.left = `${chart.valToPos(t, "x")}px`;
+    }
+  }
+}
+
+function replayFrame(now) {
+  if (!replay.playing) return;
+
+  if (replay.lastTick !== null) {
+    replay.time += ((now - replay.lastTick) / 1000) * replay.rate;
+  }
+  replay.lastTick = now;
+
+  if (replay.time >= replay.duration) {
+    replay.time = replay.duration;
+    replayUpdateUI();
+    replayPause();
+    return;
+  }
+
+  replayUpdateUI();
+  replay.frameHandle = requestAnimationFrame(replayFrame);
+}
+
+function replayPlay() {
+  const ui = replayElements();
+  if (replay.duration <= 0) return;
+  if (replay.time >= replay.duration) replay.time = 0;
+
+  replay.playing = true;
+  replay.lastTick = null;
+  replayCollectPlayheads();
+  if (ui.play) ui.play.textContent = "⏸";
+  replay.frameHandle = requestAnimationFrame(replayFrame);
+}
+
+function replayPause() {
+  const ui = replayElements();
+  replay.playing = false;
+  if (replay.frameHandle !== null) {
+    cancelAnimationFrame(replay.frameHandle);
+    replay.frameHandle = null;
+  }
+  if (ui.play) ui.play.textContent = "▶";
+}
+
+el("replayPlay")?.addEventListener("click", () => {
+  if (replay.playing) {
+    replayPause();
+  } else {
+    replayPlay();
+  }
+});
+
+el("replaySpeed")?.addEventListener("change", () => {
+  replay.rate = Number(el("replaySpeed").value) || 1;
+});
+
+el("replayScrub")?.addEventListener("input", () => {
+  if (replay.duration <= 0) return;
+  replay.time =
+    (Number(el("replayScrub").value) / 1000) * replay.duration;
+  if (replay.playheads.length === 0) replayCollectPlayheads();
+  replayUpdateUI();
+});
+
+
 const droopContextCard = el("droopContextCard");
+const droopContextTitle = el("droopContextTitle");
+const droopContextHint = el("droopContextHint");
 const droopGovBlock = el("droopGovBlock");
 const chartDroopRpm = el("chartDroopRpm");
 const chartDroopDrive = el("chartDroopDrive");
@@ -201,17 +822,74 @@ const navigation = initNavigation();
 // One source of truth: the same constant the update check uses.
 el("sidebarVersion").textContent = `v${APP_VERSION}`;
 
+// Two controls, one state: the always-visible sidebar
+// switch and the Settings checkbox both go through here,
+// so they can never disagree.
+const sidebarAdvancedToggle = el("sidebarAdvancedToggle");
+
+
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
   localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");
+  advancedModeToggle.checked = enabled;
+  sidebarAdvancedToggle.setAttribute("aria-pressed", String(enabled));
+
+  // Advanced blocks are always present; the mode only decides
+  // whether they start unfolded. Pilots can still open any
+  // fold by hand in beginner mode — that is the point.
+  document.querySelectorAll("details.advanced-block").forEach((block) => {
+    block.open = enabled;
+  });
 }
 
-advancedModeToggle.checked =
-  localStorage.getItem("blackboxLabAdvanced") === "1";
-applyAdvancedMode(advancedModeToggle.checked);
+applyAdvancedMode(localStorage.getItem("blackboxLabAdvanced") === "1");
+
+// ---- transmitter stick mode (pilot-input display) ----
+const stickModeSelect = el("stickModeSelect");
+
+if (stickModeSelect) {
+  stickModeSelect.value = String(getStickMode());
+  stickModeSelect.addEventListener("change", () => {
+    setStickMode(Number(stickModeSelect.value));
+  });
+}
 
 advancedModeToggle.addEventListener("change", () => {
   applyAdvancedMode(advancedModeToggle.checked);
+});
+
+sidebarAdvancedToggle.addEventListener("click", () => {
+  applyAdvancedMode(!document.body.classList.contains("advanced-mode"));
+});
+
+// Maximize: any chart living in a grid cell can take the
+// full row width for a closer look — the ResizeObserver
+// machinery re-renders it at the new size automatically.
+document.querySelectorAll(".chart-max-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const cell = button.closest(".chart-cell");
+    const maximized = cell.classList.toggle("chart-max");
+    button.textContent = maximized ? "⤡" : "⤢";
+  });
+});
+
+// Peek: the link under a page's verdict reveals THAT page's
+// advanced content without leaving beginner mode — every
+// verdict is backed by data, and this is where it lives.
+document.querySelectorAll(".peek-advanced-link").forEach((link) => {
+  link.addEventListener("click", () => {
+    const screen = link.closest("[data-screen]");
+    const peeking = screen.classList.toggle("peek-advanced");
+
+    link.textContent = peeking
+      ? "Hide the advanced data again"
+      : "Show the advanced data behind this page";
+
+    const note = link.parentElement.querySelector(".peek-advanced-note");
+    if (note) {
+      note.hidden = !peeking;
+    }
+  });
 });
 
 // ======================================================
@@ -280,6 +958,10 @@ openLogLock.addEventListener("click", (event) => {
 
 let loadedLog = null;
 
+// The helicopter whose flight is open, so settings opened afterwards
+// can be filed against it.
+let currentCraftName = null;
+
 // ---- load progress overlay ----
 // The inline status lives on Home. A log opened from any other
 // screen (sidebar button, drag & drop) would load invisibly and
@@ -342,10 +1024,71 @@ loadStayHere.addEventListener("click", () => {
   loadProgress.hidden = true;
 });
 
+const DUMP_SNIFF_BYTES = 64 * 1024;
+
+async function looksLikeSettingsDump(file) {
+  if (
+    file.size > LARGEST_PLAUSIBLE_DUMP_BYTES ||
+    /\.(bbl|bfl|csv)$/i.test(file.name)
+  ) {
+    return false;
+  }
+
+  return isSettingsDumpFile({
+    name: file.name,
+    size: file.size,
+    head: await file.slice(0, DUMP_SNIFF_BYTES).text()
+  });
+}
+
+/**
+ * Send a settings dump to the helicopter it describes.
+ *
+ * Returns true when the file was handled here, so the caller stops
+ * treating it as a flight.
+ */
+async function routeSettingsDump(file) {
+  if (!(await looksLikeSettingsDump(file))) {
+    return false;
+  }
+
+  // Settings explain a flight; without one loaded there is nothing to
+  // attach them to, and no way to know which helicopter they belong to.
+  if (!currentCraftName) {
+    setLoadStatus(
+      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home — the settings are filed against that helicopter.`
+    );
+    finishLoadProgress(false);
+    return true;
+  }
+
+  const text = await file.text();
+
+  openCraftCardPanel(currentCraftName);
+  stageCraftDump(text);
+  navigation.showScreen("home");
+
+  setLoadStatus(
+    `${file.name} read into your ${currentCraftName} model card — the flight stays open.`
+  );
+  finishLoadProgress(true);
+  return true;
+}
+
 async function loadFromFile(file) {
+  noteAction(`opening ${file.name}`);
   beginLoadProgress();
   setLoadStatus(`Reading ${file.name}...`);
   await new Promise((resolve) => setTimeout(resolve, 30));
+
+  // A settings dump describes the machine, not a flight. Opening one
+  // here is the natural thing to try, so it is taken as "attach this
+  // to my helicopter" rather than as a file to display in place of the
+  // flight — which would close the flight the settings are meant to
+  // explain.
+  if (await routeSettingsDump(file)) {
+    return;
+  }
 
   const logData = await readLogFile(file);
 
@@ -401,6 +1144,9 @@ logFileInput.addEventListener("change", async () => {
         "Something went wrong reading this log: " + error.message
       );
       finishLoadProgress(false);
+      // A file the decoder cannot read is exactly the failure the
+      // project most needs to hear about.
+      showErrorReport(error);
     }
   }
 
@@ -688,70 +1434,58 @@ const spectrumFlightPhase =
       alignedGovernorTarget
   });
 
-const longestSpectrumSegment =
-  spectrumFlightPhase.segments
-    .filter(
-      (segment) =>
-        Number.isInteger(
-          segment.startIndex
-        ) &&
-        segment.sampleCount >=
-          fftWindowSize
-    )
-    .sort(
-      (first, second) =>
-        second.sampleCount -
-        first.sampleCount
-    )[0] ?? null;
+// The noise picture is averaged across EVERY stable run of the
+// flight, not read from one slice. A single window makes the
+// spectrum hostage to where the slice happens to land: an
+// intermittent shake scores very differently between two flights
+// of the same machine purely by window luck.
+const minimumSpectrumRun = 1024;
 
-const spectrumWindowStart =
-  longestSpectrumSegment
-    ? longestSpectrumSegment.startIndex +
-      Math.floor(
-        (
-          longestSpectrumSegment.sampleCount -
-          fftWindowSize
-        ) / 2
-      )
-    : null;
+const stableSpectrumRuns = (columnName) => {
+  if (!columnName) {
+    return [];
+  }
 
-const buildStableSpectrumSamples =
-  (columnName) => {
+  const values = alignedColumnValues(columnName);
+  const runs = [];
+
+  for (const segment of spectrumFlightPhase.segments ?? []) {
     if (
-      !Number.isInteger(
-        spectrumWindowStart
-      )
+      !Number.isInteger(segment.startIndex) ||
+      segment.sampleCount < minimumSpectrumRun
     ) {
-      return [];
+      continue;
     }
 
-    const values =
-      alignedColumnValues(columnName)
-        .slice(
-          spectrumWindowStart,
-          spectrumWindowStart +
-            fftWindowSize
-        );
+    const run = values.slice(
+      segment.startIndex,
+      segment.startIndex + segment.sampleCount
+    );
 
-    return (
-      values.length === fftWindowSize &&
-      values.every(Number.isFinite)
-    )
-      ? values
-      : [];
-  };
+    if (run.every(Number.isFinite)) {
+      runs.push(run);
+    }
+  }
+
+  return runs;
+};
+
+const hasSpectrumRuns = (
+  spectrumFlightPhase.segments ?? []
+).some(
+  (segment) =>
+    Number.isInteger(segment.startIndex) &&
+    segment.sampleCount >= minimumSpectrumRun
+);
 
 const spectra = [];
 
-if (
-  sampleRate &&
-  longestSpectrumSegment
-) {
+if (sampleRate && hasSpectrumRuns) {
   gyroColumnNames.forEach(
     (name, index) => {
       const spectrum =
-        computeNoiseSpectrum(
-          buildStableSpectrumSamples(name),
+        computeNoiseSpectrumOverRuns(
+          stableSpectrumRuns(name),
           sampleRate,
           {
             segmentSize: fftWindowSize
@@ -775,9 +1509,39 @@ if (
 
  
 
-  const governedHeadspeed = headspeed
-    ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
-    : null;
+  // Anchor rotor-harmonic classification to the rotor speed the
+  // machine actually flew at. The stable-flight samples are the
+  // authority; the tail-of-log average is only a fallback for logs
+  // with no detectable stable phase, because ground idle and
+  // spool-down in the tail drag that average away from flight rpm
+  // and shift every harmonic ratio with it.
+  const stableMeanHeadspeed = (() => {
+    const indexes = spectrumFlightPhase.stableIndexes ?? [];
+
+    if (!alignedHeadspeed || indexes.length < 100) {
+      return null;
+    }
+
+    let sum = 0;
+    let count = 0;
+
+    for (const index of indexes) {
+      const value = alignedHeadspeed[index];
+
+      if (Number.isFinite(value) && value > 0) {
+        sum += value;
+        count += 1;
+      }
+    }
+
+    return count >= 100 ? sum / count : null;
+  })();
+
+  const governedHeadspeed =
+    stableMeanHeadspeed ??
+    (headspeed
+      ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
+      : null);
 
   const markers = buildSpectrumMarkers(spectra, governedHeadspeed);
 
@@ -796,13 +1560,7 @@ if (
   let strongestValue = 0;
 
   spectra.forEach((entry, index) => {
-    let peak = 0;
-
-    for (const value of entry.spectrum.magnitudes) {
-      if (value > peak) {
-        peak = value;
-      }
-    }
+    const peak = spectrumPeakValue(entry.spectrum);
 
     if (peak > strongestValue) {
       strongestValue = peak;
@@ -815,10 +1573,8 @@ if (
     filteredColumns[0];
 
   filteredSpectrumStrongest =
-    computeNoiseSpectrum(
-      buildStableSpectrumSamples(
-        filteredName
-      ),
+    computeNoiseSpectrumOverRuns(
+      stableSpectrumRuns(filteredName),
       sampleRate,
       {
         segmentSize: fftWindowSize
@@ -834,8 +1590,8 @@ if (
 
     for (const entry of spectra) {
       if (
-        Math.max(...entry.spectrum.magnitudes) >
-        Math.max(...strongest.spectrum.magnitudes)
+        spectrumPeakValue(entry.spectrum) >
+        spectrumPeakValue(strongest.spectrum)
       ) {
         strongest = entry;
       }
@@ -883,26 +1639,29 @@ if (
     const filteredName =
       filteredColumns[strongestAxisIndex] ?? filteredColumns[0];
 
-    const bankWindowSamples = (columnName, startIndex) => {
+    // A bank's spectrum averages across all of its stable runs,
+    // matching the flight-wide spectra: one slice per bank made
+    // the per-bank story hostage to where that slice landed.
+    const bankRunSamples = (columnName, runs) => {
       if (!columnName) {
         return [];
       }
 
-      const values = alignedColumnValues(columnName).slice(
-        startIndex,
-        startIndex + fftWindowSize
-      );
+      const values = alignedColumnValues(columnName);
 
-      return values.length === fftWindowSize &&
-        values.every(Number.isFinite)
-        ? values
-        : [];
+      return runs
+        .filter((run) => run.length >= minimumSpectrumRun)
+        .map((run) =>
+          values.slice(run.startIndex, run.startIndex + run.length)
+        )
+        .filter((run) => run.every(Number.isFinite));
     };
 
     return banks.map((bank) => {
-      const run = longestConsecutiveRun(bank.indexes);
+      const runs = allConsecutiveRuns(bank.indexes);
+      const longestRun = longestConsecutiveRun(bank.indexes);
 
-      if (!run || run.length < fftWindowSize) {
+      if (!longestRun || longestRun.length < minimumSpectrumRun) {
         return {
           targetRpm: bank.targetRpm,
           stableSampleCount: bank.indexes.length,
@@ -910,12 +1669,8 @@ if (
         };
       }
 
-      const windowStart =
-        run.startIndex +
-        Math.floor((run.length - fftWindowSize) / 2);
-
-      const unfilteredSpectrum = computeNoiseSpectrum(
-        bankWindowSamples(unfilteredName, windowStart),
+      const unfilteredSpectrum = computeNoiseSpectrumOverRuns(
+        bankRunSamples(unfilteredName, runs),
         sampleRate,
         { segmentSize: fftWindowSize }
       );
@@ -929,22 +1684,30 @@ if (
       }
 
       const filteredSpectrum = hasOwnUnfiltered(headerLine)
-        ? computeNoiseSpectrum(
-            bankWindowSamples(filteredName, windowStart),
+        ? computeNoiseSpectrumOverRuns(
+            bankRunSamples(filteredName, runs),
             sampleRate,
             { segmentSize: fftWindowSize }
           )
         : null;
 
-      const bankHeadspeed = windowStats(
-        alignedHeadspeed,
-        windowStart,
-        windowStart + fftWindowSize - 1
-      );
+      // The bank's rpm is read over its whole stable set, not a
+      // single window, to match the spectra.
+      const bankRpm = (() => {
+        let sum = 0;
+        let count = 0;
 
-      const bankRpm = bankHeadspeed
-        ? bankHeadspeed.average
-        : bank.targetRpm;
+        for (const index of bank.indexes) {
+          const value = Number(alignedHeadspeed[index]);
+
+          if (Number.isFinite(value) && value > 0) {
+            sum += value;
+            count += 1;
+          }
+        }
+
+        return count > 0 ? sum / count : bank.targetRpm;
+      })();
 
       return {
         targetRpm: bank.targetRpm,
@@ -978,7 +1741,18 @@ if (
 
   // ---- labs + verdict ----
   const labs = {
-    governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
+    governor: analyzeGovernorLab({
+      timeSeconds,
+      headspeed,
+      governorTarget,
+      // Output context for the worst-droop event: a dip with the
+      // throttle at its ceiling is a power limit, not a gain issue.
+      motorOutput:
+        Array.isArray(escThrottle) &&
+        escThrottle.some((value) => Number(value) > 0)
+          ? escThrottle
+          : motor
+    }),
    esc: analyzeEscLab({
   timeSeconds,
   motor,
@@ -1007,7 +1781,9 @@ if (
   governorTarget,
   vbat,
   pidAnalysis,
-  labs
+  labs,
+  anchorHeadspeedRpm: governedHeadspeed,
+  filterAdvice
 });
 
   // Evidence that zooms to the moment: attach a focus
@@ -1031,17 +1807,30 @@ if (
   }
 
   return {
+    // Which helicopter this flight came from. A before/after
+    // comparison is only a before/after when both are the same
+    // machine; otherwise the difference is the aircraft.
+    craftName: getMetadataValue(lines, "Craft name"),
     pidScore: Number.isFinite(pidAnalysis?.score) ? pidAnalysis.score : null,
+    // Carried so a comparison can say how much each side's score rests
+    // on. Two tracking numbers are only worth subtracting when both
+    // were measured from enough clean responses to mean anything.
+    pidConfidence: pidAnalysis?.confidence ?? null,
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     filterAdvice,
     sampleRateHz: sampleRate,
+    // "Present" means CARRIES DATA: a headspeed column logged as
+    // constant zero (RPM wire unplugged) must not promise governor
+    // analysis, title a chart "vs Target", or mark a craft
+    // electric. 16 % of contributed flights carry at least one
+    // such dead column.
     columnPresence: {
       hasUnfilteredGyro: unfilteredColumns.length > 0,
       hasFilteredGyro: filteredColumns.length > 0,
-      hasHeadspeed: Boolean(headspeed),
-      hasGovernorTarget: Boolean(governorTarget),
-      hasVbat: Boolean(vbat),
-      hasAmperage: Boolean(amperage)
+      hasHeadspeed: columnCarriesData(headspeed),
+      hasGovernorTarget: columnCarriesData(governorTarget),
+      hasVbat: columnCarriesData(vbat),
+      hasAmperage: columnCarriesData(amperage)
     },
     headerLine,
     timeSeconds,
@@ -1059,16 +1848,12 @@ if (
   };
 }
 
+// "Strongest" always means strongest ABOVE the vibration floor:
+// a plain max is dominated by near-DC maneuver energy and elects
+// the most-flown axis, while the verdict names its peak from the
+// most-shaking one — and the two must never disagree.
 function spectrumPeakValue(spectrum) {
-  let peak = 0;
-
-  for (const value of spectrum.magnitudes) {
-    if (value > peak) {
-      peak = value;
-    }
-  }
-
-  return peak;
+  return peakMagnitudeAbove(spectrum);
 }
 
 function buildSpectrumMarkers(spectra, headspeedRpm) {
@@ -1114,16 +1899,29 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
 
   return chosen.map((peak) => {
     let name = `${peak.hz.toFixed(0)} Hz`;
+    let classification = "unclassified";
 
     if (headspeedRpm && headspeedRpm > 300) {
       const ratio = peak.hz / (headspeedRpm / 60);
 
-      if (Math.abs(ratio - 1) < 0.15) name = `main rotor 1/rev · ${name}`;
-      else if (Math.abs(ratio - 2) < 0.2) name = `main rotor 2/rev · ${name}`;
-      else if (ratio > 3.5 && ratio < 6.5) name = `tail region · ${name}`;
+      if (Math.abs(ratio - 1) < 0.15) {
+        name = `main rotor 1/rev · ${name}`;
+        classification = "main_rotor_1rev";
+      } else if (Math.abs(ratio - 2) < 0.2) {
+        name = `main rotor 2/rev · ${name}`;
+        classification = "main_rotor_2rev";
+      } else if (ratio > 3.5 && ratio < 6.5) {
+        name = `tail region · ${name}`;
+        classification = "tail_region";
+      }
     }
 
-    return { hz: peak.hz, label: name };
+    return {
+      hz: peak.hz,
+      label: name,
+      magnitude: peak.magnitude,
+      classification
+    };
   });
 }
 
@@ -1137,8 +1935,204 @@ const STATUS_WORDS = {
   attention: "Needs attention"
 };
 
+// The Flight Events card: every stick command as one row,
+// worst first, each with a jump to the exact moment on the
+// matching tracking chart.
+const EVENT_CHART_BY_AXIS = {
+  roll: "chartTracking",
+  pitch: "chartTrackingPitch",
+  yaw: "chartTrackingYaw"
+};
+
+let currentFlightEvents = null;
+
+function renderFlightEvents(flightEvents) {
+  const card = el("pidEventsCard");
+  const summary = el("pidEventsSummary");
+  const list = el("pidEventsList");
+
+  if (!card) return;
+
+  currentFlightEvents = flightEvents;
+
+  if (!flightEvents) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  summary.textContent = flightEvents.summary.sentence;
+  list.innerHTML = "";
+  list.className = "events-timeline";
+  hideEventDetail();
+
+  // Every event as a small card on the time axis — click one
+  // and its evidence unfolds RIGHT HERE: what happened, and
+  // the matching chart zoomed to the moment. No teleporting.
+  const shown = flightEvents.events.slice(0, 60);
+
+  if (shown.length < flightEvents.events.length) {
+    summary.textContent += ` Showing the first ${shown.length} of ${flightEvents.events.length}.`;
+  }
+
+  for (const event of shown) {
+    const chip = document.createElement("button");
+    chip.className = `event-card chip-${event.verdict}`;
+
+    const metric =
+      event.verdict === "overshoot"
+        ? `+${event.overshoot_percent}%`
+        : event.verdict === "slow"
+          ? `${event.settling_ms} ms`
+          : "clean";
+
+    chip.innerHTML = `
+      <span class="event-card-time">${event.t?.toFixed(1) ?? "?"} s</span>
+      <span class="event-card-axis">${event.axis}</span>
+      <span class="event-card-metric">${metric}</span>
+    `;
+
+    chip.addEventListener("click", () => {
+      const wasSelected = chip.classList.contains("selected");
+      list
+        .querySelectorAll(".event-card.selected")
+        .forEach((node) => node.classList.remove("selected"));
+
+      if (wasSelected) {
+        hideEventDetail();
+        return;
+      }
+
+      chip.classList.add("selected");
+      // Re-resolve by ID from the current event list, so a chip
+      // that somehow outlives a re-render can never open another
+      // event's evidence under its own label.
+      const canonical =
+        currentFlightEvents?.events.find(
+          (candidate) => candidate.id === event.id
+        ) ?? null;
+
+      if (canonical) {
+        showEventDetail(canonical);
+      } else {
+        hideEventDetail();
+      }
+    });
+
+    list.appendChild(chip);
+  }
+}
+
+const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
+
+function hideEventDetail() {
+  const detail = el("pidEventDetail");
+  if (detail) detail.hidden = true;
+  stickControllers.get("pidEventSticks")?.controller.stop();
+}
+
+function showEventDetail(event) {
+  const detail = el("pidEventDetail");
+  const explain = el("pidEventExplain");
+  const chartElement = el("pidEventChart");
+  if (!detail || !currentDataset) return;
+
+  detail.hidden = false;
+
+  // An event without a timeline anchor gets no invented moment —
+  // the card says what is known and the chart stays un-zoomed.
+  if (!Number.isFinite(event.t)) {
+    explain.textContent = `A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} command was analyzed, but its exact position on the flight timeline could not be anchored, so no zoomed chart is shown for it.`;
+    chartElement.innerHTML = "";
+    return;
+  }
+
+  const asked = `At ${event.t.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
+  explain.textContent =
+    event.verdict === "overshoot"
+      ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
+      : event.verdict === "slow"
+        ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
+        : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
+
+  // The evidence, right here: the same setpoint-vs-gyro chart the
+  // Tuning matrix draws, windowed to THIS event's own extent —
+  // command start through response — so the selected event is
+  // always inside the frame it is described by.
+  const axisIndex = AXIS_INDEX[event.axis.toLowerCase()] ?? 0;
+  const column = (base) =>
+    new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
+
+  const markers = [{ x: event.t, label: "command" }];
+
+  if (
+    Number.isFinite(event.tResponsePeak) &&
+    event.tResponsePeak - event.t > 0.15
+  ) {
+    markers.push({ x: event.tResponsePeak, label: "response peak" });
+  }
+
+  renderPresetChart(
+    chartElement,
+    currentDataset,
+    [
+      { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint },
+      { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro }
+    ],
+    "deg/s",
+    {
+      height: 240,
+      markers
+    }
+  );
+
+  // Zoom only the chart that was just rendered for this event: a
+  // handle left over from an earlier selection (its canvas is no
+  // longer attached) must never receive this event's window.
+  const chart = chartElement.__blackboxLabChart;
+  const window = eventChartWindow(event);
+
+  if (chart && chart.root?.isConnected && window) {
+    chart.setScale("x", window);
+  }
+
+  // The pilot's hands beside the machine's answer: replay the
+  // event window once, then park at the command moment.
+  mountStickInset({
+    wrapId: "pidEventSticksWrap",
+    canvasId: "pidEventSticks",
+    chartElements: [chartElement],
+    anchorTime: event.t,
+    playFrom: window
+  });
+
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// The Filter and PID pages open with the SAME verdict Home
+// shows for them — one engine, one sentence, no page left
+// without its verdict.
+function renderLabVerdictStories(verdict) {
+  const stories = [
+    { key: "vibration", element: el("filterVerdictStory") },
+    { key: "tuning", element: el("pidVerdictStory") }
+  ];
+
+  for (const { key, element } of stories) {
+    if (!element) continue;
+    const card = verdict?.cards.find((entry) => entry.key === key);
+    if (card) {
+      element.textContent = `${card.headline}. ${card.detail}`;
+      // Same status treatment as every other lab verdict.
+      element.className = `lab-story status-text-${card.status}`;
+    }
+  }
+}
+
 function renderVerdict(dataset) {
   const verdict = dataset?.verdict;
+
+  renderLabVerdictStories(verdict);
 
   if (!verdict || verdict.cards.length === 0) {
     verdictCard.hidden = true;
@@ -1151,25 +2145,27 @@ function renderVerdict(dataset) {
     : verdict.summary;
   verdictCards.innerHTML = "";
 
-  for (const card of verdict.cards) {
-    const cardElement = document.createElement("div");
-    cardElement.className = `verdict-item status-${card.status}`;
+  // A one-look dashboard: compact tiles side by side. Their
+  // whole job is a color, a sentence and a destination — the
+  // full story, action and evidence live on each lab page,
+  // one click away.
+  verdictCards.className = "verdict-grid";
 
-    cardElement.innerHTML = `
+  for (const card of verdict.cards) {
+    const tile = document.createElement("div");
+    tile.className = `verdict-tile status-${card.status}`;
+    tile.title = `${card.detail}${card.action ? ` What to do: ${card.action}` : ""}`;
+
+    tile.innerHTML = `
       <div class="verdict-item-top">
         <span class="status-dot"></span>
         <span class="verdict-item-title">${card.title}</span>
-        <span class="verdict-item-status">${STATUS_WORDS[card.status]}</span>
       </div>
-      <div class="verdict-item-headline">${card.headline}</div>
-      <div class="verdict-item-detail">${card.detail}</div>
-      ${card.action ? `<div class="verdict-item-action"><span>What to do:</span> ${card.action}</div>` : ""}
+      <div class="verdict-tile-headline">${card.headline}</div>
+      <div class="verdict-tile-evidence">Show me → ${card.evidence}</div>
     `;
 
-    const button = document.createElement("button");
-    button.className = "verdict-jump";
-    button.textContent = `Show me → ${card.evidence}`;
-    button.addEventListener("click", () => {
+    tile.addEventListener("click", () => {
       navigation.showScreen(card.screen);
 
       if (card.focus) {
@@ -1189,8 +2185,7 @@ function renderVerdict(dataset) {
       }
     });
 
-    cardElement.appendChild(button);
-    verdictCards.appendChild(cardElement);
+    verdictCards.appendChild(tile);
   }
 }
 
@@ -1321,7 +2316,7 @@ const PRESET_COLORS = {
   d: CHART_COLORS[4] // magenta — D-term
 };
 
-function renderPresetChart(element, dataset, entries, yLabel) {
+function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
   const series = [];
 
   for (const entry of entries) {
@@ -1348,7 +2343,8 @@ function renderPresetChart(element, dataset, entries, yLabel) {
     timeSeconds: decimate(dataset.timeSeconds),
     series,
     yLabel,
-    height: 220
+    height: options.height ?? 220,
+    markers: options.markers ?? []
   });
 }
 
@@ -1451,12 +2447,41 @@ function renderGovernorEvidence(dataset) {
 
   if (!window) {
     droopContextCard.hidden = true;
+    const droopWrap = el("droopSticksWrap");
+    if (droopWrap) droopWrap.hidden = true;
     return;
   }
 
   droopContextCard.hidden = false;
 
-  const markers = [{ x: droopTime, label: "worst droop" }];
+  mountStickInset({
+    wrapId: "droopSticksWrap",
+    canvasId: "droopSticks",
+    chartElements: [chartDroopRpm, chartDroopDrive, chartDroopPower],
+    anchorTime: droopTime,
+    playFrom: null
+  });
+
+  // Droop is measured against a target. Without one, the same
+  // moment is the largest short-term swing — the card says which
+  // it is showing, and the target/error traces stay off the chart.
+  const hasTarget =
+    dataset.labs.governor?.capability === "full";
+
+  if (droopContextTitle) {
+    droopContextTitle.textContent = hasTarget
+      ? "The Worst Droop, In Context"
+      : "The Largest Swing, In Context";
+  }
+
+  if (droopContextHint) {
+    droopContextHint.textContent = hasTarget
+      ? "The seconds around the biggest dip, lined up on one clock — zoom any chart and the others follow. Read top to bottom: what the rotor did, what the pilot and governor asked for, and what the power system delivered."
+      : "The seconds around the largest short-term headspeed swing, lined up on one clock — zoom any chart and the others follow. No governor target is logged, so this shows steadiness, not droop against a target.";
+  }
+
+  const markerLabel = hasTarget ? "worst droop" : "largest swing";
+  const markers = [{ x: droopTime, label: markerLabel }];
 
   const targetValues = dataset.governorTarget ?? [];
   const actualValues = dataset.headspeed ?? [];
@@ -1471,11 +2496,15 @@ function renderGovernorEvidence(dataset) {
     chartDroopRpm,
     dataset,
     window,
-    [
-      { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
-      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
-      { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
-    ],
+    hasTarget
+      ? [
+          { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
+          { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
+          { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
+        ]
+      : [
+          { label: "headspeed", values: actualValues, color: CHART_COLORS[1] }
+        ],
     { yLabel: "rpm", markers, linkGroup: "droopSync" }
   );
 
@@ -1760,10 +2789,31 @@ function renderEscEvidence(dataset) {
       3
     );
 
+    if (!window) {
+      const escWrap = el("escSticksWrap");
+      if (escWrap) escWrap.hidden = true;
+    }
+
     if (window) {
       const markers = [
         { x: biggest.event.peakSeconds, label: "peak load" }
       ];
+
+      // The collective tells the load story better than any
+      // sentence — pilot input at the peak, scrubbed by hover.
+      mountStickInset({
+        wrapId: "escSticksWrap",
+        canvasId: "escSticks",
+        chartElements: [
+          chartLoadOutput,
+          chartLoadCollective,
+          chartLoadPower,
+          chartLoadWatts,
+          chartLoadTemp
+        ],
+        anchorTime: biggest.event.peakSeconds,
+        playFrom: null
+      });
 
       renderSyncedChart(
         chartLoadOutput,
@@ -1991,6 +3041,24 @@ function renderAllCharts(dataset) {
       /govTarget/i
     ]).slice(0, 6);
 
+    // Models on an ESC or external governor log rotor speed with
+    // no target beside it. The chart then carries one trace, so it
+    // says what it shows: rotor speed over time, and that droop —
+    // which is measured against a target — is not on offer here.
+    const hasTarget = dataset.columnPresence?.hasGovernorTarget;
+
+    if (governorChartTitle) {
+      governorChartTitle.textContent = hasTarget
+        ? "Headspeed vs Target"
+        : "Headspeed Over Time";
+    }
+
+    if (governorChartHint) {
+      governorChartHint.textContent = hasTarget
+        ? "Zoom into collective inputs — dips below the target line are droop."
+        : "View rotor-speed stability throughout the flight. Governor target telemetry was not available, so tracking error and droop cannot be measured.";
+    }
+
     if (governorColumns.length === 0) {
       chartGovernor.innerHTML =
         '<p class="chart-empty">This log has no data for this chart.</p>';
@@ -2007,7 +3075,10 @@ function renderAllCharts(dataset) {
           ? [
               {
                 x: dataset.labs.governor.droopTimeSeconds,
-                label: "worst droop"
+                label:
+                  dataset.labs.governor.capability === "full"
+                    ? "worst droop"
+                    : "largest swing"
               }
             ]
           : []
@@ -2051,9 +3122,14 @@ function renderAllCharts(dataset) {
   renderEscEvidence(dataset);
 }
 
+// The latest quality-gate result, kept for the contribution
+// payload so it never has to be recomputed.
+let currentLogQuality = null;
+
 function renderQuality(dataset, flightStats) {
   if (!dataset) {
     qualityCard.hidden = true;
+    currentLogQuality = null;
     return;
   }
 
@@ -2067,6 +3143,8 @@ function renderQuality(dataset, flightStats) {
       : 0,
     ...dataset.columnPresence
   });
+
+  currentLogQuality = quality;
 
   qualityCard.hidden = false;
   qualitySummary.textContent = quality.summary;
@@ -2377,11 +3455,24 @@ function analyzeFlight(flightIndex) {
   });
 
   currentDataset = buildDataset(lines, pidAnalysis);
+  currentPilotInput = currentDataset
+    ? readPilotInput(currentDataset)
+    : null;
+
+  renderFlightEvents(
+    buildFlightEvents({
+      trackingAnalysis:
+        pidAnalysis?.detectedColumns?.trackingAnalysis,
+      timeSeconds: currentDataset?.timeSeconds,
+      dataRowOffset: findTelemetryHeaderIndex(lines) + 1
+    })
+  );
 
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);
   renderFilterAdvisor(currentDataset);
   renderAllCharts(currentDataset);
+  setupReplay(currentDataset, currentPilotInput, currentFlightEvents);
   renderPidProfileBreakdown(pidAnalysis, lines);
   renderFilterProfileBreakdown(currentDataset);
 
@@ -2410,13 +3501,26 @@ function analyzeFlight(flightIndex) {
     : "Open a log first.";
 
   // ---- file this flight in the craft's health record ----
+  const rawCraftName = getMetadataValue(currentFlightLines, "Craft name");
+  const craftKeyName =
+    rawCraftName === "Not found" ? "Unknown craft" : rawCraftName;
+
+  // Remembered so a settings dump opened afterwards knows which
+  // helicopter it belongs to.
+  currentCraftName = craftKeyName;
+
   if (currentDataset) {
-   
-    const craftName = getMetadataValue(currentFlightLines, "Craft name");
+    const craftName = rawCraftName;
 
     const entry = buildHistoryEntry({
       fileName: file.name,
-      flightDateMs: file.lastModified || 0,
+      // The selected flight's own lines, so each flight of a
+      // multi-flight file carries its own identity.
+      sourceHash: hashFlightLines(currentFlightLines),
+      flightDateMs: resolveFlightDateMs(
+        currentFlightLines,
+        file.lastModified
+      ),
       durationSeconds:
         currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1],
    dataset: {
@@ -2436,6 +3540,20 @@ function analyzeFlight(flightIndex) {
     );
 
     refreshHistoryScreen(craftKey);
+
+    // First analysis of a new craft: offer the craft card,
+    // pre-filled from the log. Local model info first,
+    // contribution metadata second — independent of sharing.
+    // Bundled sample flights are not the pilot's craft, so
+    // they never prompt for one.
+    if (!file.name.startsWith("sample-")) {
+      maybeAskCraftCard(craftKey);
+    }
+    // The passive unlock card shows for samples too — trying
+    // the sample is how many pilots first meet the app, and the
+    // card is how they discover the unlock. Only the modal ask
+    // stays sample-suppressed.
+    setUnlockCraft(craftKey, false);
   }
 
   refreshCompareButtons();
@@ -2450,11 +3568,12 @@ function analyzeFlight(flightIndex) {
     // them, so contributing them would only fill the community
     // bucket with identical copies.
     if (!file.name.startsWith("sample-")) {
-      maybeContributeFlight(
-        flight.decoded,
-        fileType,
-        `${file.name}#${flightIndex}`
-      );
+      maybeContributeFlight(flight.decoded, fileType, `${file.name}#${flightIndex}`, {
+        dataset: currentDataset,
+        pidAnalysis,
+        logQuality: currentLogQuality,
+        craftName: craftKeyName
+      });
     }
   }
 
@@ -2487,6 +3606,7 @@ buildReportButton.addEventListener("click", () => {
     firmware: firmware === "Not found" ? null : firmware,
     durationSeconds: duration,
     verdict: currentDataset.verdict,
+    quality: currentLogQuality,
     labs: [
       { title: "Governor Lab", analysis: currentDataset.labs.governor },
       { title: "ESC Lab", analysis: currentDataset.labs.esc },
@@ -2632,7 +3752,9 @@ function renderComparison(comparisonDataset, comparisonName) {
             ? "improved"
             : row.direction === "worse"
               ? "got worse"
-              : "unchanged"
+              : row.direction === "unknown"
+                ? "not comparable"
+                : "unchanged"
         }</span>
       </div>
       <div class="compare-row-sentence">${row.sentence}</div>
@@ -2727,6 +3849,10 @@ compareSampleButton.addEventListener("click", async () => {
 // 09. HEALTH RECORD (per-craft history)
 // ======================================================
 
+// Records written by earlier builds may already hold the same
+// flight twice; fold those once, before the record is first shown.
+migrateHistory(localStorage);
+
 function refreshHistoryScreen(selectedCraft) {
   const history = loadHistory(localStorage);
   const craftNames = Object.keys(history).sort();
@@ -2800,7 +3926,7 @@ function refreshHistoryScreen(selectedCraft) {
 
   historyTrendCard.hidden = false;
   trendChart(chartTrendVibration, "vibrationPeak", "vibration peak");
-  trendChart(chartTrendDroop, "droopRpm", "worst droop (rpm)");
+  trendChart(chartTrendDroop, "droopRpm", "largest RPM deviation");
 
   // ---- flights table ----
   historyTableCard.hidden = false;
@@ -2811,13 +3937,17 @@ function refreshHistoryScreen(selectedCraft) {
   historyTable.innerHTML = `
     <tr>
       <th>Date</th><th>Log</th><th>Length</th><th>Vibration</th>
-      <th>Droop</th><th>Tracking</th><th>Sag</th><th>IR est.</th><th></th>
+      <th>RPM dev.</th><th>Tracking</th><th>Sag</th><th>IR est.</th><th></th>
     </tr>
     ${entries
       .map(
         (entry, index) => `
       <tr>
-        <td>${new Date(entry.flightDateMs).toLocaleDateString()}</td>
+        <td>${
+          isPlausibleFlightDate(entry.flightDateMs)
+            ? new Date(entry.flightDateMs).toLocaleDateString()
+            : "Date unavailable"
+        }</td>
         <td>${entry.fileName}</td>
         <td>${cell(entry.durationSeconds, " s")}</td>
         <td>${cell(entry.vibrationPeak)}${entry.vibrationHz ? ` @ ${entry.vibrationHz} Hz` : ""}</td>
@@ -2890,8 +4020,12 @@ const contributeToggle = document.getElementById("contributeToggle");
 const contributePower = document.getElementById("contributePower");
 const contributeGps = document.getElementById("contributeGps");
 const contributeSetup = document.getElementById("contributeSetup");
+const contributeDump = document.getElementById("contributeDump");
 const contributeStatus = document.getElementById("contributeStatus");
 const contributeAsk = document.getElementById("contributeAsk");
+
+const dumpConsentRow = document.getElementById("dumpConsentRow");
+const dumpConsentInline = document.getElementById("dumpConsentInline");
 
 function contributionEnabled() {
   return (
@@ -2908,10 +4042,25 @@ function loadContributeCats() {
     return {
       power: stored.power === true,
       gps: stored.gps === true,
-      setup: stored.setup === true
+      setup: stored.setup === true,
+      dump: stored.dump === true
     };
   } catch {
-    return { power: true, gps: false, setup: true };
+    return { power: true, gps: false, setup: true, dump: false };
+  }
+}
+
+// The dump category arrived after the first installs
+// consented. Whether it was ever ANSWERED (either way) is
+// what decides if the one-time inline ask still shows.
+function dumpConsentAnswered() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
+    );
+    return typeof stored.dump === "boolean";
+  } catch {
+    return false;
   }
 }
 
@@ -2930,43 +4079,86 @@ function refreshContributeCard() {
   contributePower.checked = cats.power;
   contributeGps.checked = cats.gps;
   contributeSetup.checked = cats.setup;
+  contributeDump.checked = cats.dump;
 
   const disabled = !contributeToggle.checked;
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.disabled = disabled;
-  });
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.disabled = disabled;
+    }
+  );
 }
 
-function maybeContributeFlight(flight, fileType, key) {
+async function maybeContributeFlight(flight, fileType, key, extras = {}) {
   if (!contributionEnabled()) return;
   if (contributedThisSession.has(key)) return;
   contributedThisSession.add(key);
 
-  const payload = buildContribution(
-    flight,
-    fileType,
-    loadContributeCats(),
-    CONTRIBUTE_APP_VERSION
-  );
+  const cats = loadContributeCats();
 
-  if (contributeStatus) {
-    contributeStatus.textContent = `Sharing: ${describeContribution(payload)} …`;
-  }
-
-  uploadContribution(CONTRIBUTE_ENDPOINT, payload)
-    .then((result) => {
-      if (contributeStatus) {
-        contributeStatus.textContent = result.ok
-          ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
-          : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+  try {
+    const contribution = await buildContributionV1(
+      flight,
+      fileType,
+      cats,
+      CONTRIBUTE_APP_VERSION,
+      {
+        scrubbedDump:
+          cats.dump === true && extras.craftName
+            ? getCraftDump(localStorage, extras.craftName)
+            : null,
+        craftCard: extras.craftName
+          ? getCraftCard(localStorage, extras.craftName)
+          : null,
+        analysisContext: extras.pidAnalysis?.analysisContext ?? null,
+        logQuality: extras.logQuality ?? null,
+        fingerprint: buildFingerprint({
+          dataset: extras.dataset,
+          pidAnalysis: extras.pidAnalysis
+        }),
+        flightEvents: currentFlightEvents
       }
-    })
-    .catch(() => {
+    );
+
+    // Same flight already confirmed uploaded from this
+    // install — nothing new to say, skip entirely.
+    if (hasContributed(localStorage, contribution.contentHash)) {
       if (contributeStatus) {
         contributeStatus.textContent =
-          "Sharing failed (no connection) — the tool keeps working normally.";
+          "This flight was already shared earlier — not sent again.";
       }
-    });
+      return;
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = `Sharing: ${describeContribution({
+        fields: contribution.frames.fields,
+        frames: contribution.frames.frames,
+        gps: contribution.frames.gps,
+        categories: contribution.payload.categories
+      })} …`;
+    }
+
+    const result = await uploadContributionV1(
+      CONTRIBUTE_ENDPOINT,
+      contribution
+    );
+
+    if (result.ok) {
+      recordContributed(localStorage, contribution.contentHash);
+    }
+
+    if (contributeStatus) {
+      contributeStatus.textContent = result.ok
+        ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
+        : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+    }
+  } catch {
+    if (contributeStatus) {
+      contributeStatus.textContent =
+        "Sharing failed (no connection) — the tool keeps working normally.";
+    }
+  }
 }
 
 if (contributeToggle) {
@@ -2978,15 +4170,18 @@ if (contributeToggle) {
     refreshContributeCard();
   });
 
-  [contributePower, contributeGps, contributeSetup].forEach((el) => {
-    el.addEventListener("change", () => {
-      saveContributeCats({
-        power: contributePower.checked,
-        gps: contributeGps.checked,
-        setup: contributeSetup.checked
+  [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
+    (el) => {
+      el.addEventListener("change", () => {
+        saveContributeCats({
+          power: contributePower.checked,
+          gps: contributeGps.checked,
+          setup: contributeSetup.checked,
+          dump: contributeDump.checked
+        });
       });
-    });
-  });
+    }
+  );
 }
 
 if (contributeAsk && CONTRIBUTE_ENDPOINT) {
@@ -3000,7 +4195,8 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
       saveContributeCats({
         power: document.getElementById("askPower").checked,
         gps: document.getElementById("askGps").checked,
-        setup: document.getElementById("askSetup").checked
+        setup: document.getElementById("askSetup").checked,
+        dump: document.getElementById("askDump").checked
       });
       contributeAsk.hidden = true;
       refreshContributeCard();
@@ -3014,7 +4210,355 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
   }
 }
 
+if (dumpConsentInline) {
+  dumpConsentInline.addEventListener("change", () => {
+    const cats = loadContributeCats();
+    saveContributeCats({ ...cats, dump: dumpConsentInline.checked });
+    refreshContributeCard();
+  });
+}
+
 refreshContributeCard();
+
+// ======================================================
+// Craft class card — confirmed once per craft, local
+// model info first, contribution metadata second.
+// ======================================================
+
+const craftCardAsk = document.getElementById("craftCardAsk");
+const craftCardTitle = document.getElementById("craftCardTitle");
+const craftCardSize = document.getElementById("craftCardSize");
+const craftCardBlade = document.getElementById("craftCardBlade");
+const craftCardPower = document.getElementById("craftCardPower");
+const craftCardHeadspeed = document.getElementById("craftCardHeadspeed");
+const craftCardDrive = document.getElementById("craftCardDrive");
+const craftCardSave = document.getElementById("craftCardSave");
+const craftCardLater = document.getElementById("craftCardLater");
+const editCraftCardButton = document.getElementById("editCraftCardButton");
+
+const craftDumpPaste = document.getElementById("craftDumpPaste");
+const craftDumpStatus = document.getElementById("craftDumpStatus");
+const craftDumpOpenButton = document.getElementById("craftDumpOpenButton");
+const craftDumpFileInput = document.getElementById("craftDumpFileInput");
+
+const craftCardSkippedThisSession = new Set();
+let craftCardTarget = null;
+
+// The scrubbed dump staged in the open panel — persisted
+// per craft on Save. Only ever the SCRUBBED result; the
+// raw paste is never kept.
+let stagedCraftDump = null;
+
+function openCraftCardPanel(craftName, prefill) {
+  if (!craftCardAsk) return;
+
+  craftCardTarget = craftName;
+  craftCardTitle.textContent = `About your ${craftName}`;
+
+  const card = getCraftCard(localStorage, craftName) ?? prefill ?? {};
+
+  craftCardSize.value = card.size_class ?? "";
+  craftCardBlade.value = card.blade_length_mm ?? "";
+  craftCardPower.value = card.power_type ?? "";
+  craftCardHeadspeed.value = card.typical_headspeed_rpm ?? "";
+  craftCardDrive.value = card.drive ?? "";
+
+  stagedCraftDump = null;
+  craftDumpPaste.value = "";
+
+  // The inline dump-consent checkbox exists for ONE moment:
+  // a pilot who consented to sharing before the dump category
+  // existed, at their first dump read. Once answered — there,
+  // or on the first-run ask card — it never appears again.
+  dumpConsentRow.hidden = !(
+    contributionEnabled() && !dumpConsentAnswered()
+  );
+
+  const existingDump = getCraftDump(localStorage, craftName);
+  if (existingDump) {
+    showDumpResult(
+      null,
+      "This model already has its settings on file.",
+      `${existingDump.stats.kept} settings kept — read a dump again only to replace them.`
+    );
+  } else {
+    craftDumpStatus.hidden = true;
+  }
+
+  craftCardAsk.hidden = false;
+}
+
+// A dump arriving for the open panel — from paste, file, or
+// the Read-configuration button. Scrubbed immediately; the
+// read-back is a verdict-style panel that cannot be missed,
+// and the fields the dump filled flash green.
+function showDumpResult(kind, headline, detail) {
+  craftDumpStatus.hidden = false;
+  craftDumpStatus.classList.remove("good", "warn");
+  if (kind) {
+    craftDumpStatus.classList.add(kind);
+  }
+
+  craftDumpStatus.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = headline;
+  craftDumpStatus.appendChild(strong);
+  if (detail) {
+    craftDumpStatus.appendChild(document.createElement("br"));
+    craftDumpStatus.appendChild(document.createTextNode(detail));
+  }
+}
+
+function flashField(input) {
+  input.classList.add("field-flash");
+  setTimeout(() => input.classList.remove("field-flash"), 1400);
+}
+
+function stageCraftDump(text) {
+  if (!text || text.trim().length === 0) {
+    stagedCraftDump = null;
+    craftDumpStatus.hidden = true;
+    return;
+  }
+
+  if (!looksLikeDump(text)) {
+    stagedCraftDump = null;
+    showDumpResult(
+      "warn",
+      "That doesn't look like a Rotorflight `dump all` yet.",
+      "Paste (or pick) the whole output of the `dump all` CLI command."
+    );
+    return;
+  }
+
+  stagedCraftDump = scrubDump(text);
+
+  // Read from the RAW text for reassurance only — the pilot
+  // should see "it read the right aircraft".
+  const identity = readDumpIdentity(text);
+  const who = identity.craftName
+    ? `${identity.craftName}${identity.boardName ? ` on ${identity.boardName}` : ""}`
+    : null;
+  const matches =
+    who &&
+    craftCardTarget &&
+    identity.craftName.trim().toLowerCase() ===
+      craftCardTarget.trim().toLowerCase();
+
+  // The dump is the authority on what it knows — its values
+  // go straight into the form.
+  const fromDump = craftCardFromDump(stagedCraftDump.parsed);
+  const filled = [];
+  if (fromDump.power_type) {
+    craftCardPower.value = fromDump.power_type;
+    flashField(craftCardPower);
+    filled.push("power");
+  }
+  if (fromDump.typical_headspeed_rpm) {
+    craftCardHeadspeed.value = fromDump.typical_headspeed_rpm;
+    flashField(craftCardHeadspeed);
+    filled.push("headspeed");
+  }
+
+  const detail =
+    `${stagedCraftDump.stats.kept} settings kept, ` +
+    `${stagedCraftDump.stats.dropped} scrubbed away` +
+    (stagedCraftDump.report.length > 0
+      ? ` (${stagedCraftDump.report.join(", ")})`
+      : "") +
+    "." +
+    (filled.length > 0
+      ? ` Filled in: ${filled.join(" + ")}.`
+      : "") +
+    " Now check the values above and add what's missing — Save model closes the card.";
+
+  if (who && !matches) {
+    showDumpResult(
+      "warn",
+      `✓ Configuration read — but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
+      detail
+    );
+  } else {
+    showDumpResult(
+      "good",
+      who
+        ? `✓ Configuration read: ${who} — that's this model.`
+        : "✓ Configuration read.",
+      detail
+    );
+
+    // Reading is not the end: the pilot reviews and completes
+    // the card, and SAVE is the closing action. Steer there —
+    // scroll the fields back into view and focus the first one
+    // the dump could not know.
+    const nextField =
+      [craftCardSize, craftCardBlade, craftCardPower, craftCardHeadspeed, craftCardDrive]
+        .find((field) => !field.value) ?? craftCardSize;
+    nextField.scrollIntoView({ behavior: "smooth", block: "center" });
+    nextField.focus({ preventScroll: true });
+  }
+
+  // Users who consented to sharing before the dump category
+  // existed answer it once, right here: the pre-checked
+  // checkbox appears, its shown state stored immediately.
+  if (contributionEnabled() && !dumpConsentAnswered() && dumpConsentRow) {
+    dumpConsentRow.hidden = false;
+    saveContributeCats({
+      ...loadContributeCats(),
+      dump: dumpConsentInline.checked
+    });
+    refreshContributeCard();
+  }
+}
+
+const craftDumpReadButton = document.getElementById("craftDumpReadButton");
+
+if (craftDumpReadButton) {
+  craftDumpReadButton.addEventListener("click", () => {
+    if (craftDumpPaste.value.trim().length === 0) {
+      showDumpResult(
+        "warn",
+        "Nothing to read yet.",
+        "Paste your `dump all` above, or use the file button."
+      );
+      return;
+    }
+    stageCraftDump(craftDumpPaste.value);
+  });
+}
+
+if (craftDumpPaste) {
+  craftDumpPaste.addEventListener("input", () => {
+    stageCraftDump(craftDumpPaste.value);
+  });
+}
+
+if (craftDumpOpenButton) {
+  craftDumpOpenButton.addEventListener("click", () => {
+    craftDumpFileInput.click();
+  });
+
+  craftDumpFileInput.addEventListener("change", async () => {
+    const file = craftDumpFileInput.files[0];
+    if (file) {
+      stageCraftDump(await file.text());
+    }
+    craftDumpFileInput.value = "";
+  });
+}
+
+function maybeAskCraftCard(craftName) {
+  if (!craftCardAsk) return;
+  // Never stack on top of the sharing ask — the card
+  // simply waits for a later analysis of this craft.
+  if (contributeAsk && !contributeAsk.hidden) return;
+  if (craftName === "Unknown craft") return;
+  if (getCraftCard(localStorage, craftName)) return;
+  if (craftCardSkippedThisSession.has(craftName)) return;
+
+  openCraftCardPanel(
+    craftName,
+    prefillCraftCard({
+      medianHeadspeedRpm:
+        currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+      hasElectricalTelemetry:
+        currentDataset?.columnPresence?.hasVbat === true
+    })
+  );
+}
+
+if (craftCardSave) {
+  craftCardSave.addEventListener("click", () => {
+    if (craftCardTarget) {
+      saveCraftCard(localStorage, craftCardTarget, {
+        size_class: craftCardSize.value || null,
+        blade_length_mm: craftCardBlade.value,
+        power_type: craftCardPower.value || null,
+        typical_headspeed_rpm: craftCardHeadspeed.value,
+        drive: craftCardDrive.value || null
+      });
+
+      if (stagedCraftDump) {
+        saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
+      }
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+    stagedCraftDump = null;
+    refreshUnlockCard();
+  });
+}
+
+if (craftCardLater) {
+  craftCardLater.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+  });
+}
+
+if (editCraftCardButton) {
+  editCraftCardButton.addEventListener("click", () => {
+    const craft = historyCraftSelect.value;
+    if (craft) {
+      openCraftCardPanel(craft, prefillCraftCard({}));
+    }
+  });
+}
+
+// ---- the unlock nudge on Home ----
+// Visible while the analyzed craft has no CLI dump on
+// file; one click opens the craft panel. Sample flights
+// never nag — they are not the pilot's craft.
+const unlockDumpCard = document.getElementById("unlockDumpCard");
+const unlockDumpButton = document.getElementById("unlockDumpButton");
+let unlockCraftTarget = null;
+
+function refreshUnlockCard() {
+  if (!unlockDumpCard) return;
+  unlockDumpCard.hidden =
+    !unlockCraftTarget ||
+    Boolean(getCraftDump(localStorage, unlockCraftTarget));
+}
+
+function setUnlockCraft(craftName, isSample) {
+  unlockCraftTarget =
+    !isSample && craftName && craftName !== "Unknown craft"
+      ? craftName
+      : null;
+  refreshUnlockCard();
+}
+
+const craftCardClose = document.getElementById("craftCardClose");
+
+if (craftCardClose) {
+  craftCardClose.addEventListener("click", () => {
+    if (craftCardTarget) {
+      craftCardSkippedThisSession.add(craftCardTarget);
+    }
+    craftCardAsk.hidden = true;
+    craftCardTarget = null;
+    stagedCraftDump = null;
+  });
+}
+
+if (unlockDumpButton) {
+  unlockDumpButton.addEventListener("click", () => {
+    if (unlockCraftTarget) {
+      openCraftCardPanel(
+        unlockCraftTarget,
+        prefillCraftCard({
+          medianHeadspeedRpm:
+            currentDataset?.labs?.governor?.averageHeadspeed ?? null,
+          hasElectricalTelemetry:
+            currentDataset?.columnPresence?.hasVbat === true
+        })
+      );
+    }
+  });
+}
 
 // ======================================================
 // Welcome hero (empty state): extra open/sample buttons,
@@ -3091,3 +4635,125 @@ checkForUpdate(APP_VERSION).then((update) => {
     updateBanner.hidden = true;
   });
 });
+
+// ======================================================
+// Error report — the global net under everything else.
+// One dialog, one click; the pilot never debugs. The
+// report describes the software, never the flight.
+// ======================================================
+
+const errorReportOverlay = el("errorReportOverlay");
+const errorReportSummary = el("errorReportSummary");
+const errorReportSend = el("errorReportSend");
+const errorReportCopy = el("errorReportCopy");
+const errorReportClose = el("errorReportClose");
+
+let currentErrorBundle = null;
+
+function describeLoadedFile() {
+  if (!loadedLog) {
+    return null;
+  }
+
+  const flight = loadedLog.flights?.[0] ?? null;
+  const stats = flight?.stats ?? null;
+
+  return {
+    name: loadedLog.file?.name ?? null,
+    sizeKb: Number(loadedLog.sizeKb) || null,
+    frames: stats
+      ? (stats.intraFrames ?? 0) + (stats.interFrames ?? 0)
+      : null,
+    corruptFrames: stats?.corruptFrames ?? null,
+    sampleRateHz: currentDataset?.sampleRateHz ?? null
+  };
+}
+
+function showErrorReport(error) {
+  if (!errorReportOverlay) {
+    return;
+  }
+
+  currentErrorBundle = buildErrorBundle({
+    error,
+    screen:
+      document.querySelector("[data-screen].screen-active")?.dataset
+        .screen ?? null,
+    lastAction: lastUserAction,
+    file: describeLoadedFile()
+  });
+
+  errorReportSummary.textContent = currentErrorBundle.message;
+
+  // For support consoles and the smoke driver: the full bundle of
+  // the last caught error, inspectable from devtools.
+  window.__blackboxLabLastError = currentErrorBundle;
+
+  const fingerprint = bundleFingerprint(currentErrorBundle);
+  const canSend = Boolean(CONTRIBUTE_ENDPOINT);
+  const sentBefore =
+    canSend && alreadySent(localStorage, fingerprint);
+
+  errorReportSend.hidden = !canSend;
+  errorReportSend.disabled = sentBefore;
+  errorReportSend.textContent = sentBefore
+    ? "Report already sent — thank you!"
+    : "Send report";
+
+  errorReportOverlay.hidden = false;
+}
+
+if (errorReportClose) {
+  errorReportClose.addEventListener("click", () => {
+    errorReportOverlay.hidden = true;
+  });
+}
+
+if (errorReportCopy) {
+  errorReportCopy.addEventListener("click", async () => {
+    if (!currentErrorBundle) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        formatBundleText(currentErrorBundle)
+      );
+      errorReportCopy.textContent = "Copied!";
+      setTimeout(() => {
+        errorReportCopy.textContent = "Copy details";
+      }, 2000);
+    } catch {
+      // No clipboard available — the dialog stays usable.
+    }
+  });
+}
+
+if (errorReportSend) {
+  errorReportSend.addEventListener("click", async () => {
+    if (!currentErrorBundle) {
+      return;
+    }
+
+    errorReportSend.disabled = true;
+    errorReportSend.textContent = "Sending…";
+
+    const result = await sendErrorReport(
+      CONTRIBUTE_ENDPOINT,
+      currentErrorBundle
+    );
+
+    if (result.ok) {
+      markSent(
+        localStorage,
+        bundleFingerprint(currentErrorBundle)
+      );
+      errorReportSend.textContent = "Sent — thank you!";
+    } else {
+      errorReportSend.disabled = false;
+      errorReportSend.textContent = "Send failed — use Copy details";
+    }
+  });
+}
+
+installErrorCapture({ onError: showErrorReport });

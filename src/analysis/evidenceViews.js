@@ -155,22 +155,6 @@ export function findHighestLoadEvents(
   const events = [];
 
   for (const candidate of candidates) {
-    const overlaps = events.some(
-      (event) =>
-        candidate.startIndex <= event.endIndex &&
-        candidate.endIndex >= event.startIndex
-    );
-
-    if (overlaps) {
-      continue;
-    }
-
-    const stats = windowStats(
-      load,
-      candidate.startIndex,
-      candidate.endIndex
-    );
-
     let peakIndex = candidate.startIndex;
     let peakValue = -Infinity;
 
@@ -188,7 +172,32 @@ export function findHighestLoadEvents(
       }
     }
 
+    // Separate moments must be separated in time. Windows step a
+    // quarter-window at a time, so a single current spike sitting
+    // on a seam lands in two abutting windows: they never overlap
+    // by span, they each find their own peak sample either side of
+    // the seam, and the same spike gets listed twice with matching
+    // figures. Requiring a full window of clear air between events
+    // keeps one spike to one moment, while genuinely separate
+    // loads further apart than the window still both stand.
+    const tooClose = events.some(
+      (event) =>
+        candidate.startIndex <= event.endIndex + windowSamples &&
+        candidate.endIndex >= event.startIndex - windowSamples
+    );
+
+    if (tooClose) {
+      continue;
+    }
+
+    const stats = windowStats(
+      load,
+      candidate.startIndex,
+      candidate.endIndex
+    );
+
     events.push({
+      peakIndex,
       startIndex: candidate.startIndex,
       endIndex: candidate.endIndex,
       startSeconds: timeSeconds[candidate.startIndex],
@@ -362,4 +371,29 @@ export function groupByGovernorTarget({
       indexes: bank.indexes
     }))
     .sort((first, second) => first.targetRpm - second.targetRpm);
+}
+
+// Every consecutive run inside a sorted index list — the
+// multi-window spectra average across all of a bank's stable
+// stretches, not only its longest one.
+export function allConsecutiveRuns(indexes) {
+  if (!Array.isArray(indexes) || indexes.length === 0) {
+    return [];
+  }
+
+  const runs = [];
+  let runStart = indexes[0];
+  let runLength = 1;
+
+  for (let i = 1; i <= indexes.length; i += 1) {
+    if (indexes[i] === indexes[i - 1] + 1) {
+      runLength += 1;
+    } else {
+      runs.push({ startIndex: runStart, length: runLength });
+      runStart = indexes[i];
+      runLength = 1;
+    }
+  }
+
+  return runs;
 }

@@ -78,6 +78,151 @@ export function applyFeedforwardDoctrine(
   };
 }
 
+/**
+ * How much a timing check can be trusted, given how many clean command
+ * events it had to work with.
+ *
+ * One home for the thresholds: the per-axis confidence printed in the
+ * findings and the overall confidence rating are the same judgement,
+ * and a page that prints "Insufficient" beside "High 100/100" is
+ * telling a pilot two different things about one flight.
+ */
+export function commandEvidenceConfidence(eventCount) {
+  if (eventCount >= 10) return "High";
+  if (eventCount >= 5) return "Medium";
+  if (eventCount >= 2) return "Low";
+  return "Insufficient";
+}
+
+/**
+ * What the confidence rating owes to evidence the timing checks never
+ * had. Overshoot, bounce-back, settling and ringing are all measured
+ * from clean command events, so an axis with almost none leaves those
+ * checks unanswered however complete the log's columns are.
+ *
+ * Evidence is counted as clean responses, NOT as responses that
+ * misbehaved. An overshoot figure only exists where the response
+ * crossed past its target, so an axis that tracked well produces no
+ * overshoot numbers at all — counting those as missing evidence would
+ * mark down the best-flying machines for flying well.
+ */
+export function assessCommandEvidence(commandEvents = []) {
+  const axes = commandEvents.map((axisResult) => {
+    const events = Array.isArray(axisResult?.events)
+      ? axisResult.events
+      : [];
+
+    const usable = events.filter((event) =>
+      Number.isFinite(event?.responsePeak)
+    ).length;
+
+    return {
+      axis: axisResult?.axis ?? "Axis",
+      usableEvents: usable,
+      confidence: commandEvidenceConfidence(usable)
+    };
+  });
+
+  const penalty = axes.reduce((total, axis) => {
+    if (axis.confidence === "Insufficient") return total + 15;
+    if (axis.confidence === "Low") return total + 8;
+    return total;
+  }, 0);
+
+  return {
+    axes,
+    penalty,
+    thinAxes: axes.filter(
+      (axis) =>
+        axis.confidence === "Insufficient" || axis.confidence === "Low"
+    )
+  };
+}
+
+// ------------------------------------------------------
+// Tracking-score calibration
+//
+// The score is continuous: the deduction grows with the
+// measured relative tracking error instead of stepping in
+// fixed penalty sizes. The constants below are calibrated
+// against the contributed fleet so the spread carries
+// information — every value here is a dial, and the corpus
+// is the dyno it was set on.
+// ------------------------------------------------------
+export const TRACKING_SCORE_TUNING = {
+  // Denominator floor for relative error, in setpoint units —
+  // keeps a hover-only log from dividing by nearly zero.
+  SETPOINT_ACTIVITY_FLOOR: 25,
+
+  // Relative error at or below this deducts nothing. Fleet p05
+  // is 0.124 across 179 measured flights, so the cleanest decile
+  // keeps full marks.
+  FULL_MARKS_RELATIVE_ERROR: 0.15,
+
+  // Relative error at or above this takes the full deduction —
+  // beyond the fleet's p95 of 0.549, with headroom for genuinely
+  // rough machines (fleet max observed: 0.85).
+  ZERO_MARKS_RELATIVE_ERROR: 0.75,
+
+  MAX_TRACKING_DEDUCTION: 50,
+
+  BALANCE_DEDUCTION_PER_AXIS: 10,
+  MAX_BALANCE_DEDUCTION: 25,
+
+  SATURATION_DEDUCTION_PER_TERM: 6,
+  MAX_SATURATION_DEDUCTION: 18,
+
+  // One real-world flight cannot prove a mathematically
+  // perfect tune.
+  REAL_WORLD_MARGIN: 2
+};
+
+export function computeTrackingScore({
+  relativeError = null,
+  commandBalanceReviewCount = 0,
+  saturationReviewCount = 0
+} = {}) {
+  const tuning = TRACKING_SCORE_TUNING;
+
+  const trackingDeduction = Number.isFinite(relativeError)
+    ? Math.min(
+        1,
+        Math.max(
+          0,
+          (relativeError - tuning.FULL_MARKS_RELATIVE_ERROR) /
+            (tuning.ZERO_MARKS_RELATIVE_ERROR -
+              tuning.FULL_MARKS_RELATIVE_ERROR)
+        )
+      ) * tuning.MAX_TRACKING_DEDUCTION
+    : 0;
+
+  const balanceDeduction = Math.min(
+    tuning.MAX_BALANCE_DEDUCTION,
+    commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
+  );
+
+  const saturationDeduction = Math.min(
+    tuning.MAX_SATURATION_DEDUCTION,
+    saturationReviewCount * tuning.SATURATION_DEDUCTION_PER_TERM
+  );
+
+  return {
+    score: Math.max(
+      0,
+      Math.round(
+        100 -
+          tuning.REAL_WORLD_MARGIN -
+          trackingDeduction -
+          balanceDeduction -
+          saturationDeduction
+      )
+    ),
+    trackingDeduction: Math.round(trackingDeduction * 10) / 10,
+    balanceDeduction,
+    saturationDeduction
+  };
+}
+
 export function analyzePids(
   analysisContext,
   lines = [],
@@ -183,7 +328,108 @@ for (const rowSegment of stableRowSegments) {
   stableArrayOffset += segmentLength;
 }
 
-     
+// The command-event windows below are defined in SECONDS and
+// converted to samples here. "Stable for 0.2 s" has to mean the
+// same thing in a 100 Hz CSV export and a 1 kHz raw log — a
+// fixed sample count silently shrinks every window at higher
+// logging rates, which splits one stick movement into several
+// events and calls a mid-movement pause its target.
+const timeColumnName = allColumns.find((name) =>
+  /^"?time"?$/i.test(String(name).trim())
+);
+
+const stableTimeValues =
+  timeColumnName && hasStableFlightRows
+    ? getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        timeColumnName,
+        stableRowIndexes
+      )
+    : [];
+
+const samplesPerSecond = (() => {
+  for (const segment of stableArraySegments) {
+    if (segment.sampleCount < 50) {
+      continue;
+    }
+
+    const firstMicros = Number(
+      stableTimeValues[segment.startIndex]
+    );
+    const lastMicros = Number(
+      stableTimeValues[segment.endIndex]
+    );
+
+    if (
+      Number.isFinite(firstMicros) &&
+      Number.isFinite(lastMicros) &&
+      lastMicros > firstMicros
+    ) {
+      return (
+        ((segment.sampleCount - 1) /
+          (lastMicros - firstMicros)) *
+        1_000_000
+      );
+    }
+  }
+
+  return 100;
+})();
+
+const eventWindowSamples = (seconds, minimumSamples) =>
+  Math.max(
+    minimumSamples,
+    Math.round(seconds * samplesPerSecond)
+  );
+
+const commandChangeWindowSamples = eventWindowSamples(0.2, 5);
+const commandStableWindowSamples = eventWindowSamples(0.2, 5);
+const commandEndLookaheadSamples = eventWindowSamples(3, 60);
+const responseWindowLimitSamples = eventWindowSamples(2, 40);
+const minimumEventSpacingSamples = eventWindowSamples(0.5, 10);
+const settledWindowSamples = eventWindowSamples(0.2, 5);
+const minimumRingingWindowSamples = eventWindowSamples(0.2, 5);
+const minimumBounceBackSamples = eventWindowSamples(0.03, 3);
+
+// Event moments print as seconds from the start of the recording
+// — the same axis every chart shows — so a finding can be walked
+// straight to its place in the log.
+const firstDataRowTimeMicros = timeColumnName
+  ? Number(
+      getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        timeColumnName,
+        [telemetryHeaderIndex + 1]
+      )[0]
+    )
+  : Number.NaN;
+
+const stableSampleTimeSeconds = (compactedIndex) => {
+  const micros = Number(stableTimeValues[compactedIndex]);
+
+  return Number.isFinite(micros) &&
+    Number.isFinite(firstDataRowTimeMicros)
+    ? (micros - firstDataRowTimeMicros) / 1_000_000
+    : null;
+};
+
+const eventMomentText = (compactedIndex, rowIndex) => {
+  const seconds = stableSampleTimeSeconds(compactedIndex);
+
+  if (seconds === null) {
+    return Number.isInteger(rowIndex)
+      ? `data row ${rowIndex}`
+      : "Unavailable";
+  }
+
+  return `${seconds.toFixed(2)} s${
+    Number.isInteger(rowIndex) ? ` (data row ${rowIndex})` : ""
+  }`;
+};
+
+
 const recordedAxisErrorValues =
   axisErrorColumns.map((columnName) => ({
     columnName,
@@ -220,22 +466,6 @@ const filteredGyroValues =
         )
       : []
   }));
- console.log(
-  "PID DEBUG " +
-    JSON.stringify({
-      telemetryHeaderIndex,
-      stableRowCount: stableRowIndexes.length,
-      setpointColumns: axisSetpointColumns,
-      gyroColumns: filteredGyroColumns,
-      setpointValueCounts: axisSetpointValues.map(
-        (result) => result.values.length
-      ),
-      gyroValueCounts: filteredGyroValues.map(
-        (result) => result.values.length
-      ),
-      firstStableRows: stableRowIndexes.slice(0, 5)
-    })
-);
 const axisErrorValues =
   recordedAxisErrorValues.length === 3
     ? recordedAxisErrorValues
@@ -385,7 +615,7 @@ exceedancePercent: null
     const events = [];
     const values = setpointResult.values;
 
-    const minimumEventSpacing = 50;
+    const minimumEventSpacing = minimumEventSpacingSamples;
 
     for (const stableSegment of stableArraySegments) {
       const segmentStart =
@@ -399,11 +629,12 @@ exceedancePercent: null
 
       for (
         let sampleIndex =
-          Math.max(segmentStart + 20, 20);
+          segmentStart + commandChangeWindowSamples;
         sampleIndex <= segmentEnd;
         sampleIndex += 1
       ) {
-      const previousValue = values[sampleIndex - 20];
+      const previousValue =
+        values[sampleIndex - commandChangeWindowSamples];
       const currentValue = values[sampleIndex];
 
       const commandChange =
@@ -424,12 +655,20 @@ let commandEndSampleIndex =
   sampleIndex;
 
 let stableSampleCount = 0;
-const requiredStableSamples = 20;
+const requiredStableSamples = commandStableWindowSamples;
 
+// Both look-aheads stop at the segment edge: past it the
+// compacted array jumps to a different moment of the flight,
+// and a window that crosses that seam would read two distant
+// moments as if they were adjacent.
 for (
   let lookAheadIndex = sampleIndex + 1;
   lookAheadIndex <
-    Math.min(sampleIndex + 300, values.length);
+    Math.min(
+      sampleIndex + commandEndLookaheadSamples,
+      segmentEnd + 1,
+      values.length
+    );
   lookAheadIndex += 1
 ) {
   const lookAheadChange =
@@ -469,7 +708,8 @@ const responseWindowStart =
 
 const maximumResponseWindowEnd =
   Math.min(
-    responseWindowStart + 200,
+    responseWindowStart + responseWindowLimitSamples,
+    segmentEnd + 1,
     values.length,
     responseResult?.values.length ?? 0
   );
@@ -627,7 +867,7 @@ const validBounceBackWindow =
   validBounceBackWindow.length;
 
 const hasSufficientBounceBackWindow =
-  bounceBackSampleCount >= 3;
+  bounceBackSampleCount >= minimumBounceBackSamples;
   const bounceBackExtreme =
   hasSufficientBounceBackWindow
     ? commandDirection > 0
@@ -690,7 +930,7 @@ const bounceBackAmount =
           settlingTolerance
       )
     : [];
-    const requiredSettledSamples = 20;
+    const requiredSettledSamples = settledWindowSamples;
     let settlingStartOffset = null;
 let consecutiveSettledSamples = 0;
 
@@ -783,7 +1023,7 @@ for (
   significantRingingErrorWindow.length;
 
 const hasSufficientRingingWindow =
-  ringingSampleCount >= 20;
+  ringingSampleCount >= minimumRingingWindowSamples;
   const ringingEligible =
   !hasOverlappingCommand &&
   hasSufficientRingingWindow &&
@@ -833,8 +1073,28 @@ ringingEligible,
   responseWindow,
   responsePeak,
 responsePeakOffset,
-responsePeakSampleIndex
+responsePeakSampleIndex,
+  // Absolute data-row anchors: the compacted stable-array
+  // indexes above cannot be read against the flight timeline,
+  // so every consumer that names a time or draws a chart uses
+  // these instead.
+  sampleRowIndex:
+    stableRowIndexes[sampleIndex] ?? null,
+  commandEndRowIndex:
+    stableRowIndexes[commandEndSampleIndex] ?? null,
+  responsePeakRowIndex:
+    Number.isInteger(responsePeakSampleIndex)
+      ? stableRowIndexes[responsePeakSampleIndex] ?? null
+      : null
 });
+
+// One stick movement is one event: the scan resumes after the
+// command finished settling, so a long continuous input cannot
+// re-trigger every few tenths along its own rise.
+sampleIndex = Math.max(
+  sampleIndex,
+  commandEndSampleIndex
+);
       }
     }
     return {
@@ -944,6 +1204,18 @@ return {
     Number.isFinite(profile.averageTrackingError)
   );
 
+// Best and worst are answers to "compared with what?". One profile
+// answers it with itself: the same headspeed gets named as both the
+// lowest and the highest tracking error, which reads as a finding and
+// is only a reflection. Below two profiles there is no comparison to
+// report — the flight simply ran at one headspeed.
+const canCompareProfiles = validProfileTrackingResults.length >= 2;
+
+const onlyTrackingProfile =
+  validProfileTrackingResults.length === 1
+    ? validProfileTrackingResults[0]
+    : null;
+
 const bestTrackingProfile =
   validProfileTrackingResults.reduce(
     (best, profile) => {
@@ -983,6 +1255,38 @@ const averageAbsoluteAxisError =
     averageAbsoluteError:
       calculateAverageAbsolute(axisResult.values)
   }));
+
+// Tracking error only means something against how hard the machine
+// was being flown: 30 units of error is sloppy in a hover and
+// invisible in a full-rate flip. Each axis's error is read relative
+// to its own commanded magnitude, with a floor so a hover-only log
+// cannot divide by almost nothing.
+const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
+  (axisResult, index) => {
+    const setpointMagnitude = calculateAverageAbsolute(
+      axisSetpointValues[index]?.values ?? []
+    );
+
+    return Number.isFinite(axisResult.averageAbsoluteError) &&
+      Number.isFinite(setpointMagnitude)
+      ? axisResult.averageAbsoluteError /
+          Math.max(
+            setpointMagnitude,
+            TRACKING_SCORE_TUNING.SETPOINT_ACTIVITY_FLOOR
+          )
+      : null;
+  }
+);
+
+const finiteRelativeErrors = axisRelativeTrackingErrors.filter(
+  Number.isFinite
+);
+
+const meanRelativeTrackingError =
+  finiteRelativeErrors.length > 0
+    ? finiteRelativeErrors.reduce((sum, value) => sum + value, 0) /
+      finiteRelativeErrors.length
+    : null;
   
 
 
@@ -1670,6 +1974,16 @@ const pidTermContributionByAxis =
     Number.POSITIVE_INFINITY
   );
 
+// Tracking windows can come from airframe motion instead of rotor
+// speed (no-RPM logs). The measurements are real, but without rotor
+// context the stable-phase quality is weaker — the confidence cap
+// below says so.
+const motionBasisOnly =
+  headspeedProfiles.length > 0 &&
+  headspeedProfiles.every(
+    (profile) => profile.basis === "motion"
+  );
+
 let confidenceScore = 10;
 
 if (validAxisCount === 3) {
@@ -1688,6 +2002,23 @@ if (
   groupedPidColumns.feedforward.length === 3
 ) {
   confidenceScore += 20;
+}
+
+// Everything above this point rates the log: three axes present,
+// enough samples, every PID column detected. None of it asks whether
+// the checks built on those columns actually had anything to measure.
+// Overshoot, bounce-back, settling and ringing all need clean command
+// events, and an axis that yielded almost none leaves them unanswered
+// — which is a limit on the verdict, not a detail beneath it.
+const commandEvidence = assessCommandEvidence(commandEvents);
+
+confidenceScore = Math.max(
+  0,
+  confidenceScore - commandEvidence.penalty
+);
+
+if (motionBasisOnly) {
+  confidenceScore = Math.min(confidenceScore, 65);
 }
 
 const confidenceLevel =
@@ -1798,9 +2129,13 @@ const pidSummary = [
       } showed possible sustained saturation.`
     : "No sustained PID-term saturation pattern was identified.",
 
-  bestTrackingProfile
+  canCompareProfiles
     ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
-    : "A best tracking profile could not be identified."
+    : onlyTrackingProfile
+      ? Number.isFinite(onlyTrackingProfile.targetRpm)
+        ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
+        : "No rotor-speed data was logged, so tracking was measured over the moving parts of the flight and headspeeds cannot be compared."
+      : "A best tracking profile could not be identified."
 ];
 const hasCompleteTrackingEvidence =
   validAxisCount === 3 &&
@@ -1814,55 +2149,32 @@ const pidOverallStatus =
       : commandBalanceReviewAxes.length > 0
         ? "Review"
         : "Clear";
-      const pidScoreDeductions = {
-  commandBalance:
-    Math.min(
-      commandBalanceReviewAxes.length * 20,
-      40
-    ),
-
-  saturation:
-    Math.min(
-      saturationReviewTerms.length * 15,
-      45
-    ),
-realWorldMargin: 2,
-  incompleteTracking:
-    highestTrackingErrorAxis ? 0 : 15,
-
-  incompleteProfileComparison: 0
-    
-};
-
-
+      const scoreParts = computeTrackingScore({
+  relativeError: meanRelativeTrackingError,
+  commandBalanceReviewCount: commandBalanceReviewAxes.length,
+  saturationReviewCount: saturationReviewTerms.length
+});
 
 const pidScore =
-  hasCompleteTrackingEvidence
-    ? Math.max(
-        0,
-        100 -
-          pidScoreDeductions.commandBalance -
-          pidScoreDeductions.saturation -
-          pidScoreDeductions.realWorldMargin -
-          pidScoreDeductions.incompleteTracking -
-          pidScoreDeductions.incompleteProfileComparison
-      )
-    : null;
+  hasCompleteTrackingEvidence ? scoreParts.score : null;
+
 const pidScoreExplanation = [
-  `${pidScoreDeductions.realWorldMargin} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
+  `${TRACKING_SCORE_TUNING.REAL_WORLD_MARGIN} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
+  Number.isFinite(meanRelativeTrackingError)
+    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error — on average the response missed its commanded rate by ${Math.round(
+        meanRelativeTrackingError * 100
+      )}% of the commanded magnitude.`
+    : "Tracking error could not be measured against commanded motion.",
+
   commandBalanceReviewAxes.length > 0
-    ? `${pidScoreDeductions.commandBalance} points deducted because ${commandBalanceReviewAxes
+    ? `${scoreParts.balanceDeduction} points deducted because ${commandBalanceReviewAxes
         .map((axisResult) => axisResult.axis)
         .join(", ")} command balance requires review.`
     : "No points were deducted for command balance.",
 
   saturationReviewTerms.length > 0
-    ? `${pidScoreDeductions.saturation} points deducted because sustained PID-term saturation requires review.`
+    ? `${scoreParts.saturationDeduction} points deducted because sustained PID-term saturation requires review.`
     : "No points were deducted for PID-term saturation.",
-
-  !highestTrackingErrorAxis
-    ? `${pidScoreDeductions.incompleteTracking} points deducted because complete tracking data was unavailable.`
-    : "No points were deducted for missing tracking data.",
 
   bestTrackingProfile
   ? "No points were deducted for profile comparison data."
@@ -1881,6 +2193,16 @@ const pidScoreExplanation = [
     technicalSummary: {
   highestTrackingErrorAxis:
     highestTrackingErrorAxis?.axis ?? null,
+  meanRelativeTrackingError:
+    Number.isFinite(meanRelativeTrackingError)
+      ? Math.round(meanRelativeTrackingError * 1000) / 1000
+      : null,
+  axisRelativeTrackingErrors:
+    axisRelativeTrackingErrors.map((value) =>
+      Number.isFinite(value)
+        ? Math.round(value * 1000) / 1000
+        : null
+    ),
   bestTrackingProfileRpm:
     bestTrackingProfile?.targetRpm ?? null,
   commandBalanceReviewAxes:
@@ -2049,27 +2371,38 @@ const highestOvershootEvent =
     },
     null
   );
+  // An overshoot figure exists only where the response crossed past
+  // its target. Plenty of clean responses and no overshoot among them
+  // is an answer — the axis did not overshoot — not an absence of
+  // evidence. Confidence therefore follows how many clean responses
+  // the axis produced; only a shortage of THOSE leaves the question
+  // open.
+  const cleanResponseCount = axisResult.events.filter((event) =>
+    Number.isFinite(event.responsePeak)
+  ).length;
+
   const overshootConfidence =
-  
-  validOvershootEvents.length >= 10
-    ? "High"
-    : validOvershootEvents.length >= 5
-      ? "Medium"
-      : validOvershootEvents.length >= 2
-        ? "Low"
-        : "Insufficient";
+    commandEvidenceConfidence(cleanResponseCount);
+
+  const axisDidNotOvershoot =
+    cleanResponseCount >= 2 && validOvershootEvents.length === 0;
+
    const overshootRecommendation =
   overshootConfidence === "Insufficient" ||
   overshootConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating overshoot.`
-    : Number.isFinite(medianOvershootPercent) &&
+    : axisDidNotOvershoot
+      ? `${axisResult.axis} did not overshoot its target on any of the ${cleanResponseCount} clean responses measured.`
+      : Number.isFinite(medianOvershootPercent) &&
         medianOvershootPercent >= 25
       ? `Review ${axisResult.axis} for repeated overshoot. Confirm the pattern with another log before changing PID or feedforward values.`
-      : `No repeated ${axisResult.axis} overshoot pattern was identified from the available clean events.`;   
-  
+      : `No repeated ${axisResult.axis} overshoot pattern was identified from the available clean events.`;
+
 return [
   `${axisResult.axis} events with valid overshoot measurements: ${validOvershootEvents.length}`,
-  `${axisResult.axis} overshoot confidence: ${overshootConfidence}`,
+  `${axisResult.axis} overshoot confidence: ${overshootConfidence}${
+    axisDidNotOvershoot ? " (no overshoot occurred)" : ""
+  }`,
 `${axisResult.axis} overshoot recommendation: ${overshootRecommendation}`,
   
   `${axisResult.axis} average event overshoot: ${
@@ -2093,17 +2426,23 @@ return [
   
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — sample: ${
-      highestOvershootEvent.sample ?? "Unavailable"
+  ? `${axisResult.axis} highest overshoot event details — command at: ${
+      eventMomentText(
+        highestOvershootEvent.sampleIndex,
+        highestOvershootEvent.sampleRowIndex
+      )
     }, command end: ${
-      highestOvershootEvent.commandEnd ?? "Unavailable"
+      eventMomentText(
+        highestOvershootEvent.commandEndSampleIndex,
+        highestOvershootEvent.commandEndRowIndex
+      )
     }, previous setpoint: ${
       Number.isFinite(highestOvershootEvent.previousSetpoint)
         ? highestOvershootEvent.previousSetpoint.toFixed(2)
         : "Unavailable"
     }, target: ${
-      Number.isFinite(highestOvershootEvent.target)
-        ? highestOvershootEvent.target.toFixed(2)
+      Number.isFinite(highestOvershootEvent.commandTarget)
+        ? highestOvershootEvent.commandTarget.toFixed(2)
         : "Unavailable"
     }, command magnitude: ${
       Number.isFinite(highestOvershootEvent.commandMagnitude)
@@ -2186,8 +2525,27 @@ const trimmedMaximumBounceBackPercent =
     },
     null
     );
+    // A response can only bounce back from an overshoot, so an axis
+    // that never overshot offers nothing to measure — which is a
+    // result about the axis, not a gap in the log. Saying
+    // "Insufficient Data" there sends a pilot hunting for evidence
+    // their good flying is the reason they do not have. The whole
+    // block must tell that one story: an observation ("no overshoot
+    // to recover from") backed by the clean responses that justify
+    // it — never a "Clear" verdict sitting beside an Insufficient
+    // confidence and a plea for more data.
+    const cleanBounceResponseCount = axisResult.events.filter(
+      (event) => Number.isFinite(event.responsePeak)
+    ).length;
+
+    const nothingToBounceFrom =
+      validBounceBackEvents.length === 0 &&
+      cleanBounceResponseCount >= 2;
+
     const bounceBackConfidence =
-  validBounceBackEvents.length >= 5
+  nothingToBounceFrom
+    ? commandEvidenceConfidence(cleanBounceResponseCount)
+    : validBounceBackEvents.length >= 5
     ? "High"
     : validBounceBackEvents.length >= 3
       ? "Medium"
@@ -2195,15 +2553,20 @@ const trimmedMaximumBounceBackPercent =
         ? "Low"
         : "Insufficient";
         const bounceBackRecommendation =
-  bounceBackConfidence === "Insufficient" ||
+  nothingToBounceFrom
+    ? `${axisResult.axis} produced ${cleanBounceResponseCount} clean responses and none overshot, so there is no bounce-back to measure. No action needed.`
+    : bounceBackConfidence === "Insufficient" ||
   bounceBackConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating bounce-back.`
     : Number.isFinite(medianBounceBackPercent) &&
         medianBounceBackPercent >= 15
       ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
       : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
+
       const bounceBackStatus =
-  bounceBackConfidence === "Insufficient" ||
+  nothingToBounceFrom
+    ? "No overshoot to recover from"
+    : bounceBackConfidence === "Insufficient" ||
   bounceBackConfidence === "Low"
     ? "Insufficient Data"
     : Number.isFinite(medianBounceBackPercent) &&
@@ -2213,10 +2576,18 @@ const trimmedMaximumBounceBackPercent =
 return [
   `${axisResult.axis} events with valid bounce-back measurements: ${validBounceBackEvents.length}`,
   `${axisResult.axis} bounce-back status: ${bounceBackStatus}`,
-  `${axisResult.axis} bounce-back confidence: ${bounceBackConfidence}`,
-  `${axisResult.axis} bounce-back evidence: ${validBounceBackEvents.length} valid event${
-  validBounceBackEvents.length === 1 ? "" : "s"
-}`,
+  `${axisResult.axis} bounce-back confidence: ${bounceBackConfidence}${
+    nothingToBounceFrom
+      ? ` (based on ${cleanBounceResponseCount} clean responses, none overshot)`
+      : ""
+  }`,
+  `${axisResult.axis} bounce-back evidence: ${
+    nothingToBounceFrom
+      ? `${cleanBounceResponseCount} clean responses without overshoot — no bounce-back events expected`
+      : `${validBounceBackEvents.length} valid event${
+          validBounceBackEvents.length === 1 ? "" : "s"
+        }`
+  }`,
   `${axisResult.axis} bounce-back recommendation: ${bounceBackRecommendation}`,
 
   `${axisResult.axis} average event bounce-back: ${
@@ -2244,7 +2615,12 @@ return [
   }%`,
 
   highestBounceBackEvent
-    ? `${axisResult.axis} highest bounce-back event details — sample: ${highestBounceBackEvent.sampleIndex}, target: ${
+    ? `${axisResult.axis} highest bounce-back event details — command at: ${
+        eventMomentText(
+          highestBounceBackEvent.sampleIndex,
+          highestBounceBackEvent.sampleRowIndex
+        )
+      }, target: ${
         Number.isFinite(highestBounceBackEvent.commandTarget)
           ? highestBounceBackEvent.commandTarget.toFixed(2)
           : "Unavailable"
@@ -2565,7 +2941,11 @@ highestTrackingErrorAxis
     : [];
 
   return [
-    `${profile.targetRpm} RPM profile tracking from ${profile.sampleCount} samples:`,
+    `${
+      Number.isFinite(profile.targetRpm)
+        ? `${profile.targetRpm} RPM profile tracking`
+        : "Motion-based tracking (no rotor-speed data)"
+    } from ${profile.sampleCount} samples:`,
 
     ...(axisResults.length > 0
       ? axisResults.map((axisResult) =>
@@ -2581,13 +2961,26 @@ highestTrackingErrorAxis
   ];
 }),
 
-bestTrackingProfile
-  ? `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(2)}.`
-  : "A best tracking profile could not be identified.",
-
-worstTrackingProfile
-  ? `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(2)}.`
-  : "A worst tracking profile could not be identified.",
+...(canCompareProfiles
+  ? [
+      `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+        2
+      )}.`,
+      `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(
+        2
+      )}.`
+    ]
+  : onlyTrackingProfile
+    ? [
+        `${
+        Number.isFinite(onlyTrackingProfile.targetRpm)
+          ? `${onlyTrackingProfile.targetRpm} RPM was the only headspeed flown`
+          : "Tracking was measured over the moving parts of the flight (no rotor-speed data)"
+      }, with an average tracking error of ${onlyTrackingProfile.averageTrackingError.toFixed(
+          2
+        )}. Fly a second headspeed to compare them.`
+      ]
+    : ["Tracking could not be compared across headspeeds."]),
   ...pidCommandTermContributionPercentages.map(
   (axisResult) =>
     `${axisResult.axis} command-event PID contribution from ${

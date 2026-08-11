@@ -196,6 +196,10 @@ function buildHeader(preset, presetName) {
       "setpoint[1]",
       "setpoint[2]",
       "setpoint[3]",
+      "rcCommand[0]",
+      "rcCommand[1]",
+      "rcCommand[2]",
+      "rcCommand[3]",
       "gyroADC[0]",
       "gyroADC[1]",
       "gyroADC[2]",
@@ -211,13 +215,13 @@ function buildHeader(preset, presetName) {
     ],
     // I-frame: absolutes. unsigned VB for counters/positives,
     // signed VB for anything that can be negative.
-    iPredictors: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0],
-    iEncodings: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+    iPredictors: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0],
+    iEncodings: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
     // P-frame: deltas. loopIteration increments silently,
     // time extrapolates, PID terms exercise the TAG group
     // encodings, everything else is previous + SVB delta.
-    pPredictors: [6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    pEncodings: [9, 0, 7, 7, 7, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    pPredictors: [6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    pEncodings: [9, 0, 7, 7, 7, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   };
 
   const lines = [
@@ -407,6 +411,13 @@ export function generateFlight(presetName, durationSeconds, seed = 20260722) {
       Math.round(setpointAt(1, t, durationSeconds)),
       Math.round(setpointAt(2, t, durationSeconds)),
       Math.round(collective),
+      // Pilot input: deflection consistent with the setpoints —
+      // cyclic/yaw 1:1 (500 deg/s at full stick), collective on
+      // the deflection scale.
+      Math.round(setpointAt(0, t, durationSeconds)),
+      Math.round(setpointAt(1, t, durationSeconds)),
+      Math.round(setpointAt(2, t, durationSeconds)),
+      Math.round(collective * 5),
       Math.round(filtered[0]),
       Math.round(filtered[1]),
       Math.round(filtered[2]),

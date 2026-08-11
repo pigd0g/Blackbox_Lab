@@ -25,7 +25,7 @@ function getMedian(values) {
   return sorted[middle];
 }
 
-function estimateSampleRate(timeSeconds) {
+export function estimateSampleRate(timeSeconds) {
   if (!Array.isArray(timeSeconds) || timeSeconds.length < 3) {
     return null;
   }
@@ -64,7 +64,8 @@ function buildCandidateMask({
   timeSeconds,
   headspeed,
   governorTarget,
-  sampleCount
+  sampleCount,
+  sampleRateHz = 100
 }) {
   const mask =
     new Array(sampleCount).fill(false);
@@ -86,6 +87,19 @@ function buildCandidateMask({
         numericValue >= 500
       );
     });
+
+  // With no target to measure against, a plateau is found by asking
+  // whether rotor speed is going anywhere — which has to be asked of
+  // the trend, not of two lone samples four seconds apart. Sensor
+  // jitter alone clears the movement limit often enough to punch
+  // holes through every candidate stretch, and a plateau full of
+  // holes contains no segment long enough to count.
+  const smoothedHeadspeed = hasUsableGovernorTarget
+    ? null
+    : buildRollingMean(
+        headspeed.slice(0, sampleCount).map(Number),
+        Math.max(3, Math.round(sampleRateHz))
+      );
 
   let earlierIndex = 0;
   let laterIndex = 0;
@@ -186,12 +200,14 @@ function buildCandidateMask({
 
     const earlierActual =
       Number(
-        headspeed[earlierIndex]
+        smoothedHeadspeed?.[earlierIndex] ??
+          headspeed[earlierIndex]
       );
 
     const laterActual =
       Number(
-        headspeed[laterIndex]
+        smoothedHeadspeed?.[laterIndex] ??
+          headspeed[laterIndex]
       );
 
     if (
@@ -378,7 +394,7 @@ export function hasUsableRotorSpeed(values) {
   });
 }
 
-function buildRollingMean(values, windowSamples) {
+export function buildRollingMean(values, windowSamples) {
   const smoothed = new Array(values.length).fill(null);
 
   const half = Math.max(1, Math.round(windowSamples / 2));
@@ -610,7 +626,8 @@ const sampleCount =
           timeSeconds: alignedTime,
           headspeed: alignedHeadspeed,
           governorTarget: alignedTarget,
-          sampleCount
+          sampleCount,
+          sampleRateHz
         });
 
   const transitionCleanedMask =
@@ -685,4 +702,47 @@ export function selectStableValues(
   }
 
   return selectedValues;
+}
+
+// ------------------------------------------------------
+// detectInFlightSamples — every sample where the rotor is
+// carrying the machine, hard maneuvers included.
+//
+// The stable phase deliberately drops spool-up, profile
+// transitions and heavy-load excursions — right for
+// averages, wrong for questions like "did the power
+// system ever run out". A hard load event pulls the rotor
+// off its plateau, so it removes itself from the stable
+// set at exactly the moment the question matters. This
+// mask keeps those moments: smoothed rotor speed above
+// 70% of its own 95th percentile.
+// ------------------------------------------------------
+export function detectInFlightSamples({ timeSeconds, headspeed }) {
+  if (!hasUsableRotorSpeed(headspeed)) {
+    return null;
+  }
+
+  const sampleRate = estimateSampleRate(timeSeconds) ?? 100;
+  const windowSamples = Math.max(3, Math.round(sampleRate * 2));
+
+  const smoothed = buildRollingMean(headspeed, windowSamples);
+  const p95 = getPercentile(smoothed, 0.95);
+
+  if (!Number.isFinite(p95) || p95 < 500) {
+    return null;
+  }
+
+  const threshold = p95 * 0.7;
+  const inFlightIndexes = [];
+
+  for (let index = 0; index < smoothed.length; index += 1) {
+    if (
+      Number.isFinite(smoothed[index]) &&
+      smoothed[index] >= threshold
+    ) {
+      inFlightIndexes.push(index);
+    }
+  }
+
+  return inFlightIndexes.length >= 100 ? inFlightIndexes : null;
 }

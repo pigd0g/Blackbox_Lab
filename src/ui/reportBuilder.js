@@ -32,7 +32,11 @@ function chartImage(entry) {
 const STATUS = {
   good: { color: "#1e8449", soft: "#e9f7ef", word: "Looks good" },
   watch: { color: "#b9770e", soft: "#fdf3e3", word: "Worth watching" },
-  attention: { color: "#c0392b", soft: "#fdedec", word: "Needs attention" }
+  attention: { color: "#c0392b", soft: "#fdedec", word: "Needs attention" },
+  // A status the map has never heard of must read as unjudged,
+  // never borrow "Looks good" — missing data limits the
+  // conclusion, it does not upgrade it.
+  insufficient: { color: "#5d6d7e", soft: "#eef1f4", word: "Not evaluated" }
 };
 
 function escapeHtml(text) {
@@ -42,6 +46,62 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;");
 }
 
+// A shared report is read by people who never saw the app. Inside
+// the app, the Log Quality gate says what this log could and could
+// not support — the report has to say the same, or its reader
+// cannot tell "this area was fine" from "this area was never
+// judged". A fully qualified report depends on complete data;
+// where data was missing, the report says so instead of staying
+// silent.
+const QUALITY_LEVELS = {
+  full: { word: "FULL DATA", color: "#1f8f5f" },
+  partial: { word: "PARTIAL DATA", color: "#b07d10" },
+  missing: { word: "NO JUDGMENT", color: "#b3423a" }
+};
+
+function buildQualityHtml(quality) {
+  if (!quality || !Array.isArray(quality.capabilities)) {
+    return "";
+  }
+
+  const rows = quality.capabilities
+    .map((capability) => {
+      const level =
+        QUALITY_LEVELS[capability.level] ?? QUALITY_LEVELS.partial;
+
+      const note =
+        capability.level === "missing"
+          ? `No judgment was possible on this area — ${escapeHtml(
+              capability.note
+            )}`
+          : escapeHtml(capability.note);
+
+      return `
+      <div class="basis-row">
+        <span class="basis-name">${escapeHtml(capability.name)}</span>
+        <span class="basis-level" style="color:${level.color};">${
+          level.word
+        }</span>
+        <div class="basis-note">${note}</div>
+      </div>`;
+    })
+    .join("");
+
+  const warnings = (quality.warnings ?? [])
+    .map(
+      (warning) =>
+        `<div class="basis-note basis-warning">${escapeHtml(warning)}</div>`
+    )
+    .join("");
+
+  return `
+  <h2>What This Report Is Based On</h2>
+  <p class="summary">${escapeHtml(quality.summary ?? "")} A fully
+  qualified report depends on all telemetry being logged — areas
+  without their data are stated below rather than judged.</p>
+  <div class="basis">${rows}${warnings}</div>`;
+}
+
 export function buildReportHtml({
   fileName,
   craftName,
@@ -49,7 +109,8 @@ export function buildReportHtml({
   durationSeconds,
   verdict,
   labs,
-  chartElements
+  chartElements,
+  quality = null
 }) {
   const date = new Date().toLocaleString();
 
@@ -74,7 +135,7 @@ export function buildReportHtml({
 
   const cardsHtml = (verdict?.cards ?? [])
     .map((card) => {
-      const status = STATUS[card.status] ?? STATUS.good;
+      const status = STATUS[card.status] ?? STATUS.insufficient;
 
       return `
       <div class="verdict" style="border-left-color:${status.color};background:${status.soft};">
@@ -96,7 +157,7 @@ export function buildReportHtml({
   const labsHtml = (labs ?? [])
     .filter((lab) => lab && lab.analysis)
     .map((lab) => {
-      const status = STATUS[lab.analysis.status] ?? STATUS.good;
+      const status = STATUS[lab.analysis.status] ?? STATUS.insufficient;
 
       const tiles = lab.analysis.metrics
         .map(
@@ -148,7 +209,7 @@ export function buildReportHtml({
     font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
     color: #1c2733;
     line-height: 1.55;
-    font-size: 15px;
+    font-size: 16px;
   }
   .page { max-width: 880px; margin: 0 auto; padding: 26px 18px 60px 18px; }
   .masthead {
@@ -159,21 +220,21 @@ export function buildReportHtml({
     box-shadow: 0 10px 30px rgba(13, 21, 36, 0.25);
   }
   .masthead h1 { margin: 0; font-size: 26px; letter-spacing: 0.2px; }
-  .masthead .sub { color: #9cc3f5; margin-top: 3px; font-size: 14px; }
+  .masthead .sub { color: #9cc3f5; margin-top: 3px; font-size: 15px; }
   .meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 14px;
     margin-top: 20px;
   }
-  .meta-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #8fb3dd; }
-  .meta-value { font-weight: 600; font-size: 15px; margin-top: 2px; color: #ffffff; overflow-wrap: anywhere; }
+  .meta-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8fb3dd; }
+  .meta-value { font-weight: 600; font-size: 16px; margin-top: 2px; color: #ffffff; overflow-wrap: anywhere; }
 
   h2 {
-    font-size: 15px; letter-spacing: 1.6px; text-transform: uppercase;
+    font-size: 16px; letter-spacing: 1.6px; text-transform: uppercase;
     color: #5a6b80; margin: 34px 4px 12px 4px;
   }
-  .summary { font-size: 17px; margin: 0 4px 14px 4px; color: #1c2733; }
+  .summary { font-size: 18px; margin: 0 4px 14px 4px; color: #1c2733; }
 
   .verdict {
     background: #ffffff; border: 1px solid #e3e8ef; border-left: 6px solid;
@@ -182,11 +243,11 @@ export function buildReportHtml({
   }
   .verdict-top { display: flex; align-items: baseline; }
   .verdict-title { font-weight: 700; }
-  .verdict-status { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-  .verdict-headline { font-size: 16.5px; font-weight: 650; margin-top: 4px; }
-  .verdict-detail { color: #46586d; margin-top: 3px; font-size: 14px; }
+  .verdict-status { margin-left: auto; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .verdict-headline { font-size: 17.5px; font-weight: 650; margin-top: 4px; }
+  .verdict-detail { color: #46586d; margin-top: 3px; font-size: 15px; }
   .verdict-action {
-    margin-top: 9px; font-size: 13.5px; color: #2c3e50;
+    margin-top: 9px; font-size: 14.5px; color: #2c3e50;
     background: rgba(255, 255, 255, 0.75); border-radius: 8px; padding: 8px 12px;
   }
 
@@ -196,24 +257,36 @@ export function buildReportHtml({
     box-shadow: 0 2px 8px rgba(13, 21, 36, 0.05);
   }
   .lab-head { display: flex; align-items: baseline; }
-  .lab-name { font-weight: 700; font-size: 16px; }
-  .lab-status { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .lab-name { font-weight: 700; font-size: 17px; }
+  .lab-status { margin-left: auto; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   .lab-story { border-left: 3px solid; padding-left: 12px; margin: 10px 0 12px 0; color: #2c3e50; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .tile { background: #f4f7fb; border: 1px solid #e3e8ef; border-radius: 9px; padding: 9px 12px; }
-  .tile-label { font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
-  .tile-value { font-weight: 650; margin-top: 2px; font-size: 14.5px; }
+  .tile-label { font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
+  .tile-value { font-weight: 650; margin-top: 2px; font-size: 15.5px; }
+
+  .basis {
+    background: #ffffff; border: 1px solid #e3e8ef; border-radius: 12px;
+    padding: 8px 18px 12px 18px; margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(13, 21, 36, 0.05);
+  }
+  .basis-row { padding: 10px 0; border-bottom: 1px solid #eef1f6; }
+  .basis-row:last-of-type { border-bottom: none; }
+  .basis-name { font-weight: 700; }
+  .basis-level { float: right; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; }
+  .basis-note { color: #46586d; font-size: 14.5px; margin-top: 3px; clear: both; }
+  .basis-warning { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e3e8ef; }
 
   .chart-panel {
     background: #101a2c; border-radius: 14px; padding: 14px 14px 8px 14px;
     margin: 12px 0; box-shadow: 0 6px 18px rgba(13, 21, 36, 0.18);
   }
-  .chart-title { color: #b9c9e6; font-size: 13px; font-weight: 600; letter-spacing: 0.4px; margin: 0 4px 10px 4px; }
+  .chart-title { color: #b9c9e6; font-size: 14px; font-weight: 600; letter-spacing: 0.4px; margin: 0 4px 10px 4px; }
   .chart-panel img { width: 100%; display: block; border-radius: 8px; }
 
   .footer {
     margin-top: 40px; padding-top: 14px; border-top: 1px solid #d7dee8;
-    color: #7c8da1; font-size: 12px;
+    color: #7c8da1; font-size: 13px;
   }
   @media print {
     body { background: #ffffff; }
@@ -233,6 +306,8 @@ export function buildReportHtml({
   <h2>Verdict</h2>
   <p class="summary">${escapeHtml(verdict?.summary ?? "")}</p>
   ${cardsHtml}
+
+  ${buildQualityHtml(quality)}
 
   ${labsHtml ? `<h2>Lab Details</h2>${labsHtml}` : ""}
 

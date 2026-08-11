@@ -14,6 +14,9 @@
 //
 // ======================================================
 
+import { VIBRATION_FLOOR_HZ } from "./dsp/fft.js";
+import { assessVibrationConclusion } from "./vibrationSeverity.js";
+
 function averageOf(values) {
   if (!values || values.length === 0) {
     return null;
@@ -31,19 +34,19 @@ function averageOf(values) {
 // ------------------------------------------------------
 // Vibration verdict — from the noise spectrum peaks
 // ------------------------------------------------------
-function vibrationVerdict(spectra, headspeedRpm) {
+function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
   if (!spectra || spectra.length === 0) {
     return null;
   }
 
-  // Strongest peak above 10 Hz across all gyro axes.
+  // Strongest peak above the vibration floor across all gyro axes.
   let peakHz = 0;
   let peakMagnitude = 0;
 
   for (const { spectrum } of spectra) {
     for (let i = 0; i < spectrum.frequencies.length; i += 1) {
       if (
-        spectrum.frequencies[i] > 10 &&
+        spectrum.frequencies[i] >= VIBRATION_FLOOR_HZ &&
         spectrum.magnitudes[i] > peakMagnitude
       ) {
         peakMagnitude = spectrum.magnitudes[i];
@@ -77,39 +80,56 @@ function vibrationVerdict(spectra, headspeedRpm) {
   const magnitudeLabel = peakMagnitude.toFixed(1);
   const hzLabel = peakHz.toFixed(0);
 
-  if (peakMagnitude > 8) {
-    return {
-      key: "vibration",
-      title: "Vibration",
-      status: "attention",
-      headline: `Strong vibration at ${hzLabel} Hz`,
-      detail: `The biggest shake (amplitude ${magnitudeLabel}) comes from ${source}.`,
-      action: "Fix the mechanics before touching filters: balance the blades, check head damping and bearings. Filters hide vibration — they don't cure it.",
-      screen: "filter",
-      evidence: "Noise Spectrum chart, Filter Lab"
-    };
-  }
+  // Filtering evidence for THIS peak, when the advisor measured it:
+  // raw amplitude alone never decides the verdict again.
+  const advisorRow =
+    filterAdvice?.rows?.find(
+      (row) => Math.abs(row.hz - peakHz) <= 3
+    ) ?? null;
 
-  if (peakMagnitude > 3) {
-    return {
-      key: "vibration",
-      title: "Vibration",
-      status: "watch",
-      headline: `Moderate vibration at ${hzLabel} Hz`,
-      detail: `Noticeable but not alarming (amplitude ${magnitudeLabel}); it comes from ${source}.`,
-      action: "Worth a look at blade balance next time you're at the bench; no urgency.",
-      screen: "filter",
-      evidence: "Noise Spectrum chart, Filter Lab"
-    };
-  }
+  const conclusion = assessVibrationConclusion({
+    rawMagnitude: peakMagnitude,
+    hz: peakHz,
+    source,
+    reductionPercent: advisorRow?.reductionPercent ?? null,
+    residualMagnitude: advisorRow?.filteredMagnitude ?? null,
+    trackingConcern: Number.isFinite(pidAnalysis?.score)
+      ? pidAnalysis.score < 70
+      : null
+  });
+
+  // Detection stays sensitive; the card's status follows the
+  // evidence-gated conclusion. A managed strong peak stays visible
+  // as "watch" — filters do not remove vibration from bearings.
+  const status =
+    conclusion.level === "strong" || conclusion.level === "suspected"
+      ? "attention"
+      : conclusion.level === "review" ||
+          (conclusion.managed && peakMagnitude > 8)
+        ? "watch"
+        : "good";
+
+  const headline =
+    conclusion.level === "observed" && peakMagnitude > 3
+      ? `Vibration at ${hzLabel} Hz — managed by filtering`
+      : peakMagnitude > 8
+        ? `Strong vibration at ${hzLabel} Hz`
+        : peakMagnitude > 3
+          ? `Vibration at ${hzLabel} Hz`
+          : "Vibration levels look healthy";
+
+  const detail =
+    peakMagnitude > 3
+      ? `${conclusion.detected} ${conclusion.filtering} ${conclusion.impact}`
+      : `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz — a clean, well-balanced machine.`;
 
   return {
     key: "vibration",
     title: "Vibration",
-    status: "good",
-    headline: "Vibration levels look healthy",
-    detail: `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz — a clean, well-balanced machine.`,
-    action: "Nothing to do — keep it this way.",
+    status,
+    headline,
+    detail,
+    action: conclusion.recommendation,
     screen: "filter",
     evidence: "Noise Spectrum chart, Filter Lab"
   };
@@ -233,6 +253,24 @@ function tuningVerdict(pidAnalysis) {
     };
   }
 
+  // The card and the PID Lab must tell the same story: when the
+  // Lab's own status says "Review", the Home card cannot say
+  // "crisp" — whatever the score. One source of truth.
+  if (overallStatus === "Review") {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: `Tracking score ${score}/100 — with items to review`,
+      detail:
+        "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
+      action:
+        "Open the PID Lab and read its review items — they say exactly where to look.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
+  }
+
   if (score < 75) {
     return {
       key: "tuning",
@@ -314,6 +352,37 @@ function rotorSpeedVerdictFromLab(governorLab) {
     return null;
   }
 
+  // Models that state no governor target still get a rotor
+  // story: hold judged against the rotor's own trend. Without
+  // a target there is no contract to break, so this card never
+  // goes past "watch".
+  if (
+    governorLab.mode === "headspeed-hold" &&
+    governorLab.status !== "insufficient" &&
+    Number.isFinite(governorLab.droopRpm)
+  ) {
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: governorLab.status,
+      headline:
+        governorLab.status === "good"
+          ? `Headspeed held steady near ${governorLab.averageHeadspeed} rpm`
+          : `Headspeed swung ${Math.round(
+              governorLab.droopRpm
+            )} rpm short-term`,
+      detail: `No governor target is logged, so hold is judged against the rotor's own trend: largest short-term swing ${Math.round(
+        governorLab.droopRpm
+      )} rpm (${governorLab.droopPercent.toFixed(1)}%).`,
+      action:
+        governorLab.status === "good"
+          ? "Nothing to change from this result."
+          : "Worth a look at that moment in the Governor Lab chart — deliberate headspeed changes are not counted against this.",
+      screen: "governor",
+      evidence: "Headspeed Over Time chart, Governor Lab"
+    };
+  }
+
   if (
     governorLab.status === "insufficient" ||
     !Number.isFinite(governorLab.droopRpm)
@@ -348,17 +417,54 @@ function rotorSpeedVerdictFromLab(governorLab) {
   const droopRpm = governorLab.droopRpm;
   const droopPercent = governorLab.droopPercent;
 
+  // A deep sustained dip under load anywhere in the flight is
+  // the headline, and the motor output at that moment decides
+  // what the card recommends: at the ceiling, the fix is power,
+  // not governor gain.
+  const flightDipSevere =
+    Number.isFinite(governorLab.flightDroopPercent) &&
+    governorLab.flightDroopPercent > 8;
+
+  if (flightDipSevere) {
+    const outputAtCeiling =
+      Number.isFinite(governorLab.flightDroopOutputPercent) &&
+      governorLab.flightDroopOutputPercent >= 95;
+
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: "attention",
+      headline: `Rotor fell ${Math.round(
+        governorLab.flightDroopRpm
+      )} rpm under load`,
+      detail: `A sustained ${governorLab.flightDroopPercent.toFixed(
+        1
+      )}% dip below target${
+        Number.isFinite(governorLab.flightDroopOutputPercent)
+          ? ` with the motor output at ${Math.round(
+              governorLab.flightDroopOutputPercent
+            )}%`
+          : ""
+      }.`,
+      action: outputAtCeiling
+        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the moment."
+        : "Review the worst-droop event in Governor Lab before changing gain or power-system settings.",
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
+    };
+  }
+
   if (governorLab.status === "attention") {
     return {
       key: "rotor",
       title: "Rotor Speed",
       status: "attention",
-      headline: `Largest stable-flight dip ${Math.round(
+      headline: `Sustained dip of ${Math.round(
         droopRpm
-      )} rpm`,
+      )} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
         1
-      )}% below target during stable flight.`,
+      )}% below target, held for a quarter second or longer.`,
       action:
         "Review the matching event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
@@ -371,9 +477,9 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: "watch",
-      headline: `Largest stable-flight dip ${Math.round(
+      headline: `Sustained dip of ${Math.round(
         droopRpm
-      )} rpm`,
+      )} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
         1
       )}% below target. Review the event before making a governor change.`,
@@ -388,8 +494,8 @@ function rotorSpeedVerdictFromLab(governorLab) {
     key: "rotor",
     title: "Rotor Speed",
     status: "good",
-    headline: "Rock-solid stable-flight headspeed",
-    detail: `Largest stable-flight dip was ${Math.round(
+    headline: "Rock-solid headspeed",
+    detail: `Largest sustained dip was ${Math.round(
       droopRpm
     )} rpm (${droopPercent.toFixed(1)}%).`,
     action: "Nothing to change from this result.",
@@ -437,7 +543,7 @@ function batteryVerdictFromLab(batteryLab) {
       title: "Battery",
       status: "attention",
       headline: "Low voltage observed during stable flight",
-      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+      detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
         2
       )} V per cell.`,
       action:
@@ -453,7 +559,7 @@ function batteryVerdictFromLab(batteryLab) {
       title: "Battery",
       status: "watch",
       headline: "Loaded voltage is worth reviewing",
-      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+      detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
         2
       )} V per cell. This alone does not prove the pack is weak.`,
       action:
@@ -468,7 +574,7 @@ function batteryVerdictFromLab(batteryLab) {
     title: "Battery",
     status: "good",
     headline: "Battery held up well",
-    detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+    detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
       2
     )} V per cell. No clear evidence of a weak or tired pack.`,
     action: "Nothing to change from this result.",
@@ -476,6 +582,40 @@ function batteryVerdictFromLab(batteryLab) {
     evidence: "Voltage Over the Flight chart, Battery Lab"
   };
 }
+// ------------------------------------------------------
+// Power verdict — motor output headroom, from the ESC Lab
+// ------------------------------------------------------
+function powerVerdictFromLab(escLab) {
+  if (!escLab || escLab.status === "insufficient") {
+    return null;
+  }
+
+  const headline =
+    escLab.status === "attention"
+      ? "The power system ran out of headroom"
+      : escLab.status === "watch"
+        ? "Power headroom is getting thin"
+        : "Plenty of power in reserve";
+
+  const action =
+    escLab.status === "attention"
+      ? "Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the exact moments."
+      : escLab.status === "watch"
+        ? "Fine for now — worth remembering before asking the machine for more."
+        : "Nothing to do.";
+
+  return {
+    key: "power",
+    title: "Power & ESC",
+    status: escLab.status,
+    headline,
+    detail: escLab.story,
+    action,
+    screen: "esc",
+    evidence: "Throttle Output chart, ESC Lab"
+  };
+}
+
 // ------------------------------------------------------
 // buildFlightVerdict — the one call the renderer makes
 // ------------------------------------------------------
@@ -485,16 +625,26 @@ export function buildFlightVerdict({
   governorTarget,
   vbat,
   pidAnalysis,
-  labs
+  labs,
+  anchorHeadspeedRpm,
+  filterAdvice = null
 }) {
-  const governedHeadspeed = headspeed
-    ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
-    : null;
+  // Peak naming needs the rotor speed the machine flew at. The
+  // caller passes the stable-flight mean when one exists; the
+  // tail-of-log average remains only as a fallback.
+  const governedHeadspeed =
+    (Number.isFinite(anchorHeadspeedRpm) && anchorHeadspeedRpm > 0
+      ? anchorHeadspeedRpm
+      : null) ??
+    (headspeed
+      ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
+      : null);
 
   const cards = [
-  vibrationVerdict(spectra, governedHeadspeed),
+  vibrationVerdict(spectra, governedHeadspeed, filterAdvice, pidAnalysis),
   rotorSpeedVerdictFromLab(labs?.governor),
   tuningVerdict(pidAnalysis),
+  powerVerdictFromLab(labs?.esc),
   batteryVerdictFromLab(labs?.battery)
 ].filter(Boolean);
 
