@@ -54,11 +54,39 @@ Commit the change and publish a new release — from that version on,
 the app asks pilots on first launch and contributed logs start
 arriving in your bucket.
 
+## Updating the worker (when this repo's worker file changes)
+
+The worker is one file, and updating it is the same move as
+installing it — all in the browser, about a minute:
+
+1. **Workers & Pages** → `blackbox-ingest` → **Edit code**.
+2. Select everything, delete, paste the current contents of
+   `Documentation/ingest-worker.js` from this repo.
+3. Click **Deploy**. The bucket binding and the address stay as
+   they are — nothing else to reconfigure, and the app needs no
+   change.
+
+Worth doing whenever a release notes mention the worker: the
+current version stores each contribution at the content-hash
+address the app gives it, which means the same flight contributed
+twice lands on itself (one copy per distinct flight, automatically),
+a contribution's parts stay together under one prefix, and error
+reports file into their own `errors/` area instead of between the
+flights. Older app versions keep working — their uploads land in a
+`legacy/` prefix.
+
 ## Reading the collected logs
 
-R2 → `blackbox-logs` → files are grouped by date, one JSON file
-(gzipped) per contributed flight. Download from the browser, or ask
-for tooling to analyze them in bulk once there's a pile.
+R2 → `blackbox-logs`:
+
+- `contrib/<schema>/<hash>/` — one folder per distinct contributed
+  flight (payload, frames, and dump when shared).
+- `errors/` — one small JSON per distinct in-app error report.
+- `legacy/` and date-named files — uploads from releases before the
+  addressed layout, grouped by date.
+
+Download from the browser, or ask for tooling to analyze them in
+bulk once there's a pile.
 
 ## Costs and abuse
 
