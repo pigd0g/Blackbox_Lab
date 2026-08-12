@@ -407,12 +407,15 @@ function overshootAxis(axis, events) {
 }
 
 test("ringing overshoots suggest damping up", () => {
-  const events = [30, 35, 40, 32, 38].map((overshoot, index) =>
-    overshootEvent({ overshoot, ringing: 4, index })
+  // The fleet-anchored trigger needs nearly every command
+  // overshooting, by a lot: 12 of 12, median well over 115%.
+  const events = [120, 135, 140, 132, 138, 125, 150, 118, 122, 145, 128, 131].map(
+    (overshoot, index) =>
+      overshootEvent({ overshoot, ringing: index < 8 ? 4 : 0, index })
   );
 
   const result = buildRecommendations({
-    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    trackingAnalysis: { commandEvents: [{ axis: "Roll", events }] },
     timeSeconds
   });
 
@@ -428,18 +431,19 @@ test("ringing overshoots suggest damping up", () => {
 
 test("overshoot growing with command rate suggests feedforward down", () => {
   // Same command size, varying duration: faster command = bigger
-  // overshoot. Size is constant so it cannot be the driver.
-  const durations = [40, 30, 20, 10, 5, 4];
+  // overshoot. Size is constant so it cannot be the driver. Every
+  // event clears the fleet bars (all big, median >115%).
+  const durations = [40, 35, 30, 25, 20, 15, 10, 8, 6, 5, 4, 4];
   const events = durations.map((durationSamples, index) =>
     overshootEvent({
-      overshoot: 10 + (100 / durationSamples) * 3,
+      overshoot: 100 + (100 / durationSamples) * 5,
       durationSamples,
       index
     })
   );
 
   const result = buildRecommendations({
-    trackingAnalysis: { commandEvents: [overshootAxis("Pitch", events)] },
+    trackingAnalysis: { commandEvents: [{ axis: "Pitch", events }] },
     timeSeconds
   });
 
@@ -455,11 +459,11 @@ test("overshoot growing with command rate suggests feedforward down", () => {
 
 test("overshoot growing with command size suggests proportional down", () => {
   // Duration scales with size, so the RATE is constant — only the
-  // size can be the driver.
-  const sizes = [60, 90, 120, 180, 240, 300];
+  // size can be the driver. Every event clears the fleet bars.
+  const sizes = [60, 80, 100, 120, 140, 160, 180, 200, 220, 250, 280, 300];
   const events = sizes.map((size, index) =>
     overshootEvent({
-      overshoot: 10 + size / 8,
+      overshoot: 90 + size / 4,
       size,
       durationSamples: size / 10,
       index
@@ -467,7 +471,7 @@ test("overshoot growing with command size suggests proportional down", () => {
   );
 
   const result = buildRecommendations({
-    trackingAnalysis: { commandEvents: [overshootAxis("Yaw", events)] },
+    trackingAnalysis: { commandEvents: [{ axis: "Yaw", events }] },
     timeSeconds
   });
 
@@ -482,21 +486,28 @@ test("overshoot growing with command size suggests proportional down", () => {
 });
 
 test("an inseparable driver names both knobs, feedforward first", () => {
-  // Overshoot uncorrelated with either candidate.
+  // Overshoot uncorrelated with either candidate; all events clear
+  // the fleet bars so only the driver question stays open.
   const rows = [
-    { overshoot: 30, size: 100, durationSamples: 10 },
-    { overshoot: 45, size: 100, durationSamples: 10 },
-    { overshoot: 28, size: 200, durationSamples: 20 },
-    { overshoot: 50, size: 200, durationSamples: 20 },
-    { overshoot: 33, size: 150, durationSamples: 15 },
-    { overshoot: 41, size: 150, durationSamples: 15 }
+    { overshoot: 130, size: 100, durationSamples: 10 },
+    { overshoot: 145, size: 100, durationSamples: 10 },
+    { overshoot: 128, size: 200, durationSamples: 20 },
+    { overshoot: 150, size: 200, durationSamples: 20 },
+    { overshoot: 133, size: 150, durationSamples: 15 },
+    { overshoot: 141, size: 150, durationSamples: 15 },
+    { overshoot: 126, size: 120, durationSamples: 12 },
+    { overshoot: 148, size: 120, durationSamples: 12 },
+    { overshoot: 135, size: 180, durationSamples: 18 },
+    { overshoot: 139, size: 180, durationSamples: 18 },
+    { overshoot: 124, size: 160, durationSamples: 16 },
+    { overshoot: 143, size: 160, durationSamples: 16 }
   ];
   const events = rows.map((row, index) =>
     overshootEvent({ ...row, index })
   );
 
   const result = buildRecommendations({
-    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    trackingAnalysis: { commandEvents: [{ axis: "Roll", events }] },
     timeSeconds
   });
 
@@ -524,12 +535,12 @@ test("one big overshoot is not a pattern", () => {
 });
 
 test("vibration silences overshoot advice too", () => {
-  const events = [30, 35, 40, 32, 38].map((overshoot, index) =>
-    overshootEvent({ overshoot, ringing: 4, index })
+  const events = [120, 135, 140, 132, 138, 125, 150, 118, 122, 145, 128, 131].map(
+    (overshoot, index) => overshootEvent({ overshoot, ringing: 4, index })
   );
 
   const result = buildRecommendations({
-    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    trackingAnalysis: { commandEvents: [{ axis: "Roll", events }] },
     timeSeconds,
     vibrationConcern: true
   });
@@ -607,5 +618,24 @@ test("vibration silences governor advice too — filters before governor", () =>
   assert.ok(
     !tailRec.gatedReason.includes("yaw_collective_ff_gain"),
     "vibration-suspect tail read still handed out the knob"
+  );
+});
+
+
+test("ordinary fleet-level overshoot never triggers a recommendation", () => {
+  // The fleet's MEDIAN axis: most commands overshoot ~47%. That is
+  // the measurement's norm, not a tuning fault — no card.
+  const events = [40, 55, 47, 60, 35, 50, 45, 52, 38, 48, 44, 58].map(
+    (overshoot, index) => overshootEvent({ overshoot, index })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [{ axis: "Roll", events }] },
+    timeSeconds
+  });
+
+  assert.equal(
+    result.pid.find((r) => r.id === "pid:Roll:overshoot"),
+    undefined
   );
 });

@@ -39,10 +39,21 @@ export const RECOMMENDATION_GATE = {
   // machine: zero), so three same-cause excursions in ONE flight
   // is already a strong pattern.
   GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3,
-  // Overshoot driver disambiguation: the review threshold matches
-  // the Flight Events verdict; the correlation constants are what
-  // "clearly rate-driven" has to mean before a knob is named.
+  // Overshoot: fleet-calibrated 2026-08-12 (247 contributed
+  // flights, 528 axes with enough clean commands). The raw
+  // overshoot measurement reads high as its NORM — the fleet's
+  // median axis shows 73% of its commands past 25% overshoot with
+  // a median magnitude of 47% — so an absolute-percent trigger
+  // would fire on the median machine and describe the formula.
+  // The recommendation trigger is therefore anchored to the fleet
+  // distribution: nearly every command overshooting (share ≥ 0.95
+  // ≈ fleet p90), by a lot (median ≥ 115% ≈ fleet p90 of per-axis
+  // medians), at least three times. 4.9% of fleet axes clear all
+  // three bars — an overshoot recommendation means something.
   OVERSHOOT_REVIEW_PERCENT: 25,
+  OVERSHOOT_MINIMUM_EVENTS: 3,
+  OVERSHOOT_SHARE_MINIMUM: 0.95,
+  OVERSHOOT_MEDIAN_MINIMUM_PERCENT: 115,
   OVERSHOOT_CORRELATION_MINIMUM_EVENTS: 5,
   OVERSHOOT_CORRELATION_STRONG: 0.6,
   OVERSHOOT_CORRELATION_GAP: 0.25
@@ -371,13 +382,25 @@ function buildOvershootRecommendation({
       event.overshootPercent >= gate.OVERSHOOT_REVIEW_PERCENT
   );
 
-  if (big.length < gate.MINIMUM_EVENTS) {
+  const medianBig = big.length
+    ? big
+        .map((event) => event.overshootPercent)
+        .sort((a, b) => a - b)[Math.floor(big.length / 2)]
+    : null;
+
+  // The fleet-anchored trigger: all three bars, or silence. See
+  // the calibration note on the gate constants — anything looser
+  // fires on the median machine.
+  if (
+    big.length < gate.OVERSHOOT_MINIMUM_EVENTS ||
+    cleanResponses.length === 0 ||
+    big.length / cleanResponses.length <
+      gate.OVERSHOOT_SHARE_MINIMUM ||
+    !Number.isFinite(medianBig) ||
+    medianBig < gate.OVERSHOOT_MEDIAN_MINIMUM_PERCENT
+  ) {
     return null;
   }
-
-  const medianBig = big
-    .map((event) => event.overshootPercent)
-    .sort((a, b) => a - b)[Math.floor(big.length / 2)];
 
   const finding =
     `${axis} overshot its target by ${gate.OVERSHOOT_REVIEW_PERCENT}%+ on ` +
