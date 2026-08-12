@@ -43,10 +43,33 @@ is that answer.
   and when NOT to change anything — plus a fuller written version in
   `Documentation/READING_THE_FINDINGS.md`.
 
+- **The overshoot driver, answered carefully.** Repeated overshoot
+  now gets its own recommendation — and the engine reads what
+  drives it before naming a knob: overshoots that ring point at
+  damping; overshoot growing with how FAST the command moved
+  carries the feedforward signature; growing with how BIG the
+  command was, the proportional one. When the driver is not
+  separable from the log, the card says so and names both knobs in
+  doctrine order, feedforward first, one at a time.
+- **Precomp trends across flights.** The Health Record now tracks
+  each flight's precomp reads — rise-side droop, drop-side
+  overspeed, tail kick ratio — and warns when they worsen across
+  sessions, the way it already watches vibration and droop. Trends
+  on metrics that live near zero carry an absolute floor, so a
+  rise from nothing to almost nothing can never read as a
+  deterioration.
+
 ### Also in
 
 - Governor & precomp settings from the craft's saved configuration
   shown beside the events they produced (advanced view).
+- Contribution schema 1.2: governor excursion events and the
+  precomp balance reads now travel with contributed flights — the
+  same allowlist-on-write, consent and caps as the command events;
+  pilot-facing text never uploads.
+- The ingest guide gains browser-only steps for updating the
+  worker, and describes the addressed bucket layout (one folder
+  per distinct flight, error reports in their own area).
 - Stick insets across the app now hide cleanly on logs without
   rcCommand telemetry instead of rendering an empty box.
 
