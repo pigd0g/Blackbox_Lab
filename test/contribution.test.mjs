@@ -199,7 +199,7 @@ test("v1 envelope carries schema version, tier, id and hash", async () => {
   const { payload, contentHash, contributionId } =
     await buildContributionV1(makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "0.4.0");
 
-  assert.equal(payload.schema_version, "1.1");
+  assert.equal(payload.schema_version, "1.2");
   assert.equal(payload.tier, 1);
   assert.equal(payload.app_version, "0.4.0");
   assert.match(
@@ -526,9 +526,9 @@ test("fingerprint degrades to nulls when analyses are absent", () => {
 test("bucket paths follow the schema version, keyed by content hash", () => {
   const paths = contributionPaths("abc123");
 
-  assert.equal(paths.payload, "contrib/1.1/abc123/payload.json");
-  assert.equal(paths.frames, "contrib/1.1/abc123/frames.bin.gz");
-  assert.equal(paths.dump, "contrib/1.1/abc123/dump.txt");
+  assert.equal(paths.payload, "contrib/1.2/abc123/payload.json");
+  assert.equal(paths.frames, "contrib/1.2/abc123/frames.bin.gz");
+  assert.equal(paths.dump, "contrib/1.2/abc123/dump.txt");
 });
 
 test("schema 1.1: events travel compact and capped; absent stays honest", async () => {
@@ -566,4 +566,76 @@ test("upload ledger: a confirmed hash is never offered twice", () => {
   recordContributed(storage, "hash-a");
   assert.equal(hasContributed(storage, "hash-a"), true);
   assert.equal(hasContributed(storage, "hash-b"), false);
+});
+
+test("schema 1.2: governor events travel allowlisted; stories and ids stay local", async () => {
+  const governorEvents = {
+    events: Array.from({ length: 120 }, (_, i) => ({
+      id: `gov:${i}:${i + 50}`,
+      kind: i % 2 ? "under" : "over",
+      cause: "collective-drop",
+      hunting: true,
+      t: i,
+      tPeak: i + 0.2,
+      tEnd: i + 0.5,
+      durationMs: 500,
+      peakErrorPercent: 7.1,
+      peakErrorRpm: 142,
+      targetRpm: 2000,
+      outputMaxPercent: 71.5,
+      collectiveBefore: "drop",
+      story: "PILOT-FACING STORY MUST NOT TRAVEL"
+    })),
+    summary: {
+      total: 120, totalFound: 120, dropped: 0,
+      under: 60, over: 60, powerLimit: 0, hunting: 120,
+      worst: null, sentence: "UI SENTENCE MUST NOT TRAVEL"
+    }
+  };
+
+  const precomp = {
+    transientCount: 40, riseCount: 20, dropCount: 20,
+    governor: {
+      balance: "high", riseDroopPercent: 0.4,
+      dropOvershootPercent: 4.4, riseCount: 20, dropCount: 20,
+      story: "STORY MUST NOT TRAVEL"
+    },
+    tail: {
+      balance: "coupled", kickRatio: 5.1, baselineError: 4,
+      transientError: 62, consistency: 0.9, kickCount: 18,
+      story: "STORY MUST NOT TRAVEL"
+    }
+  };
+
+  const result = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "1.1.0",
+    { governorEvents, precomp }
+  );
+
+  assert.equal(result.payload.governor_events.length, 100, "not capped");
+
+  const [event] = result.payload.governor_events;
+  assert.equal(event.cause, "collective-drop");
+  assert.equal(event.peak_error_percent, 7.1);
+  assert.ok(!("story" in event), "story leaked");
+  assert.ok(!("id" in event), "local id leaked");
+  assert.ok(!("collectiveBefore" in event), "unlisted field leaked");
+
+  assert.equal(result.payload.governor_events_summary.power_limit, 0);
+  assert.ok(
+    !("sentence" in result.payload.governor_events_summary),
+    "UI sentence leaked"
+  );
+
+  assert.equal(result.payload.precomp.governor.balance, "high");
+  assert.equal(result.payload.precomp.tail.kick_ratio, 5.1);
+  assert.ok(!("story" in result.payload.precomp.governor), "story leaked");
+  assert.ok(!("story" in result.payload.precomp.tail), "story leaked");
+
+  const withoutAny = await buildContributionV1(
+    makeFlight(), "Blackbox BBL Log", V1_ALL_ON, "1.1.0"
+  );
+  assert.deepEqual(withoutAny.payload.governor_events, []);
+  assert.equal(withoutAny.payload.governor_events_summary, null);
+  assert.equal(withoutAny.payload.precomp, null);
 });

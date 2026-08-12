@@ -4515,7 +4515,9 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
           dataset: extras.dataset,
           pidAnalysis: extras.pidAnalysis
         }),
-        flightEvents: currentFlightEvents
+        flightEvents: currentFlightEvents,
+        governorEvents: extras.dataset?.governorEvents ?? null,
+        precomp: extras.dataset?.precomp ?? null
       }
     );
 
