@@ -580,11 +580,28 @@ const { mkdirSync } = require("node:fs");
     droop: document.getElementById("droopContextCard").offsetParent !== null,
     note: document.querySelector(
       'section[data-screen="governor"] .peek-advanced-note'
-    ).hidden
+    ).hidden,
+    // The dump saved earlier in this run carries gov_mode and
+    // gov_headspeed — the settings card must surface them here.
+    settingsRows: document.querySelectorAll(
+      "#governorSettingsTable tr"
+    ).length,
+    settingsVisible:
+      document.getElementById("governorSettingsCard").offsetParent !==
+      null
   }));
   if (!peekState.droop || peekState.note) {
     throw new Error("peek did not reveal advanced data: " + JSON.stringify(peekState));
   }
+  if (!peekState.settingsVisible || peekState.settingsRows < 3) {
+    throw new Error(
+      "governor settings card missing its dump values: " +
+        JSON.stringify(peekState)
+    );
+  }
+  console.log(
+    `governor settings ok: ${peekState.settingsRows - 1} value row(s) from the saved dump`
+  );
   await window.screenshot({ path: "smoke-shots/13b-governor-peek.png" });
   await window.click('section[data-screen="governor"] .peek-advanced-link');
   const peekOff = await window.evaluate(

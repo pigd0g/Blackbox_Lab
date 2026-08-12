@@ -2219,6 +2219,64 @@ function renderGovernorEvents(dataset) {
   }
 }
 
+// The governor- and precomp-family settings worth showing beside
+// the headspeed events, in reading order. Names verified against a
+// real Rotorflight 4.6 `dump all`; keys a firmware version does not
+// have simply do not appear — nothing is guessed or defaulted.
+const GOVERNOR_SETTING_KEYS = [
+  "gov_mode",
+  "gov_headspeed",
+  "gov_gain",
+  "gov_p_gain",
+  "gov_i_gain",
+  "gov_d_gain",
+  "gov_f_gain",
+  "gov_tta_gain",
+  "gov_cyclic_ff_weight",
+  "gov_collective_ff_weight",
+  "gov_spoolup_time",
+  "gov_min_throttle",
+  "gov_max_throttle",
+  "yaw_collective_ff_gain",
+  "yaw_cyclic_ff_gain",
+  "pitch_f_gain",
+  "pitch_o_gain"
+];
+
+function renderGovernorSettings(dataset) {
+  const card = el("governorSettingsCard");
+  const table = el("governorSettingsTable");
+
+  if (!card || !table) return;
+
+  const craftName = dataset?.craftName;
+  const dump = craftName ? getCraftDump(localStorage, craftName) : null;
+  const parsed = dump?.parsed ?? null;
+
+  const rows = parsed
+    ? GOVERNOR_SETTING_KEYS.filter((key) => parsed[key] !== undefined)
+    : [];
+
+  if (rows.length === 0) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  table.innerHTML = `
+    <tr><th>Setting</th><th>Value</th></tr>
+    ${rows
+      .map(
+        (key) => `
+      <tr>
+        <td>${key}</td>
+        <td>${String(parsed[key])}</td>
+      </tr>`
+      )
+      .join("")}
+  `;
+}
+
 const AXIS_INDEX = { roll: 0, pitch: 1, yaw: 2 };
 
 function hideEventDetail() {
@@ -3679,6 +3737,7 @@ function analyzeFlight(flightIndex) {
     "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed can still be viewed, but governor tracking and droop cannot be scored."
   );
   renderGovernorEvents(currentDataset);
+  renderGovernorSettings(currentDataset);
   renderLab(
     currentDataset?.labs.esc,
     escStory,
@@ -4677,6 +4736,9 @@ if (craftCardSave) {
 
       if (stagedCraftDump) {
         saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
+        // The Governor Lab's settings card reads from this dump —
+        // reflect a fresh save without needing a reload.
+        renderGovernorSettings(currentDataset);
       }
     }
     craftCardAsk.hidden = true;
