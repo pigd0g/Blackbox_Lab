@@ -83,6 +83,7 @@ export function buildRecommendations({
   commandBalanceReviewAxes = [],
   timeSeconds = null,
   governorEvents = null,
+  precomp = null,
   vibrationConcern = false
 } = {}) {
   return {
@@ -92,7 +93,10 @@ export function buildRecommendations({
       timeSeconds,
       vibrationConcern
     }),
-    governor: buildGovernorRecommendations({ governorEvents })
+    governor: buildGovernorRecommendations({
+      governorEvents,
+      precomp
+    })
   };
 }
 
@@ -236,13 +240,8 @@ function buildPidRecommendations({
   return recommendations;
 }
 
-function buildGovernorRecommendations({ governorEvents }) {
+function buildGovernorRecommendations({ governorEvents, precomp }) {
   const events = governorEvents?.events ?? [];
-
-  if (events.length === 0) {
-    return [];
-  }
-
   const gate = RECOMMENDATION_GATE;
   const recommendations = [];
 
@@ -332,6 +331,163 @@ function buildGovernorRecommendations({ governorEvents }) {
       gatedReason: gated
         ? `Two occurrences is a hint, not a pattern (confidence ${confidence}). Fly another log with the same moves and re-read this page.`
         : null
+    });
+  }
+
+  // ---- precomp balance (the ratio view) ----
+  //
+  // The event layer sees excursions past the fleet band; the ratio
+  // view sees the systematic lean UNDER it. They agree by
+  // construction (same error signal), so when the event-based
+  // precomp recommendation already fired, the ratio adds nothing
+  // and stays quiet.
+  const governorBalance = precomp?.governor ?? null;
+  const eventRecAlreadyFired = recommendations.some(
+    (rec) => rec.id === "governor:precomp-overshoot"
+  );
+
+  if (
+    governorBalance &&
+    governorBalance.balance &&
+    governorBalance.balance !== "balanced" &&
+    powerLimitEvents.length === 0 &&
+    !eventRecAlreadyFired
+  ) {
+    const sideCounts = `${governorBalance.riseCount} rises / ${governorBalance.dropCount} drops`;
+
+    const confidence =
+      governorBalance.riseCount >= 2 * gate.MINIMUM_EVENTS &&
+      governorBalance.dropCount >= 2 * gate.MINIMUM_EVENTS
+        ? "High"
+        : "Medium";
+
+    const gated = confidence !== "High";
+
+    if (governorBalance.balance === "low") {
+      recommendations.push({
+        id: "governor:precomp-low",
+        lab: "governor",
+        finding: `Fast collective rises pull the rotor a median ${governorBalance.riseDroopPercent}% under target while drops stay clean (${sideCounts} measured).`,
+        hypothesis:
+          "Droop that only appears when load ARRIVES is anticipation running behind: the governor waits to see the error instead of feeding power with the collective. More collective precomp asks for the power before the load does.",
+        evidence: [
+          {
+            kind: "precomp-balance",
+            riseDroopPercent: governorBalance.riseDroopPercent,
+            dropOvershootPercent:
+              governorBalance.dropOvershootPercent,
+            riseCount: governorBalance.riseCount,
+            dropCount: governorBalance.dropCount
+          }
+        ],
+        confidence,
+        suggestion: gated
+          ? null
+          : {
+              family: "gov_f_gain",
+              direction: "up",
+              magnitudeClass: "small step"
+            },
+        expectedResult: gated
+          ? null
+          : "The rise-side droop in the Precomp Balance read shrinks, without new overspeed appearing on drops.",
+        verifyMetric: gated
+          ? null
+          : "the rise-droop number in the Governor Lab's Precomp Balance",
+        gatedReason: gated
+          ? `Not enough collective moves in both directions yet (${sideCounts}). Fly a log with a few honest pumps each way and re-read this page.`
+          : null
+      });
+    } else if (governorBalance.balance === "high") {
+      recommendations.push({
+        id: "governor:precomp-high",
+        lab: "governor",
+        finding: `Fast collective drops push the rotor a median ${governorBalance.dropOvershootPercent}% over target while rises stay clean (${sideCounts} measured).`,
+        hypothesis:
+          "Overspeed that only appears when load LEAVES is anticipation overshooting: the precomp keeps feeding power the load no longer needs. Less collective precomp, or more governor damping, absorbs it — the smaller change first.",
+        evidence: [
+          {
+            kind: "precomp-balance",
+            riseDroopPercent: governorBalance.riseDroopPercent,
+            dropOvershootPercent:
+              governorBalance.dropOvershootPercent,
+            riseCount: governorBalance.riseCount,
+            dropCount: governorBalance.dropCount
+          }
+        ],
+        confidence,
+        suggestion: gated
+          ? null
+          : {
+              family: "gov_f_gain",
+              direction: "down",
+              magnitudeClass: "small step"
+            },
+        expectedResult: gated
+          ? null
+          : "The drop-side overspeed in the Precomp Balance read shrinks, without new droop appearing on rises.",
+        verifyMetric: gated
+          ? null
+          : "the drop-overspeed number in the Governor Lab's Precomp Balance",
+        gatedReason: gated
+          ? `Not enough collective moves in both directions yet (${sideCounts}). Fly a log with a few honest pumps each way and re-read this page.`
+          : null
+      });
+    } else if (governorBalance.balance === "lagging") {
+      recommendations.push({
+        id: "governor:response-lag",
+        lab: "governor",
+        finding: `The rotor misses its target both ways around collective moves — droop ${governorBalance.riseDroopPercent}% on rises AND overspeed ${governorBalance.dropOvershootPercent}% on drops (${sideCounts} measured).`,
+        hypothesis:
+          "Missing in both directions is not a precomp balance problem — precomp trades one side against the other. A governor late both ways is a response-speed story, and that lives in its gain and the power system's headroom together.",
+        evidence: [
+          {
+            kind: "precomp-balance",
+            riseDroopPercent: governorBalance.riseDroopPercent,
+            dropOvershootPercent:
+              governorBalance.dropOvershootPercent,
+            riseCount: governorBalance.riseCount,
+            dropCount: governorBalance.dropCount
+          }
+        ],
+        confidence,
+        suggestion: null,
+        expectedResult: null,
+        verifyMetric: null,
+        gatedReason:
+          "Two-sided lag needs the ESC Lab's headroom read next to it before any governor value moves — check that page first."
+      });
+    }
+  }
+
+  // ---- tail precomp coupling ----
+  const tailBalance = precomp?.tail ?? null;
+
+  if (tailBalance?.balance === "coupled") {
+    recommendations.push({
+      id: "governor:tail-coupling",
+      lab: "governor",
+      finding: `Collective moves kick the tail ${tailBalance.kickRatio}× harder than its ordinary error (median ${tailBalance.transientError} deg/s across ${tailBalance.kickCount} moves, ${Math.round(tailBalance.consistency * 100)}% in a consistent direction).`,
+      hypothesis:
+        "A tail that only misbehaves during collective transients is torque anticipation, not tail tuning: the collective feedforward into yaw is not matching the torque change. The knob is the collective-to-yaw precomp — but its direction depends on rotor rotation, which a log does not state.",
+      evidence: [
+        {
+          kind: "tail-coupling",
+          kickRatio: tailBalance.kickRatio,
+          transientError: tailBalance.transientError,
+          consistency: tailBalance.consistency,
+          kickCount: tailBalance.kickCount
+        }
+      ],
+      confidence:
+        tailBalance.kickCount >= 2 * gate.MINIMUM_EVENTS
+          ? "High"
+          : "Medium",
+      suggestion: null,
+      expectedResult: null,
+      verifyMetric: null,
+      gatedReason:
+        "Step yaw_collective_ff_gain one small step in either direction and fly the same pumps: if the kick grows, go the other way. The Precomp Balance read here is the before/after judge."
     });
   }
 

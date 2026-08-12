@@ -107,6 +107,7 @@ import {
   governorEventWindow
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
+import { analyzePrecomp } from "./analysis/precompAnalysis.js";
 import {
   sliceWindow,
   windowStats,
@@ -1864,6 +1865,17 @@ if (sampleRate && hasSpectrumRuns) {
       motorOutput: motorOutputForGovernor,
       collective
     }),
+    // How the anticipation worked: collective transients against
+    // headspeed error (governor precomp) and yaw error (tail
+    // torque precomp).
+    precomp: analyzePrecomp({
+      timeSeconds,
+      headspeed,
+      governorTarget,
+      collective,
+      yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
+      yawGyro: firstColumn([/^gyroADC\[2\]$/i])
+    }),
     verdict
   };
 }
@@ -2287,6 +2299,67 @@ const GOVERNOR_SETTING_KEYS = [
   "pitch_f_gain",
   "pitch_o_gain"
 ];
+
+function renderPrecompBalance(dataset) {
+  const card = el("precompBalanceCard");
+  const governorStoryElement = el("precompGovernorStory");
+  const tailStoryElement = el("precompTailStory");
+  const metricsElement = el("precompMetrics");
+
+  if (!card) return;
+
+  const precomp = dataset?.precomp;
+
+  if (!precomp || (!precomp.governor && !precomp.tail)) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+
+  if (governorStoryElement) {
+    governorStoryElement.hidden = !precomp.governor;
+    governorStoryElement.textContent =
+      precomp.governor?.story ?? "";
+  }
+
+  if (tailStoryElement) {
+    tailStoryElement.hidden = !precomp.tail;
+    tailStoryElement.textContent = precomp.tail?.story ?? "";
+  }
+
+  const metrics = [];
+
+  if (Number.isFinite(precomp.governor?.riseDroopPercent)) {
+    metrics.push({
+      label: "Rise droop (median)",
+      value: `${precomp.governor.riseDroopPercent}%`
+    });
+  }
+
+  if (Number.isFinite(precomp.governor?.dropOvershootPercent)) {
+    metrics.push({
+      label: "Drop overspeed (median)",
+      value: `${precomp.governor.dropOvershootPercent}%`
+    });
+  }
+
+  if (precomp.transientCount > 0) {
+    metrics.push({
+      label: "Collective moves read",
+      value: `${precomp.riseCount} up · ${precomp.dropCount} down`
+    });
+  }
+
+  if (Number.isFinite(precomp.tail?.kickRatio)) {
+    metrics.push({
+      label: "Tail kick vs baseline",
+      value: `${precomp.tail.kickRatio}×`
+    });
+  }
+
+  renderMetricGrid(metricsElement, metrics);
+}
 
 function renderGovernorSettings(dataset) {
   const card = el("governorSettingsCard");
@@ -3783,6 +3856,7 @@ function analyzeFlight(flightIndex) {
   );
   renderGovernorEvents(currentDataset);
   renderGovernorSettings(currentDataset);
+  renderPrecompBalance(currentDataset);
 
   // "What to try next": the recommendation engine reads what the
   // analyses measured; the vibration precedence comes from the same
@@ -3793,6 +3867,7 @@ function analyzeFlight(flightIndex) {
       pidAnalysis?.technicalSummary?.commandBalanceReviewAxes ?? [],
     timeSeconds: currentDataset?.timeSeconds,
     governorEvents: currentDataset?.governorEvents,
+    precomp: currentDataset?.precomp,
     vibrationConcern: Boolean(
       currentDataset?.verdict?.cards?.some(
         (card) =>

@@ -244,3 +244,119 @@ test("gate constants stay explicit", () => {
   assert.equal(RECOMMENDATION_GATE.MINIMUM_EVENTS, 2);
   assert.ok(RECOMMENDATION_GATE.GOVERNOR_HIGH_CONFIDENCE_EVENTS >= 3);
 });
+
+function precompFixture(overrides = {}) {
+  return {
+    governor: {
+      balance: "low",
+      riseDroopPercent: 4.2,
+      dropOvershootPercent: 0.8,
+      riseCount: 12,
+      dropCount: 11,
+      ...overrides.governor
+    },
+    tail: overrides.tail ?? null
+  };
+}
+
+test("precomp running low suggests gov_f_gain up from the ratio view", () => {
+  const result = buildRecommendations({
+    precomp: precompFixture()
+  });
+
+  assert.equal(result.governor.length, 1);
+  const [rec] = result.governor;
+  assert.equal(rec.id, "governor:precomp-low");
+  assert.deepEqual(rec.suggestion, {
+    family: "gov_f_gain",
+    direction: "up",
+    magnitudeClass: "small step"
+  });
+  assert.match(rec.hypothesis, /before the load does/);
+});
+
+test("precomp running high suggests gov_f_gain down when no event rec fired", () => {
+  const result = buildRecommendations({
+    precomp: precompFixture({
+      governor: {
+        balance: "high",
+        riseDroopPercent: 0.6,
+        dropOvershootPercent: 4.5
+      }
+    })
+  });
+
+  const [rec] = result.governor;
+  assert.equal(rec.id, "governor:precomp-high");
+  assert.equal(rec.suggestion.direction, "down");
+});
+
+test("the ratio view stays quiet when the event-based precomp rec already fired", () => {
+  const result = buildRecommendations({
+    governorEvents: {
+      events: [
+        governorEvent({ cause: "collective-drop" }),
+        governorEvent({ cause: "collective-drop" }),
+        governorEvent({ cause: "collective-drop" })
+      ]
+    },
+    precomp: precompFixture({
+      governor: { balance: "high", dropOvershootPercent: 5 }
+    })
+  });
+
+  assert.equal(result.governor.length, 1);
+  assert.equal(result.governor[0].id, "governor:precomp-overshoot");
+});
+
+test("two-sided lag is not given a precomp direction", () => {
+  const result = buildRecommendations({
+    precomp: precompFixture({
+      governor: {
+        balance: "lagging",
+        riseDroopPercent: 3.8,
+        dropOvershootPercent: 3.1
+      }
+    })
+  });
+
+  const [rec] = result.governor;
+  assert.equal(rec.id, "governor:response-lag");
+  assert.equal(rec.suggestion, null);
+  assert.match(rec.gatedReason, /ESC Lab/);
+});
+
+test("a power-limit event silences the ratio view too", () => {
+  const result = buildRecommendations({
+    governorEvents: {
+      events: [governorEvent({ cause: "power-limit" })]
+    },
+    precomp: precompFixture()
+  });
+
+  assert.equal(result.governor.length, 1);
+  assert.equal(result.governor[0].id, "governor:power-limit");
+});
+
+test("tail coupling names the knob and the two-way verify plan", () => {
+  const result = buildRecommendations({
+    precomp: {
+      governor: null,
+      tail: {
+        balance: "coupled",
+        kickRatio: 6.2,
+        transientError: 74,
+        consistency: 0.92,
+        kickCount: 18
+      }
+    }
+  });
+
+  assert.equal(result.governor.length, 1);
+  const [rec] = result.governor;
+  assert.equal(rec.id, "governor:tail-coupling");
+  assert.equal(rec.confidence, "High");
+  assert.equal(rec.suggestion, null);
+  assert.match(rec.gatedReason, /yaw_collective_ff_gain/);
+  assert.match(rec.gatedReason, /if the kick grows, go the other way/);
+});
