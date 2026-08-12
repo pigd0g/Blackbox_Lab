@@ -360,3 +360,211 @@ test("tail coupling names the knob and the two-way verify plan", () => {
   assert.match(rec.gatedReason, /yaw_collective_ff_gain/);
   assert.match(rec.gatedReason, /if the kick grows, go the other way/);
 });
+
+// ---- overshoot driver disambiguation ----
+
+function overshootEvent({
+  overshoot,
+  size = 100,
+  durationSamples = 10,
+  ringing = 0,
+  index = 0
+}) {
+  return {
+    responsePeak: 100,
+    settlingDetected: true,
+    settlingDurationSamples: 20,
+    ringingTargetCrossingCount: ringing,
+    overshootPercent: overshoot,
+    commandMagnitude: size,
+    sampleIndex: 1000 + index * 500,
+    commandEndSampleIndex: 1000 + index * 500 + durationSamples,
+    sampleRowIndex: 1000 + index * 500
+  };
+}
+
+function overshootAxis(axis, events) {
+  const padded = [...events];
+  let i = events.length;
+
+  // Pad to High confidence with clean, non-overshooting events.
+  while (padded.length < 12) {
+    padded.push({
+      responsePeak: 100,
+      settlingDetected: true,
+      settlingDurationSamples: 20,
+      ringingTargetCrossingCount: 0,
+      overshootPercent: NaN,
+      commandMagnitude: 100,
+      sampleIndex: 20_000 + i * 500,
+      commandEndSampleIndex: 20_000 + i * 500 + 10,
+      sampleRowIndex: 20_000 + i * 500
+    });
+    i += 1;
+  }
+
+  return { axis, events: padded };
+}
+
+test("ringing overshoots suggest damping up", () => {
+  const events = [30, 35, 40, 32, 38].map((overshoot, index) =>
+    overshootEvent({ overshoot, ringing: 4, index })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    timeSeconds
+  });
+
+  const rec = result.pid.find((r) => r.id === "pid:Roll:overshoot");
+  assert.ok(rec, JSON.stringify(result.pid.map((r) => r.id)));
+  assert.deepEqual(rec.suggestion, {
+    family: "roll_d_gain",
+    direction: "up",
+    magnitudeClass: "small step"
+  });
+  assert.ok(!("dampingSide" in rec), "internal flag leaked");
+});
+
+test("overshoot growing with command rate suggests feedforward down", () => {
+  // Same command size, varying duration: faster command = bigger
+  // overshoot. Size is constant so it cannot be the driver.
+  const durations = [40, 30, 20, 10, 5, 4];
+  const events = durations.map((durationSamples, index) =>
+    overshootEvent({
+      overshoot: 10 + (100 / durationSamples) * 3,
+      durationSamples,
+      index
+    })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Pitch", events)] },
+    timeSeconds
+  });
+
+  const rec = result.pid.find((r) => r.id === "pid:Pitch:overshoot");
+  assert.ok(rec);
+  assert.deepEqual(rec.suggestion, {
+    family: "pitch_f_gain",
+    direction: "down",
+    magnitudeClass: "small step"
+  });
+  assert.match(rec.hypothesis, /how FAST/);
+});
+
+test("overshoot growing with command size suggests proportional down", () => {
+  // Duration scales with size, so the RATE is constant — only the
+  // size can be the driver.
+  const sizes = [60, 90, 120, 180, 240, 300];
+  const events = sizes.map((size, index) =>
+    overshootEvent({
+      overshoot: 10 + size / 8,
+      size,
+      durationSamples: size / 10,
+      index
+    })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Yaw", events)] },
+    timeSeconds
+  });
+
+  const rec = result.pid.find((r) => r.id === "pid:Yaw:overshoot");
+  assert.ok(rec);
+  assert.deepEqual(rec.suggestion, {
+    family: "yaw_p_gain",
+    direction: "down",
+    magnitudeClass: "small step"
+  });
+  assert.match(rec.hypothesis, /how BIG/);
+});
+
+test("an inseparable driver names both knobs, feedforward first", () => {
+  // Overshoot uncorrelated with either candidate.
+  const rows = [
+    { overshoot: 30, size: 100, durationSamples: 10 },
+    { overshoot: 45, size: 100, durationSamples: 10 },
+    { overshoot: 28, size: 200, durationSamples: 20 },
+    { overshoot: 50, size: 200, durationSamples: 20 },
+    { overshoot: 33, size: 150, durationSamples: 15 },
+    { overshoot: 41, size: 150, durationSamples: 15 }
+  ];
+  const events = rows.map((row, index) =>
+    overshootEvent({ ...row, index })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    timeSeconds
+  });
+
+  const rec = result.pid.find((r) => r.id === "pid:Roll:overshoot");
+  assert.ok(rec);
+  assert.equal(
+    rec.suggestion.family,
+    "roll_f_gain, then roll_p_gain"
+  );
+  assert.match(rec.expectedResult, /step it first/);
+});
+
+test("one big overshoot is not a pattern", () => {
+  const events = [overshootEvent({ overshoot: 60 })];
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    timeSeconds
+  });
+
+  assert.equal(
+    result.pid.find((r) => r.id === "pid:Roll:overshoot"),
+    undefined
+  );
+});
+
+test("vibration silences overshoot advice too", () => {
+  const events = [30, 35, 40, 32, 38].map((overshoot, index) =>
+    overshootEvent({ overshoot, ringing: 4, index })
+  );
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [overshootAxis("Roll", events)] },
+    timeSeconds,
+    vibrationConcern: true
+  });
+
+  const rec = result.pid.find((r) => r.id === "pid:Roll:overshoot");
+  assert.equal(rec.suggestion, null);
+  assert.match(rec.gatedReason, /Filters come before PIDs/);
+});
+
+test("damping advice is not said twice on one axis", () => {
+  // Slow settling WITH hunting (damping rec) plus ringing
+  // overshoots (also damping-side) → only the slow-settle rec
+  // carries the knob.
+  const slowHunting = [0, 1, 2, 3].map((index) => ({
+    responsePeak: 100,
+    settlingDetected: true,
+    settlingDurationSamples: 90,
+    ringingTargetCrossingCount: 4,
+    overshootPercent: 30 + index,
+    commandMagnitude: 100,
+    sampleIndex: 1000 + index * 500,
+    commandEndSampleIndex: 1010 + index * 500,
+    sampleRowIndex: 1000 + index * 500
+  }));
+
+  const result = buildRecommendations({
+    trackingAnalysis: {
+      commandEvents: [overshootAxis("Pitch", slowHunting)]
+    },
+    timeSeconds
+  });
+
+  const dampingRecs = result.pid.filter(
+    (r) => r.suggestion?.family === "pitch_d_gain"
+  );
+  assert.equal(dampingRecs.length, 1, JSON.stringify(result.pid.map((r) => [r.id, r.suggestion?.family])));
+  assert.equal(dampingRecs[0].id, "pid:Pitch:slow-settling");
+});

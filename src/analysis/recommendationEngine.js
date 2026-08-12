@@ -38,8 +38,75 @@ export const RECOMMENDATION_GATE = {
   // Governor excursions are fleet-rare by calibration (median
   // machine: zero), so three same-cause excursions in ONE flight
   // is already a strong pattern.
-  GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3
+  GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3,
+  // Overshoot driver disambiguation: the review threshold matches
+  // the Flight Events verdict; the correlation constants are what
+  // "clearly rate-driven" has to mean before a knob is named.
+  OVERSHOOT_REVIEW_PERCENT: 25,
+  OVERSHOOT_CORRELATION_MINIMUM_EVENTS: 5,
+  OVERSHOOT_CORRELATION_STRONG: 0.6,
+  OVERSHOOT_CORRELATION_GAP: 0.25
 };
+
+// Spearman rank correlation — the driver signature lives in how
+// overshoot GROWS with a candidate driver, not in absolute values,
+// so ranks are the honest measure at these sample sizes.
+function spearmanCorrelation(a, b) {
+  if (a.length !== b.length || a.length < 3) {
+    return null;
+  }
+
+  // Ties share their average rank — without this, a CONSTANT
+  // series gets ranks in input order and correlates perfectly
+  // with anything sorted, which is exactly backwards.
+  const rankOf = (values) => {
+    const indexed = values
+      .map((value, index) => ({ value, index }))
+      .sort((x, y) => x.value - y.value);
+
+    const ranks = new Array(values.length);
+    let i = 0;
+
+    while (i < indexed.length) {
+      let j = i;
+
+      while (
+        j + 1 < indexed.length &&
+        indexed[j + 1].value === indexed[i].value
+      ) {
+        j += 1;
+      }
+
+      const sharedRank = (i + j) / 2;
+
+      for (let k = i; k <= j; k += 1) {
+        ranks[indexed[k].index] = sharedRank;
+      }
+
+      i = j + 1;
+    }
+
+    return ranks;
+  };
+
+  const ra = rankOf(a);
+  const rb = rankOf(b);
+  const meanRank = (a.length - 1) / 2;
+
+  let cov = 0;
+  let varA = 0;
+  let varB = 0;
+
+  for (let i = 0; i < a.length; i += 1) {
+    const da = ra[i] - meanRank;
+    const db = rb[i] - meanRank;
+    cov += da * db;
+    varA += da * da;
+    varB += db * db;
+  }
+
+  return varA > 0 && varB > 0 ? cov / Math.sqrt(varA * varB) : null;
+}
 
 function sampleSpacingMs(timeSeconds) {
   if (!Array.isArray(timeSeconds) || timeSeconds.length < 2) {
@@ -57,9 +124,21 @@ function sampleSpacingMs(timeSeconds) {
 
 // The Rotorflight CLI family a suggestion points at, per axis.
 const AXIS_SETTING_FAMILY = {
-  Roll: { damping: "roll_d_gain", drive: "roll_f_gain" },
-  Pitch: { damping: "pitch_d_gain", drive: "pitch_f_gain" },
-  Yaw: { damping: "yaw_d_gain", drive: "yaw_f_gain" }
+  Roll: {
+    damping: "roll_d_gain",
+    drive: "roll_f_gain",
+    proportional: "roll_p_gain"
+  },
+  Pitch: {
+    damping: "pitch_d_gain",
+    drive: "pitch_f_gain",
+    proportional: "pitch_p_gain"
+  },
+  Yaw: {
+    damping: "yaw_d_gain",
+    drive: "yaw_f_gain",
+    proportional: "yaw_p_gain"
+  }
 };
 
 /**
@@ -138,7 +217,32 @@ function buildPidRecommendations({
           gate.SLOW_SETTLING_MS
     );
 
+    const overshootRecommendation = buildOvershootRecommendation({
+      axis,
+      cleanResponses,
+      confidence,
+      vibrationConcern,
+      gate
+    });
+
+    // Same-knob guard: when the slow-settle rec below already points
+    // at damping, a second damping-side overshoot rec on the same
+    // axis would say the same thing twice with two findings.
+    const pushOvershoot = (slowSuggestedDamping) => {
+      if (!overshootRecommendation) {
+        return;
+      }
+
+      if (slowSuggestedDamping && overshootRecommendation.dampingSide) {
+        return;
+      }
+
+      delete overshootRecommendation.dampingSide;
+      recommendations.push(overshootRecommendation);
+    };
+
     if (slowEvents.length < gate.MINIMUM_EVENTS) {
+      pushOvershoot(false);
       continue;
     }
 
@@ -235,9 +339,203 @@ function buildPidRecommendations({
       verifyMetric,
       gatedReason
     });
+
+    pushOvershoot(
+      suggestion?.family === AXIS_SETTING_FAMILY[axis].damping
+    );
   }
 
   return recommendations;
+}
+
+// The overshoot driver question: an axis that repeatedly shoots
+// past its target is being pushed past it by SOMETHING — damping
+// too short (it also rings), feedforward too hot (overshoot grows
+// with how FAST the command moved), or proportional drive too hot
+// (overshoot grows with how BIG the command was). The signature is
+// read from how overshoot grows, never from one event.
+function buildOvershootRecommendation({
+  axis,
+  cleanResponses,
+  confidence,
+  vibrationConcern,
+  gate
+}) {
+  const measured = cleanResponses.filter((event) =>
+    Number.isFinite(event.overshootPercent)
+  );
+
+  const big = measured.filter(
+    (event) =>
+      event.overshootPercent >= gate.OVERSHOOT_REVIEW_PERCENT
+  );
+
+  if (big.length < gate.MINIMUM_EVENTS) {
+    return null;
+  }
+
+  const medianBig = big
+    .map((event) => event.overshootPercent)
+    .sort((a, b) => a - b)[Math.floor(big.length / 2)];
+
+  const finding =
+    `${axis} overshot its target by ${gate.OVERSHOOT_REVIEW_PERCENT}%+ on ` +
+    `${big.length} of ${cleanResponses.length} measured commands ` +
+    `(median ${Math.round(medianBig)}% past the target).`;
+
+  const evidence = big.slice(0, 6).map((event) => ({
+    kind: "command-event",
+    axis,
+    rowIndex: event.sampleRowIndex ?? null,
+    overshootPercent:
+      Math.round(event.overshootPercent * 10) / 10,
+    ringingCrossings: event.ringingTargetCrossingCount ?? null
+  }));
+
+  const base = {
+    id: `pid:${axis}:overshoot`,
+    lab: "pid",
+    axis,
+    finding,
+    evidence,
+    confidence,
+    suggestion: null,
+    expectedResult: null,
+    verifyMetric: null,
+    gatedReason: null,
+    dampingSide: false
+  };
+
+  if (vibrationConcern) {
+    return {
+      ...base,
+      hypothesis:
+        "Repeated overshoot with an open vibration finding is unreadable — gyro vibration can push a response past its target all by itself.",
+      gatedReason:
+        "Filters come before PIDs: resolve the vibration finding, fly again, and re-read this page."
+    };
+  }
+
+  if (confidence !== "High") {
+    return {
+      ...base,
+      hypothesis:
+        "The overshoots repeat, but there are not enough clean commands in this log to read what drives them.",
+      gatedReason: `Evidence confidence is ${confidence} (${cleanResponses.length} clean command${cleanResponses.length === 1 ? "" : "s"}). Fly a log with more distinct stick inputs and re-read this page.`
+    };
+  }
+
+  const ringing = big.filter(
+    (event) =>
+      Number.isFinite(event.ringingTargetCrossingCount) &&
+      event.ringingTargetCrossingCount >=
+        gate.HUNTING_MINIMUM_CROSSINGS
+  );
+
+  if (ringing.length * 2 > big.length) {
+    return {
+      ...base,
+      dampingSide: true,
+      hypothesis:
+        "The overshoots ring: the axis blows past its target and oscillates before resting — the drive is winning against the damping.",
+      suggestion: {
+        family: AXIS_SETTING_FAMILY[axis].damping,
+        direction: "up",
+        magnitudeClass: "small step"
+      },
+      expectedResult: `${axis} overshoot events shrink and stop ringing, without the response turning sluggish.`,
+      verifyMetric: `the ${axis} overshoot count in Flight Events`
+    };
+  }
+
+  // Driver correlation needs enough measured overshoots to rank.
+  if (
+    measured.length < gate.OVERSHOOT_CORRELATION_MINIMUM_EVENTS
+  ) {
+    return {
+      ...base,
+      hypothesis:
+        "The overshoots repeat without ringing, but too few responses crossed the target to read whether command speed or command size drives them.",
+      gatedReason:
+        "Confirm the pattern with another log carrying more measured overshoots before changing values."
+    };
+  }
+
+  const overshoots = measured.map(
+    (event) => event.overshootPercent
+  );
+
+  const rates = measured.map((event) => {
+    const durationSamples = Math.max(
+      1,
+      Number.isInteger(event.commandEndSampleIndex) &&
+        Number.isInteger(event.sampleIndex)
+        ? event.commandEndSampleIndex - event.sampleIndex
+        : 1
+    );
+
+    return (
+      (Number(event.commandMagnitude) || 0) / durationSamples
+    );
+  });
+
+  const sizes = measured.map(
+    (event) => Number(event.commandMagnitude) || 0
+  );
+
+  const rhoRate = spearmanCorrelation(overshoots, rates) ?? 0;
+  const rhoSize = spearmanCorrelation(overshoots, sizes) ?? 0;
+
+  const rateDriven =
+    rhoRate >= gate.OVERSHOOT_CORRELATION_STRONG &&
+    rhoRate - rhoSize >= gate.OVERSHOOT_CORRELATION_GAP;
+
+  const sizeDriven =
+    rhoSize >= gate.OVERSHOOT_CORRELATION_STRONG &&
+    rhoSize - rhoRate >= gate.OVERSHOOT_CORRELATION_GAP;
+
+  if (rateDriven) {
+    return {
+      ...base,
+      hypothesis:
+        "Overshoot grows with how FAST the command moved — the feedforward signature: it pushes in proportion to stick speed, and here it pushes past the target.",
+      suggestion: {
+        family: AXIS_SETTING_FAMILY[axis].drive,
+        direction: "down",
+        magnitudeClass: "small step"
+      },
+      expectedResult: `${axis} overshoot shrinks on fast inputs first — exactly where it is worst now.`,
+      verifyMetric: `the ${axis} overshoot count in Flight Events`
+    };
+  }
+
+  if (sizeDriven) {
+    return {
+      ...base,
+      hypothesis:
+        "Overshoot grows with how BIG the command was, not how fast — the proportional-drive signature.",
+      suggestion: {
+        family: AXIS_SETTING_FAMILY[axis].proportional,
+        direction: "down",
+        magnitudeClass: "small step"
+      },
+      expectedResult: `${axis} overshoot shrinks on large inputs first — exactly where it is worst now.`,
+      verifyMetric: `the ${axis} overshoot count in Flight Events`
+    };
+  }
+
+  return {
+    ...base,
+    hypothesis:
+      "The overshoots are real but their driver is not separable from this log: they grow with neither command speed nor command size clearly enough to name one knob.",
+    suggestion: {
+      family: `${AXIS_SETTING_FAMILY[axis].drive}, then ${AXIS_SETTING_FAMILY[axis].proportional}`,
+      direction: "down",
+      magnitudeClass: "small step"
+    },
+    expectedResult: `${axis} overshoot count drops. In Rotorflight, feedforward does most of the commanded work, so it is the likelier driver — step it first, and only touch ${AXIS_SETTING_FAMILY[axis].proportional} if the next log still overshoots.`,
+    verifyMetric: `the ${axis} overshoot count in Flight Events`
+  };
 }
 
 function buildGovernorRecommendations({ governorEvents, precomp }) {
