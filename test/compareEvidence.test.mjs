@@ -251,3 +251,39 @@ test("precomp rows appear only when both flights read a balance", () => {
     undefined
   );
 });
+
+// ---- voltage source cross-check (v1.1.x) ----
+
+import { chooseVoltageSource } from "../src/analysis/batteryLabAnalysis.js";
+
+test("disagreeing ESC voltage yields to the FC's pack reading, with a note", () => {
+  // ESC reports ~32 V while the FC reads ~26 V — a 6S HV pack.
+  const escVoltage = new Array(500).fill(3228);
+  const vbat = new Array(500).fill(2618);
+
+  const { selected, note } = chooseVoltageSource(escVoltage, vbat);
+
+  assert.equal(selected, vbat);
+  assert.match(note, /disagrees/);
+  assert.match(note, /calibrate/);
+});
+
+test("agreeing sources keep the ESC's reading, no note", () => {
+  const escVoltage = new Array(500).fill(2615);
+  const vbat = new Array(500).fill(2618);
+
+  const { selected, note } = chooseVoltageSource(escVoltage, vbat);
+
+  assert.equal(selected, escVoltage);
+  assert.equal(note, null);
+});
+
+test("a single usable source is used as before", () => {
+  const escOnly = chooseVoltageSource(new Array(500).fill(2500), null);
+  assert.ok(escOnly.selected);
+  assert.equal(escOnly.note, null);
+
+  const fcOnly = chooseVoltageSource(null, new Array(500).fill(2500));
+  assert.ok(fcOnly.selected);
+  assert.equal(fcOnly.note, null);
+});

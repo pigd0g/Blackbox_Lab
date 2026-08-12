@@ -64,6 +64,78 @@ function hasUsablePositiveData(values) {
 
   return false;
 }
+// Scale a raw voltage column the way this Lab does everywhere,
+// and return its average in real volts — for source cross-checks
+// before any column is chosen.
+function scaledAverageVolts(values) {
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  let sum = 0;
+  let count = 0;
+
+  for (const value of values) {
+    const numericValue = Number(value);
+
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      sum += numericValue;
+      count += 1;
+    }
+  }
+
+  if (count === 0) {
+    return null;
+  }
+
+  const rawAverage = sum / count;
+  const scale =
+    rawAverage > 1000 ? 100 : rawAverage > 100 ? 10 : 1;
+
+  return rawAverage / scale;
+}
+
+/**
+ * Choose between the ESC's voltage telemetry and the flight
+ * controller's own pack reading.
+ *
+ * ESC voltage is preferred when it is the only usable source — but
+ * when the flight controller ALSO measured the pack, the two must
+ * agree. Some ESCs report voltage in units the generic scale rule
+ * cannot know, and a cell count estimated from such a reading
+ * invents a pack that does not exist. The FC's own ADC is the one
+ * the pilot calibrates, so on real disagreement it wins — and the
+ * returned note says so, for the story of whichever Lab asked.
+ */
+export function chooseVoltageSource(escVoltage, vbat) {
+  const escUsable = hasUsablePositiveData(escVoltage);
+  const vbatUsable = hasUsablePositiveData(vbat);
+
+  if (escUsable && vbatUsable) {
+    const escAvg = scaledAverageVolts(escVoltage);
+    const vbatAvg = scaledAverageVolts(vbat);
+
+    if (
+      Number.isFinite(escAvg) &&
+      Number.isFinite(vbatAvg) &&
+      vbatAvg > 0 &&
+      Math.abs(escAvg - vbatAvg) / vbatAvg > 0.08
+    ) {
+      return {
+        selected: vbat,
+        note: `The ESC's voltage telemetry (${escAvg.toFixed(1)} V avg) disagrees with the flight controller's own pack reading (${vbatAvg.toFixed(1)} V avg) — this assessment uses the flight controller's, which is the one you calibrate.`
+      };
+    }
+
+    return { selected: escVoltage, note: null };
+  }
+
+  return {
+    selected: escUsable ? escVoltage : vbat,
+    note: null
+  };
+}
+
 export function analyzeBatteryLab({
   timeSeconds,
   vbat,
@@ -73,10 +145,8 @@ export function analyzeBatteryLab({
   headspeed,
   governorTarget
 }) {
-    const selectedVoltage =
-    hasUsablePositiveData(escVoltage)
-      ? escVoltage
-      : vbat;
+  const { selected: selectedVoltage, note: voltageSourceNote } =
+    chooseVoltageSource(escVoltage, vbat);
 
   const selectedAmperage =
     hasUsablePositiveData(escCurrent)
@@ -471,7 +541,9 @@ export function analyzeBatteryLab({
 
   return {
     status,
-    story,
+    story: voltageSourceNote
+      ? `${story} ${voltageSourceNote}`
+      : story,
     metrics,
 
     sagPercent:

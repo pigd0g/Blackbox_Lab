@@ -108,6 +108,7 @@ import {
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import { analyzePrecomp } from "./analysis/precompAnalysis.js";
+import { chooseVoltageSource } from "./analysis/batteryLabAnalysis.js";
 import {
   sliceWindow,
   windowStats,
@@ -394,7 +395,7 @@ const REPLAY_GRAPH_PRESETS = [
     label: "Voltage & current",
     yLabel: "V · A",
     series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^EscV$/i, /^vbatLatest$/i], color: CHART_COLORS[0], convert: toVolts },
+      { patterns: dataset.voltagePatterns, color: CHART_COLORS[0], convert: toVolts },
       { patterns: [/^EscI$/i, /^amperageLatest$/i], color: CHART_COLORS[1], convert: toAmps }
     ])
   }
@@ -613,7 +614,7 @@ function setupReplay(dataset, pilotInput, flightEvents) {
   if (stickCol) stickCol.hidden = !replay.sticks;
 
   // Live readouts: headspeed and pack voltage at the playhead.
-  const voltageColumn = dataset.findColumnsIn([/^EscV$/i, /^vbatLatest$/i])[0] ?? null;
+  const voltageColumn = dataset.findColumnsIn(dataset.voltagePatterns)[0] ?? null;
   replay.readout = {
     headspeed: Array.isArray(dataset.headspeed) ? dataset.headspeed : null,
     volts: voltageColumn ? toVolts(dataset.columnValues(voltageColumn)) : null,
@@ -1758,6 +1759,15 @@ if (sampleRate && hasSpectrumRuns) {
     });
   })();
 
+  // One voltage-source decision for every chart and readout: the
+  // same cross-check the Labs use (FC's calibrated reading wins on
+  // real disagreement), so a chart never contradicts the story
+  // beside it.
+  const voltagePatterns =
+    chooseVoltageSource(escVoltage, vbat).selected === escVoltage
+      ? [/^EscV$/i, /^vbatLatest$/i]
+      : [/^vbat/i, /^vbatLatest$/i];
+
   // ---- labs + verdict ----
   const motorOutputForGovernor =
     Array.isArray(escThrottle) &&
@@ -1863,6 +1873,7 @@ if (sampleRate && hasSpectrumRuns) {
     governorTarget,
     collective,
     vbat,
+    voltagePatterns,
     amperage,
     spectra,
     markers,
@@ -2929,7 +2940,7 @@ function renderGovernorEvidence(dataset) {
     window,
     [
       {
-       patterns: [/^EscV$/i],
+       patterns: dataset.voltagePatterns,
         label: "Pack voltage (V)",
         convert: toVolts,
         color: CHART_COLORS[0]
@@ -2980,7 +2991,7 @@ function renderEscEvidence(dataset) {
     dataset.findColumnsIn([/^Ibat$/i, /amperage/i, /current/i])[0];
 
   const voltageColumn =
-    dataset.findColumnsIn([/^EscV$/i])[0] ??
+    dataset.findColumnsIn(dataset.voltagePatterns)[0] ??
     dataset.findColumnsIn([/^vbat/i])[0];
 
   if (!outputColumn || !currentColumn || !voltageColumn) {
@@ -3496,7 +3507,7 @@ function renderAllCharts(dataset) {
   dataset,
   [
     {
-     patterns: [/^EscV$/i],
+     patterns: dataset.voltagePatterns,
       label: "pack voltage (V)",
       convert: toVolts
     }

@@ -14,6 +14,7 @@ import {
   detectStableFlightPhase,
   detectInFlightSamples
 } from "./flightPhase.js";
+import { chooseVoltageSource } from "./batteryLabAnalysis.js";
 
 function statsOf(values) {
   if (!Array.isArray(values) || values.length === 0) {
@@ -92,10 +93,8 @@ export function analyzeEscLab({
       ? escCurrent
       : amperage;
 
-  const selectedVoltage =
-    hasUsablePositiveData(escVoltage)
-      ? escVoltage
-      : vbat;
+  const { selected: selectedVoltage, note: voltageSourceNote } =
+    chooseVoltageSource(escVoltage, vbat);
 
   const selectedOutput =
     hasUsablePositiveData(escThrottle)
@@ -429,7 +428,9 @@ export function analyzeEscLab({
 
   return {
     status,
-    story,
+    story: voltageSourceNote
+      ? `${story} ${voltageSourceNote}`
+      : story,
     metrics,
 
     averageOutputPercent:
