@@ -322,7 +322,7 @@ test("worst event and summary agree", () => {
   plantExcursion(flight, {
     startSecond: 40,
     durationSeconds: 1,
-    errorPercent: 6
+    errorPercent: 7
   });
   plantExcursion(flight, {
     startSecond: 70,

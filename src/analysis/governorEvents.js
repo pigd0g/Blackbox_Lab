@@ -28,14 +28,18 @@ import {
   detectInFlightSamples
 } from "./flightPhase.js";
 
-// Starting values chosen against the fleet scoring anchors
-// (stable sustained droop p50 4.09% / p90 6.44%, 247-flight
-// calibration of 2026-08-07): an event should be rarer than
-// the median machine's ordinary droop, and hysteresis keeps
-// one wobbling excursion from counting as five.
+// Fleet-calibrated 2026-08-12 (247 contributed flights, 146 with a
+// usable governor target, five candidate bands probed): at 6%/3%
+// the MEDIAN governed machine reads zero events and the 90th
+// percentile reads 7, while 6–7% excursions — the kind pilots
+// actually ask about — stay visible. The band also lines up with
+// the fleet's stable-droop p90 (6.44%) and the lab's 6.5%
+// "attention" threshold: an event is an excursion worse than nine
+// out of ten machines' ordinary droop. Hysteresis keeps one
+// wobbling excursion from counting as five.
 export const GOVERNOR_EVENT_TUNING = {
-  ENTER_ERROR_PERCENT: 5,
-  EXIT_ERROR_PERCENT: 2.5,
+  ENTER_ERROR_PERCENT: 6,
+  EXIT_ERROR_PERCENT: 3,
   MINIMUM_DURATION_SECONDS: 0.35,
   MERGE_GAP_SECONDS: 0.6,
   POWER_LIMIT_OUTPUT_PERCENT: 95,
