@@ -103,6 +103,10 @@ import {
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import {
+  detectGovernorEvents,
+  governorEventWindow
+} from "./analysis/governorEvents.js";
+import {
   sliceWindow,
   windowStats,
   findHighestLoadEvents,
@@ -1740,6 +1744,14 @@ if (sampleRate && hasSpectrumRuns) {
   })();
 
   // ---- labs + verdict ----
+  const motorOutputForGovernor =
+    Array.isArray(escThrottle) &&
+    escThrottle.some((value) => Number(value) > 0)
+      ? escThrottle
+      : motor;
+
+  const collective = firstColumn([/^setpoint\[3\]$/i]);
+
   const labs = {
     governor: analyzeGovernorLab({
       timeSeconds,
@@ -1747,11 +1759,7 @@ if (sampleRate && hasSpectrumRuns) {
       governorTarget,
       // Output context for the worst-droop event: a dip with the
       // throttle at its ceiling is a power limit, not a gain issue.
-      motorOutput:
-        Array.isArray(escThrottle) &&
-        escThrottle.some((value) => Number(value) > 0)
-          ? escThrottle
-          : motor
+      motorOutput: motorOutputForGovernor
     }),
    esc: analyzeEscLab({
   timeSeconds,
@@ -1838,12 +1846,23 @@ if (sampleRate && hasSpectrumRuns) {
     findColumnsIn: (patterns) => findColumns(headerLine, patterns),
     headspeed,
     governorTarget,
+    collective,
     vbat,
     amperage,
     spectra,
     markers,
     perBankFilter,
     labs,
+    // The Governor Lab's event layer: sustained over/under-target
+    // excursions with their context, measured by the analysis
+    // module on the same arrays the lab charts read.
+    governorEvents: detectGovernorEvents({
+      timeSeconds,
+      headspeed,
+      governorTarget,
+      motorOutput: motorOutputForGovernor,
+      collective
+    }),
     verdict
   };
 }
@@ -2016,6 +2035,183 @@ function renderFlightEvents(flightEvents) {
         showEventDetail(canonical);
       } else {
         hideEventDetail();
+      }
+    });
+
+    list.appendChild(chip);
+  }
+}
+
+// ---- Governor Lab headspeed events ----
+//
+// Same interaction contract as the PID Flight Events strip:
+// event cards on a time axis, click one and its evidence
+// unfolds in place — never a jump to another screen.
+
+function hideGovernorEventDetail() {
+  const detail = el("governorEventDetail");
+  if (detail) detail.hidden = true;
+  stickControllers.get("governorEventSticks")?.controller.stop();
+}
+
+function showGovernorEventDetail(event) {
+  const detail = el("governorEventDetail");
+  const explain = el("governorEventExplain");
+  const rpmChart = el("governorEventChartRpm");
+  const driveChart = el("governorEventChartDrive");
+
+  if (!detail || !currentDataset) return;
+
+  detail.hidden = false;
+  explain.textContent = `At ${event.t.toFixed(1)} s: ${event.story}`;
+
+  const eventWindow = governorEventWindow(event);
+  const window = sliceWindow(
+    currentDataset.timeSeconds,
+    (eventWindow.min + eventWindow.max) / 2,
+    (eventWindow.max - eventWindow.min) / 2,
+    (eventWindow.max - eventWindow.min) / 2
+  );
+
+  if (!window) {
+    rpmChart.innerHTML = "";
+    driveChart.innerHTML = "";
+    return;
+  }
+
+  const markers = [{ x: event.t, label: "excursion" }];
+
+  if (
+    Number.isFinite(event.tPeak) &&
+    event.tPeak - event.t > 0.15
+  ) {
+    markers.push({ x: event.tPeak, label: "peak" });
+  }
+
+  const targetValues = currentDataset.governorTarget ?? [];
+  const actualValues = currentDataset.headspeed ?? [];
+
+  renderSyncedChart(
+    rpmChart,
+    currentDataset,
+    window,
+    [
+      { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
+      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] }
+    ],
+    { yLabel: "rpm", markers, linkGroup: "governorEventSync" }
+  );
+
+  // One output series, whichever telemetry name this log carries —
+  // ESC throttle when present, motor[0] otherwise.
+  const outputPatterns =
+    currentDataset.findColumnsIn([/^EscThr$/i]).length > 0
+      ? [/^EscThr$/i]
+      : [/^motor\[0\]$/i];
+
+  renderSyncedChart(
+    driveChart,
+    currentDataset,
+    window,
+    [
+      {
+        patterns: outputPatterns,
+        label: "Motor output (%)",
+        convert: toThrottlePercent,
+        color: CHART_COLORS[3]
+      },
+      {
+        patterns: [/^setpoint\[3\]$/i],
+        label: "Collective target",
+        color: CHART_COLORS[5]
+      }
+    ],
+    { yLabel: "% · collective", markers, linkGroup: "governorEventSync" }
+  );
+
+  mountStickInset({
+    wrapId: "governorEventSticksWrap",
+    canvasId: "governorEventSticks",
+    chartElements: [rpmChart, driveChart],
+    anchorTime: event.tPeak ?? event.t,
+    playFrom: { min: eventWindow.min, max: eventWindow.max }
+  });
+
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderGovernorEvents(dataset) {
+  const card = el("governorEventsCard");
+  const summary = el("governorEventsSummary");
+  const list = el("governorEventsList");
+
+  if (!card) return;
+
+  const governorEvents = dataset?.governorEvents;
+
+  hideGovernorEventDetail();
+
+  // No usable target = no excursion measurements; the card stays
+  // away entirely — the lab verdict already explains capability.
+  if (!governorEvents) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  summary.textContent = governorEvents.summary.sentence;
+  list.innerHTML = "";
+  list.className = "events-timeline";
+
+  for (const event of governorEvents.events) {
+    const chip = document.createElement("button");
+
+    // Power-limit events carry the attention colour — the dip the
+    // governor could not have fixed. Everything else is a watch.
+    chip.className = `event-card ${
+      event.cause === "power-limit" ? "chip-overshoot" : "chip-slow"
+    }`;
+
+    const label = event.kind === "under" ? "Under" : "Over";
+    const metric = `${event.kind === "under" ? "−" : "+"}${event.peakErrorPercent}%`;
+
+    chip.innerHTML = `
+      <span class="event-card-time">${event.t.toFixed(1)} s</span>
+      <span class="event-card-axis">${label}</span>
+      <span class="event-card-metric">${metric}${event.hunting ? " ~" : ""}</span>
+    `;
+
+    chip.title =
+      event.cause === "power-limit"
+        ? "Power-system limit"
+        : event.cause === "load"
+          ? "Load droop after a collective increase"
+          : event.cause === "collective-drop"
+            ? "Overspeed after a collective drop"
+            : "Unexplained excursion";
+
+    chip.addEventListener("click", () => {
+      const wasSelected = chip.classList.contains("selected");
+      list
+        .querySelectorAll(".event-card.selected")
+        .forEach((node) => node.classList.remove("selected"));
+
+      if (wasSelected) {
+        hideGovernorEventDetail();
+        return;
+      }
+
+      chip.classList.add("selected");
+
+      const canonical =
+        currentDataset?.governorEvents?.events.find(
+          (candidate) => candidate.id === event.id
+        ) ?? null;
+
+      if (canonical) {
+        showGovernorEventDetail(canonical);
+      } else {
+        hideGovernorEventDetail();
       }
     });
 
@@ -3482,6 +3678,7 @@ function analyzeFlight(flightIndex) {
     governorMetrics,
     "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed can still be viewed, but governor tracking and droop cannot be scored."
   );
+  renderGovernorEvents(currentDataset);
   renderLab(
     currentDataset?.labs.esc,
     escStory,

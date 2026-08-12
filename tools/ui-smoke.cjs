@@ -515,6 +515,64 @@ const { mkdirSync } = require("node:fs");
   }
   await window.screenshot({ path: "smoke-shots/13-governor-beginner.png" });
 
+  // Headspeed events: with a governed sample the card must be
+  // visible in beginner mode and carry a real summary sentence —
+  // zero events is a legitimate summary, an empty one is not.
+  const governorEventsState = await window.evaluate(() => {
+    const card = document.getElementById("governorEventsCard");
+    const summary = document.getElementById("governorEventsSummary");
+    return {
+      visible: card ? card.offsetParent !== null : null,
+      sentence: summary?.textContent?.trim() ?? "",
+      chips: document.querySelectorAll(
+        "#governorEventsList .event-card"
+      ).length
+    };
+  });
+  if (!governorEventsState.visible || !governorEventsState.sentence) {
+    throw new Error(
+      "governor events card missing or empty: " +
+        JSON.stringify(governorEventsState)
+    );
+  }
+  // If the sample produced events, the first chip must open its
+  // in-place evidence with a populated rpm chart.
+  if (governorEventsState.chips > 0) {
+    await window.click("#governorEventsList .event-card");
+    await window.waitForTimeout(400);
+    const detailState = await window.evaluate(() => ({
+      detail:
+        document.getElementById("governorEventDetail").offsetParent !==
+        null,
+      explain:
+        document
+          .getElementById("governorEventExplain")
+          ?.textContent?.trim() ?? "",
+      rpmChart: Boolean(
+        document
+          .getElementById("governorEventChartRpm")
+          ?.querySelector("canvas")
+      )
+    }));
+    if (!detailState.detail || !detailState.explain || !detailState.rpmChart) {
+      throw new Error(
+        "governor event detail broken: " + JSON.stringify(detailState)
+      );
+    }
+    console.log(
+      `governor events ok: ${governorEventsState.chips} chip(s), detail opens`
+    );
+    await window.screenshot({
+      path: "smoke-shots/13c-governor-events.png"
+    });
+    await window.click("#governorEventsList .event-card");
+  } else {
+    console.log(
+      "governor events ok: zero-event summary — " +
+        governorEventsState.sentence
+    );
+  }
+
   // Peek: reveals this page's advanced content in beginner
   // mode, shows the teaching note, and toggles back off.
   await window.click('section[data-screen="governor"] .peek-advanced-link');

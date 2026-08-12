@@ -1608,6 +1608,13 @@ section[data-screen="history"] .flight-picker .secondary-button {
   margin: 10px 0 6px 0;
 }
 
+/* The display:flex above outranks the UA's [hidden] rule, so the
+   hide-on-no-rcCommand contract needs its own rule — without it a
+   log with no stick telemetry shows an empty inset box. */
+.stick-inset[hidden] {
+  display: none;
+}
+
 .stick-inset canvas {
   flex: 0 0 auto;
   background: rgba(10, 17, 30, 0.55);

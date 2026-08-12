@@ -872,6 +872,26 @@
             permanent.</span>
         </p>
 
+        <section class="card" id="governorEventsCard" hidden>
+          <h3>Headspeed Events</h3>
+          <p class="lab-story" id="governorEventsSummary"></p>
+          <div id="governorEventsList"></div>
+          <div id="governorEventDetail" hidden>
+            <p class="event-detail-explain" id="governorEventExplain"></p>
+            <div class="stick-inset" id="governorEventSticksWrap" hidden>
+              <div class="stick-col">
+                <canvas id="governorEventSticks" width="320" height="170"></canvas>
+                <button class="stick-replay-btn" data-stick-replay="governorEventSticks" title="Play the seconds around this excursion.">▶&nbsp;Replay</button>
+              </div>
+              <p class="stick-inset-caption">Pilot input around this
+                excursion — the collective usually tells the story.
+                Hover any chart to scrub.</p>
+            </div>
+            <div class="chart-container" id="governorEventChartRpm"></div>
+            <div class="chart-container" id="governorEventChartDrive"></div>
+          </div>
+        </section>
+
         <section class="card">
           <h3 id="governorChartTitle">Headspeed vs Target</h3>
           <p class="chart-hint" id="governorChartHint">
