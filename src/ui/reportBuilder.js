@@ -102,6 +102,62 @@ function buildQualityHtml(quality) {
   <div class="basis">${rows}${warnings}</div>`;
 }
 
+// One "What To Try Next" block per recommendation — the same
+// object the in-app cards render, phrased for the second pair of
+// eyes a report is made for.
+function buildRecommendationsHtml(recommendations) {
+  const all = [
+    ...(recommendations?.pid ?? []),
+    ...(recommendations?.governor ?? [])
+  ];
+
+  if (all.length === 0) {
+    return "";
+  }
+
+  const blocks = all
+    .map((rec) => {
+      const action = rec.suggestion
+        ? `<div class="verdict-action"><b>Try:</b> one ${escapeHtml(rec.suggestion.magnitudeClass)} ${rec.suggestion.direction === "up" ? "up" : "down"} on <code>${escapeHtml(rec.suggestion.family)}</code>. Change only this, fly the same moves again, and watch ${escapeHtml(rec.verifyMetric ?? "the same finding")}.</div>`
+        : `<div class="verdict-action"><b>Not calling it yet:</b> ${escapeHtml(rec.gatedReason ?? "more evidence needed.")}</div>`;
+
+      return `
+      <div class="verdict" style="border-left-color:#4f7dc4;background:#f2f6fc;">
+        <div class="verdict-headline">${escapeHtml(rec.finding)}</div>
+        <div class="verdict-detail">${escapeHtml(rec.hypothesis)}</div>
+        ${action}
+        <div class="verdict-detail" style="margin-top:6px;color:#7c8da1;">Confidence: ${escapeHtml(rec.confidence)} · based on ${rec.evidence.length} event${rec.evidence.length === 1 ? "" : "s"} in this flight</div>
+      </div>`;
+    })
+    .join("");
+
+  return `<h2>What To Try Next</h2>
+  <p class="summary">One change at a time, then fly the same moves again — the numbers each card names are the judge.</p>
+  ${blocks}`;
+}
+
+// The rotor's event story beside the labs: excursion summary and
+// the precomp balance reads, when the flight could measure them.
+function buildRotorBehaviourHtml(governorEvents, precomp) {
+  const lines = [
+    governorEvents?.summary?.sentence ?? null,
+    precomp?.governor?.story ?? null,
+    precomp?.tail?.story ?? null
+  ].filter(Boolean);
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return `<h2>Headspeed Events &amp; Precomp</h2>
+  ${lines
+    .map(
+      (line) =>
+        `<p class="summary" style="margin-bottom:10px;">${escapeHtml(line)}</p>`
+    )
+    .join("")}`;
+}
+
 export function buildReportHtml({
   fileName,
   craftName,
@@ -110,7 +166,10 @@ export function buildReportHtml({
   verdict,
   labs,
   chartElements,
-  quality = null
+  quality = null,
+  recommendations = null,
+  governorEvents = null,
+  precomp = null
 }) {
   const date = new Date().toLocaleString();
 
@@ -307,9 +366,13 @@ export function buildReportHtml({
   <p class="summary">${escapeHtml(verdict?.summary ?? "")}</p>
   ${cardsHtml}
 
+  ${buildRecommendationsHtml(recommendations)}
+
   ${buildQualityHtml(quality)}
 
   ${labsHtml ? `<h2>Lab Details</h2>${labsHtml}` : ""}
+
+  ${buildRotorBehaviourHtml(governorEvents, precomp)}
 
   ${chartsHtml ? `<h2>The Evidence</h2>${chartsHtml}` : ""}
 

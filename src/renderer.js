@@ -1986,6 +1986,7 @@ const EVENT_CHART_BY_AXIS = {
 };
 
 let currentFlightEvents = null;
+let currentRecommendations = null;
 
 function renderFlightEvents(flightEvents) {
   const card = el("pidEventsCard");
@@ -3877,6 +3878,7 @@ function analyzeFlight(flightIndex) {
       )
     )
   });
+  currentRecommendations = nextSteps;
   renderNextSteps("pidNextCard", "pidNextList", nextSteps.pid);
   renderNextSteps(
     "governorNextCard",
@@ -4008,6 +4010,9 @@ buildReportButton.addEventListener("click", () => {
     durationSeconds: duration,
     verdict: currentDataset.verdict,
     quality: currentLogQuality,
+    recommendations: currentRecommendations,
+    governorEvents: currentDataset.governorEvents,
+    precomp: currentDataset.precomp,
     labs: [
       { title: "Governor Lab", analysis: currentDataset.labs.governor },
       { title: "ESC Lab", analysis: currentDataset.labs.esc },
