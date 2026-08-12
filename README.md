@@ -73,6 +73,11 @@ Blackbox Lab explains what happened during the flight using plain English and pr
 - **Native .bbl decoding** — open raw Blackbox files straight off
   the flight controller, no CSV conversion. Multi-flight files
   supported, corrupt bytes skipped gracefully.
+- **What To Try Next** — evidence-gated recommendations on the PID
+  and Governor pages: when enough events agree, the card names one
+  setting, a direction and a small step, plus the exact number the
+  next log must improve. Headspeed excursion events, precomp
+  balance reads and cross-flight precomp trends feed it.
 - **Flight Verdict** — answers first: plain-language cards with
   status, cause, what to do, and a jump straight to the evidence.
 - **Log Quality Gate** — before analysis, the app tells you what

@@ -631,6 +631,19 @@ function setupReplay(dataset, pilotInput, flightEvents) {
       tick.title = `${event.axis} — ${event.t.toFixed(1)} s`;
       ui.ticks.appendChild(tick);
     }
+
+    // Headspeed excursions ride the same scrub bar: the governor's
+    // moments are as scrubbable as the pilot's.
+    for (const event of dataset?.governorEvents?.events ?? []) {
+      if (!Number.isFinite(event.t) || replay.duration <= 0) continue;
+      const tick = document.createElement("span");
+      tick.className = `replay-tick ${
+        event.cause === "power-limit" ? "tick-overshoot" : "tick-slow"
+      }`;
+      tick.style.left = `${(event.t / replay.duration) * 100}%`;
+      tick.title = `Headspeed ${event.kind} — ${event.t.toFixed(1)} s`;
+      ui.ticks.appendChild(tick);
+    }
   }
 
   if (ui.speed) replay.rate = Number(ui.speed.value) || 1;
@@ -3860,6 +3873,16 @@ function analyzeFlight(flightIndex) {
   renderGovernorEvents(currentDataset);
   renderGovernorSettings(currentDataset);
   renderPrecompBalance(currentDataset);
+
+  // One page, one story: when the flight produced excursions, the
+  // verdict sentence carries their summary too — "excellent hold"
+  // must never sit silently above an event strip that disagrees.
+  if (
+    currentDataset?.governorEvents?.summary?.total > 0 &&
+    governorStory
+  ) {
+    governorStory.textContent += ` ${currentDataset.governorEvents.summary.sentence}`;
+  }
 
   // "What to try next": the recommendation engine reads what the
   // analyses measured; the vibration precedence comes from the same
