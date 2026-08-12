@@ -1,3 +1,55 @@
+## v1.1.0 — The Recommendation Engine
+
+v1.0.0 finished the analysis half of the mission; this release starts
+the other half the roadmap always promised: recommendations,
+explained and evidence-backed, with the pilot deciding. It was asked
+for by the first users of v1.0.0 within hours of the release — this
+is that answer.
+
+### The big ones
+
+- **What To Try Next.** The PID and Governor Lab pages now carry
+  recommendation cards. Each one states the finding, teaches the
+  mechanism behind it, and — only when enough evidence agrees —
+  names ONE setting family, a direction, and a small step, followed
+  by its verify plan: change the one thing, fly the same moves, and
+  the card names the exact number that must improve. Below the gate,
+  the same card says plainly what is missing ("Not calling it yet").
+  Advice is confidence-gated (at least two comparable events, high
+  evidence confidence, no conflicting higher-priority finding) and
+  respects the tuning order in code: an open vibration finding
+  silences PID advice, a power limit silences governor advice.
+- **Headspeed Events.** The Governor Lab gains the event layer the
+  PID page already had: every sustained moment the rotor ran over or
+  under its governed target shows as a card on a time axis — click
+  one and its evidence unfolds in place, target vs headspeed and
+  motor output vs collective on one clock, with the pilot's hands
+  beside it when the log carries stick telemetry. Each event is
+  classified from its context: power-limit, load droop, overspeed
+  after a collective drop, with post-event hunting flagged. The
+  event band is fleet-calibrated on 247 contributed flights: the
+  median governed machine reads zero events.
+- **Precomp Balance.** Precomp is never logged, but how well the
+  anticipation worked is. The Governor Lab's advanced view now reads
+  the flight's own fast collective moves both ways: droop on rises
+  with clean drops = precomp behind the load; overspeed on drops
+  with clean rises = precomp past it; missed both ways = a
+  response-speed story, routed to the ESC Lab. The tail gets the
+  same treatment — a tail kicked consistently by collective moves is
+  torque anticipation, not tail tuning, and the card says which knob
+  that is and how to verify the direction.
+- **Reading the findings.** The How-to-Use guide gains the chapter
+  users asked for — how events, patterns and recommendations relate,
+  and when NOT to change anything — plus a fuller written version in
+  `Documentation/READING_THE_FINDINGS.md`.
+
+### Also in
+
+- Governor & precomp settings from the craft's saved configuration
+  shown beside the events they produced (advanced view).
+- Stick insets across the app now hide cleanly on logs without
+  rcCommand telemetry instead of rendering an empty box.
+
 ## v1.0.0 — Blackbox Lab
 
 The first full release. Everything below grew out of months of test
