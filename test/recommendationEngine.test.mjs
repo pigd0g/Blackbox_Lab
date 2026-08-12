@@ -568,3 +568,44 @@ test("damping advice is not said twice on one axis", () => {
   assert.equal(dampingRecs.length, 1, JSON.stringify(result.pid.map((r) => [r.id, r.suggestion?.family])));
   assert.equal(dampingRecs[0].id, "pid:Pitch:slow-settling");
 });
+
+test("vibration silences governor advice too — filters before governor", () => {
+  const result = buildRecommendations({
+    governorEvents: {
+      events: [
+        governorEvent({ cause: "collective-drop" }),
+        governorEvent({ cause: "collective-drop" }),
+        governorEvent({ cause: "collective-drop" })
+      ]
+    },
+    precomp: {
+      governor: null,
+      tail: {
+        balance: "coupled",
+        kickRatio: 6,
+        transientError: 70,
+        consistency: 0.9,
+        kickCount: 15
+      }
+    },
+    vibrationConcern: true
+  });
+
+  for (const rec of result.governor) {
+    assert.equal(rec.suggestion, null, rec.id);
+  }
+
+  const precompRec = result.governor.find(
+    (rec) => rec.id === "governor:precomp-overshoot"
+  );
+  assert.match(precompRec.gatedReason, /vibration/i);
+
+  const tailRec = result.governor.find(
+    (rec) => rec.id === "governor:tail-coupling"
+  );
+  assert.match(tailRec.gatedReason, /Filters come first/);
+  assert.ok(
+    !tailRec.gatedReason.includes("yaw_collective_ff_gain"),
+    "vibration-suspect tail read still handed out the knob"
+  );
+});

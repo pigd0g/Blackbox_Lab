@@ -174,7 +174,8 @@ export function buildRecommendations({
     }),
     governor: buildGovernorRecommendations({
       governorEvents,
-      precomp
+      precomp,
+      vibrationConcern
     })
   };
 }
@@ -538,10 +539,36 @@ function buildOvershootRecommendation({
   };
 }
 
-function buildGovernorRecommendations({ governorEvents, precomp }) {
+function buildGovernorRecommendations({
+  governorEvents,
+  precomp,
+  vibrationConcern = false
+}) {
   const events = governorEvents?.events ?? [];
   const gate = RECOMMENDATION_GATE;
   const recommendations = [];
+
+  // The tuning order holds here too: gyro vibration can fake the
+  // yaw-error signal the tail read is built on, and shake enough
+  // energy into everything else to make any governor conclusion
+  // suspect. One silencer, applied to every directional suggestion
+  // this builder would otherwise make.
+  const silenceForVibration = (recommendation) =>
+    vibrationConcern &&
+    (recommendation.suggestion ||
+      // The tail read is measured from yaw gyro error — the most
+      // vibration-sensitive signal here — so its verify-plan
+      // guidance yields too, suggestion or not.
+      recommendation.id === "governor:tail-coupling")
+      ? {
+          ...recommendation,
+          suggestion: null,
+          expectedResult: null,
+          verifyMetric: null,
+          gatedReason:
+            "This flight carries an open vibration finding, and vibration can fake exactly these signals. Filters come first: resolve it, fly again, and re-read this page."
+        }
+      : recommendation;
 
   const powerLimitEvents = events.filter(
     (event) => event.cause === "power-limit"
@@ -789,5 +816,5 @@ function buildGovernorRecommendations({ governorEvents, precomp }) {
     });
   }
 
-  return recommendations;
+  return recommendations.map(silenceForVibration);
 }

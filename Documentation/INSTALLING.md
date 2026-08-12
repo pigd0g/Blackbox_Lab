@@ -46,7 +46,9 @@ updates it in place. Your Health Record and settings are kept.
 
 ## Where your data lives
 
-Everything Blackbox Lab analyzes stays on your computer. Your
-Health Record, model cards and settings live in your user
-profile and survive updates. Sharing anything is always your
-choice, per action, in the app.
+Analysis runs on your computer, and your Health Record, model
+cards and settings live in your user profile and survive updates.
+Sharing flight data with the project is a consent choice: the app
+asks once on first launch, the answer can be changed anytime in
+Settings, and `Documentation/CONTRIBUTED-DATA.md` describes
+exactly what a shared flight contains — and what never uploads.
