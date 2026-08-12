@@ -261,3 +261,68 @@ test("deleteFlight leaves storage untouched on unknown craft or file", () => {
   assert.equal(deleteFlight(storage, "Test Heli", "no-such.bbl"), false);
   assert.equal(JSON.stringify(loadHistory(storage)), before);
 });
+
+// ---- precomp trends (v1.1) ----
+
+function precompEntry(index, { kick = null, riseDroop = null } = {}) {
+  return {
+    fileName: `flight-${index}.bbl`,
+    flightDateMs: 1_700_000_000_000 + index * 86_400_000,
+    durationSeconds: 300,
+    sampleCount: 40_000 + index,
+    vibrationPeak: 5,
+    tailKickRatio: kick,
+    precompRiseDroopPercent: riseDroop
+  };
+}
+
+test("a rising tail kick across flights becomes a trend finding", () => {
+  const entries = [
+    precompEntry(0, { kick: 1.2 }),
+    precompEntry(1, { kick: 1.4 }),
+    precompEntry(2, { kick: 1.3 }),
+    precompEntry(3, { kick: 4.5 }),
+    precompEntry(4, { kick: 5.2 }),
+    precompEntry(5, { kick: 5.8 })
+  ];
+
+  const { findings } = assessTrends(entries);
+  const kick = findings.find((finding) =>
+    finding.sentence.includes("Tail kick")
+  );
+
+  assert.ok(kick, JSON.stringify(findings));
+  assert.match(kick.sentence, /Precomp Balance/);
+});
+
+test("tiny-base precomp ratios never trend — the floor holds", () => {
+  // 0.1% → 0.18% droop is a huge ratio and a meaningless number.
+  const entries = [
+    precompEntry(0, { riseDroop: 0.1 }),
+    precompEntry(1, { riseDroop: 0.12 }),
+    precompEntry(2, { riseDroop: 0.11 }),
+    precompEntry(3, { riseDroop: 0.17 }),
+    precompEntry(4, { riseDroop: 0.18 }),
+    precompEntry(5, { riseDroop: 0.19 })
+  ];
+
+  const { findings } = assessTrends(entries);
+
+  assert.equal(
+    findings.some((finding) =>
+      finding.sentence.includes("collective rises")
+    ),
+    false
+  );
+});
+
+test("history entries from before v1.1 trend cleanly without the fields", () => {
+  const entries = [0, 1, 2, 3, 4].map((index) => ({
+    fileName: `old-${index}.bbl`,
+    durationSeconds: 300,
+    vibrationPeak: 5
+  }));
+
+  const { findings } = assessTrends(entries);
+  assert.ok(Array.isArray(findings));
+});

@@ -220,7 +220,15 @@ export function buildHistoryEntry({
   dataset.pidScore ??
   null,
     batterySagPercent: dataset.batterySagPercent ?? null,
-    internalResistance: dataset.labs?.battery?.internalResistance ?? null
+    internalResistance: dataset.labs?.battery?.internalResistance ?? null,
+    // Precomp balance reads (v1.1) — how hard collective moves hit
+    // the headspeed and the tail on THIS flight. Older entries
+    // simply lack these keys and the trend checks skip them.
+    precompRiseDroopPercent:
+      dataset.precomp?.governor?.riseDroopPercent ?? null,
+    precompDropOvershootPercent:
+      dataset.precomp?.governor?.dropOvershootPercent ?? null,
+    tailKickRatio: dataset.precomp?.tail?.kickRatio ?? null
   };
 }
 
@@ -663,7 +671,11 @@ function averageOf(values) {
   return sum / usable.length;
 }
 
-function assessMetric(entries, key, { label, lowerIsBetter, unit, adviceUp }) {
+function assessMetric(
+  entries,
+  key,
+  { label, lowerIsBetter, unit, adviceUp, minimumRecent }
+) {
   const values = entries.map((entry) => entry[key]);
   const usable = values.filter((value) => Number.isFinite(value));
 
@@ -676,6 +688,17 @@ function assessMetric(entries, key, { label, lowerIsBetter, unit, adviceUp }) {
   const recent = averageOf(usable.slice(-Math.min(3, half)));
 
   if (earlier === null || recent === null || earlier === 0) {
+    return null;
+  }
+
+  // Ratios on tiny bases are noise: 0.1 → 0.15 is a 50% "rise" of
+  // nothing. Metrics that live near zero on a healthy machine set
+  // an absolute floor the recent value must clear before a trend
+  // may speak.
+  if (
+    Number.isFinite(minimumRecent) &&
+    Math.abs(recent) < minimumRecent
+  ) {
     return null;
   }
 
@@ -731,6 +754,30 @@ export function assessTrends(entries) {
       unit: "",
       adviceUp:
         "The tune is drifting — mechanics wearing in, or settings changed along the way."
+    }),
+    assessMetric(entries, "tailKickRatio", {
+      label: "Tail kick on collective moves",
+      lowerIsBetter: true,
+      unit: "×",
+      minimumRecent: 3,
+      adviceUp:
+        "The collective-to-yaw anticipation no longer matches the torque — either the precomp drifted or the tail drive is wearing. The Governor Lab's Precomp Balance shows the current read."
+    }),
+    assessMetric(entries, "precompRiseDroopPercent", {
+      label: "Droop on collective rises",
+      lowerIsBetter: true,
+      unit: "%",
+      minimumRecent: 2.5,
+      adviceUp:
+        "The governor's load anticipation is losing ground across flights — an aging pack shrinking headroom, or precomp no longer matching the machine."
+    }),
+    assessMetric(entries, "precompDropOvershootPercent", {
+      label: "Overspeed on collective drops",
+      lowerIsBetter: true,
+      unit: "%",
+      minimumRecent: 2.5,
+      adviceUp:
+        "Collective drops overspeed the rotor more than they used to — worth re-reading the Precomp Balance before it becomes audible."
     })
   ].filter(Boolean);
 
