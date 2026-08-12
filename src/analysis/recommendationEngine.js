@@ -35,12 +35,20 @@ export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
   SLOW_SETTLING_MS: 500,
   // Fleet-calibrated 2026-08-12 (78 contributed flights, 178 axes):
-  // slow settling is rare per COMMAND (the median axis: 2.3% of its
-  // commands), but absolute counts grow with flight length — over
-  // half of fleet axes accumulate two slow events eventually. The
-  // trigger therefore needs a share of commands, not a count alone:
-  // at 15% (≈ fleet p90) the recommendation lands on 7% of axes.
-  SLOW_SETTLE_SHARE_MINIMUM: 0.15,
+  // slow settling is rare per COMMAND overall, but each axis has its
+  // own normal — roll settles fast on the whole fleet (p50 share
+  // 0.000), while yaw settles slow as its NATURE (p50 0.076, p90
+  // 0.167: tail dynamics plus sustained pirouette commands measured
+  // as one long settle). One shared bar over-fires on yaw and never
+  // fires on roll — three unrelated reference machines all earned
+  // the same yaw advice before this split. Bars sit above each
+  // axis's p90 (yaw above p95, since its measurement inflates), so
+  // a slow-settle card names the machine, not the axis's nature.
+  SLOW_SETTLE_SHARE_MINIMUM: {
+    Roll: 0.1,
+    Pitch: 0.15,
+    Yaw: 0.25
+  },
   HUNTING_MINIMUM_CROSSINGS: 3,
   // Governor excursions are fleet-rare by calibration (median
   // machine: zero), so three same-cause excursions in ONE flight
@@ -268,9 +276,12 @@ function buildPidRecommendations({
         ? slowEvents.length / cleanResponses.length
         : 0;
 
+    const slowShareBar =
+      gate.SLOW_SETTLE_SHARE_MINIMUM[axis] ?? 0.15;
+
     if (
       slowEvents.length < gate.MINIMUM_EVENTS ||
-      slowShare < gate.SLOW_SETTLE_SHARE_MINIMUM
+      slowShare < slowShareBar
     ) {
       pushOvershoot(false);
       continue;

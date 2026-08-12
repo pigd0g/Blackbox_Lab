@@ -242,6 +242,7 @@ test("empty inputs produce empty recommendation lists", () => {
 
 test("gate constants stay explicit", () => {
   assert.equal(RECOMMENDATION_GATE.MINIMUM_EVENTS, 2);
+  assert.ok(RECOMMENDATION_GATE.SLOW_SETTLE_SHARE_MINIMUM.Yaw > RECOMMENDATION_GATE.SLOW_SETTLE_SHARE_MINIMUM.Roll, "yaw's nature needs the higher bar");
   assert.ok(RECOMMENDATION_GATE.GOVERNOR_HIGH_CONFIDENCE_EVENTS >= 3);
 });
 
@@ -661,5 +662,29 @@ test("slow events diluted across a long flight never trigger", () => {
   assert.equal(
     result.pid.find((r) => r.id === "pid:Pitch:slow-settling"),
     undefined
+  );
+});
+
+
+test("an ordinary yaw axis is not a finding — per-axis bars hold", () => {
+  // Fleet yaw p90 is ~17% slow — a yaw axis at that level is the
+  // axis's nature, not this machine's fault.
+  const events = [];
+  for (let index = 0; index < 3; index += 1) {
+    events.push(commandEvent({ slow: true, hunting: true }));
+  }
+  while (events.length < 18) {
+    events.push(commandEvent());
+  }
+
+  const result = buildRecommendations({
+    trackingAnalysis: { commandEvents: [axisEvents("Yaw", events)] },
+    timeSeconds
+  });
+
+  assert.equal(
+    result.pid.find((r) => r.id === "pid:Yaw:slow-settling"),
+    undefined,
+    "3 of 18 (17%) is fleet-ordinary yaw"
   );
 });
