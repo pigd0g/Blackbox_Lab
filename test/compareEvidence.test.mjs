@@ -287,3 +287,22 @@ test("a single usable source is used as before", () => {
   assert.ok(fcOnly.selected);
   assert.equal(fcOnly.note, null);
 });
+
+test("a regression from a zero baseline is never 'about the same'", () => {
+  const clean = verifyDataset({
+    events: { summary: { total: 40, clean: 40, overshoot: 0, slow: 0 } },
+    governorEvents: { summary: { totalFound: 0, under: 0, over: 0, powerLimit: 0, hunting: 0 } }
+  });
+  const rough = verifyDataset({
+    events: { summary: { total: 35, clean: 25, overshoot: 6, slow: 4 } },
+    governorEvents: { summary: { totalFound: 8, under: 5, over: 3, powerLimit: 0, hunting: 2 } }
+  });
+
+  const rows = compareFlights(clean, rough).rows;
+
+  const excursions = rows.find((r) => r.title === "Headspeed excursions");
+  assert.equal(excursions.direction, "worse", excursions.sentence);
+
+  const events = rows.find((r) => r.title === "Stick response events");
+  assert.equal(events.direction, "worse", events.sentence);
+});

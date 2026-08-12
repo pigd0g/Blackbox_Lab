@@ -256,16 +256,26 @@ export function analyzePrecomp({
     );
 
     // Droop is positive error; overshoot is negative. Each side is
-    // read in its own natural direction.
+    // read in its own natural direction, and a window that only
+    // moved the OTHER way contributes zero — "median droop on
+    // rises" is a magnitude, and a negative one would silently
+    // invert every comparison built on it.
+    const clampedPeak = (peak) =>
+      peak === null ? null : Math.max(0, peak);
+
     const riseDroopPercent = medianOf(
       rises.map((t) =>
-        peakInWindow(smoothedError, t.startIndex, t.endIndex, "positive")
+        clampedPeak(
+          peakInWindow(smoothedError, t.startIndex, t.endIndex, "positive")
+        )
       )
     );
 
     const dropOvershootPercent = medianOf(
       drops.map((t) =>
-        peakInWindow(smoothedError, t.startIndex, t.endIndex, "negative")
+        clampedPeak(
+          peakInWindow(smoothedError, t.startIndex, t.endIndex, "negative")
+        )
       )
     );
 

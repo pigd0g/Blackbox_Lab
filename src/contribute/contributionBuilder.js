@@ -406,7 +406,9 @@ export async function buildContributionV1(
       })),
     governor_events_summary: extras.governorEvents?.summary
       ? {
-          total: extras.governorEvents.summary.total,
+          total:
+            extras.governorEvents.summary.totalFound ??
+            extras.governorEvents.summary.total,
           under: extras.governorEvents.summary.under,
           over: extras.governorEvents.summary.over,
           power_limit: extras.governorEvents.summary.powerLimit,

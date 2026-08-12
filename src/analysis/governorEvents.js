@@ -593,6 +593,9 @@ export function detectGovernorEvents({
     .slice(0, tuning.MAXIMUM_EVENTS)
     .sort((a, b) => a.t - b.t);
 
+  // Tallies cover EVERYTHING found, not just the events kept for
+  // display — "31 excursions (14 under · 10 over)" is a summary
+  // that cannot add up, and it would travel into contributions.
   const counts = {
     under: 0,
     over: 0,
@@ -600,7 +603,7 @@ export function detectGovernorEvents({
     hunting: 0
   };
 
-  for (const event of events) {
+  for (const event of qualified) {
     counts[event.kind] += 1;
 
     if (event.cause === "power-limit") {
@@ -623,7 +626,7 @@ export function detectGovernorEvents({
   const sentence =
     events.length === 0
       ? "No sustained over- or under-target excursions found in flight — the rotor stayed inside the event band the whole time."
-      : `${events.length} headspeed excursion${events.length === 1 ? "" : "s"} found — ` +
+      : `${qualified.length} headspeed excursion${qualified.length === 1 ? "" : "s"} found — ` +
         `${counts.under} below target` +
         (counts.over > 0 ? `, ${counts.over} above target` : "") +
         (counts.powerLimit > 0

@@ -399,6 +399,19 @@ export function buildRollingMean(values, windowSamples) {
 
   const half = Math.max(1, Math.round(windowSamples / 2));
 
+  // null means MISSING, and Number(null) is 0 — without the
+  // explicit check, gaps average into the window as zeros and
+  // dilute every smoothed signal near a dropout (an 8% droop
+  // straddling a gap can read below the event band).
+  const finiteAt = (index) => {
+    const value = values[index];
+    return value !== null &&
+      value !== undefined &&
+      Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+  };
+
   let runningTotal = 0;
   let runningCount = 0;
 
@@ -408,9 +421,9 @@ export function buildRollingMean(values, windowSamples) {
     index += 1
   ) {
     if (index < values.length) {
-      const entering = Number(values[index]);
+      const entering = finiteAt(index);
 
-      if (Number.isFinite(entering)) {
+      if (entering !== null) {
         runningTotal += entering;
         runningCount += 1;
       }
@@ -419,9 +432,9 @@ export function buildRollingMean(values, windowSamples) {
     const leavingIndex = index - 2 * half;
 
     if (leavingIndex >= 0) {
-      const leaving = Number(values[leavingIndex]);
+      const leaving = finiteAt(leavingIndex);
 
-      if (Number.isFinite(leaving)) {
+      if (leaving !== null) {
         runningTotal -= leaving;
         runningCount -= 1;
       }

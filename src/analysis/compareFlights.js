@@ -42,15 +42,32 @@ function percentChange(before, after) {
   return ((after - before) / Math.abs(before)) * 100;
 }
 
-function describeChange(change, lowerIsBetter, absoluteDelta, minimumDelta) {
+function describeChange(before, after, lowerIsBetter, minimumDelta) {
+  const absoluteDelta = after - before;
+
   // Tiny absolute changes are noise, not news — a droop of
   // 4 vs 6 rpm is "excellent both times", not "50% worse".
   if (
-    change === null ||
-    Math.abs(change) < 5 ||
-    (Number.isFinite(absoluteDelta) &&
-      Math.abs(absoluteDelta) < minimumDelta)
+    !Number.isFinite(absoluteDelta) ||
+    Math.abs(absoluteDelta) < minimumDelta
   ) {
+    return { direction: "same", word: "about the same" };
+  }
+
+  // A zero baseline has no percent — but 0 → 8 is not "the same".
+  // The common good state IS zero (no excursions, no events), so
+  // regressions from it must be called what they are.
+  if (before === 0) {
+    const improved = lowerIsBetter ? after < 0 : after > 0;
+    return {
+      direction: improved ? "better" : "worse",
+      word: improved ? "better" : "worse"
+    };
+  }
+
+  const change = percentChange(before, after);
+
+  if (change === null || Math.abs(change) < 5) {
     return { direction: "same", word: "about the same" };
   }
 
@@ -134,11 +151,10 @@ export function compareFlights(baseline, comparison) {
   const peakAfter = strongestPeak(comparison.spectra);
 
   if (peakBefore && peakAfter) {
-    const change = percentChange(peakBefore.magnitude, peakAfter.magnitude);
     const described = describeChange(
-      change,
+      peakBefore.magnitude,
+      peakAfter.magnitude,
       true,
-      peakAfter.magnitude - peakBefore.magnitude,
       1.5
     );
 
@@ -161,11 +177,10 @@ export function compareFlights(baseline, comparison) {
   if (govBefore && govAfter) {
     const droopBefore = govBefore.droopRpm;
     const droopAfter = govAfter.droopRpm;
-    const change = percentChange(droopBefore, droopAfter);
     const described = describeChange(
-      change,
+      droopBefore,
+      droopAfter,
       true,
-      droopAfter - droopBefore,
       8
     );
 
@@ -209,11 +224,10 @@ export function compareFlights(baseline, comparison) {
     );
 
     if (evidence.comparable) {
-      const change = percentChange(scoreBefore, scoreAfter);
       const described = describeChange(
-        change,
+        scoreBefore,
+        scoreAfter,
         false,
-        scoreAfter - scoreBefore,
         5
       );
 
@@ -256,13 +270,13 @@ export function compareFlights(baseline, comparison) {
     const rateBefore = reviewBefore / eventsBefore.total;
     const rateAfter = reviewAfter / eventsAfter.total;
 
-    const change = percentChange(rateBefore, rateAfter);
-    const described = describeChange(
-      change,
-      true,
-      reviewAfter - reviewBefore,
-      1
-    );
+    // The DIRECTION comes from the rate (two flights rarely hold
+    // the same number of commands), but the noise floor is one
+    // whole event: a rate wiggle without a count change is nothing.
+    const described =
+      Math.abs(reviewAfter - reviewBefore) < 1
+        ? { direction: "same", word: "about the same" }
+        : describeChange(rateBefore, rateAfter, true, 0.001);
 
     const describeSide = (summary, review) =>
       `${review} of ${summary.total} command${summary.total === 1 ? "" : "s"}` +
@@ -292,11 +306,10 @@ export function compareFlights(baseline, comparison) {
     const countBefore = govExBefore.totalFound;
     const countAfter = govExAfter.totalFound;
 
-    const change = percentChange(countBefore, countAfter);
     const described = describeChange(
-      change,
+      countBefore,
+      countAfter,
       true,
-      countAfter - countBefore,
       1
     );
 
@@ -350,11 +363,10 @@ export function compareFlights(baseline, comparison) {
       continue;
     }
 
-    const change = percentChange(valueBefore, valueAfter);
     const described = describeChange(
-      change,
+      valueBefore,
+      valueAfter,
       true,
-      valueAfter - valueBefore,
       minimumDelta
     );
 
@@ -374,11 +386,10 @@ export function compareFlights(baseline, comparison) {
   const kickAfter = comparison.precomp?.tail?.kickRatio;
 
   if (Number.isFinite(kickBefore) && Number.isFinite(kickAfter)) {
-    const change = percentChange(kickBefore, kickAfter);
     const described = describeChange(
-      change,
+      kickBefore,
+      kickAfter,
       true,
-      kickAfter - kickBefore,
       0.8
     );
 
@@ -399,11 +410,10 @@ export function compareFlights(baseline, comparison) {
   const sagAfter = comparison.batterySagPercent;
 
   if (Number.isFinite(sagBefore) && Number.isFinite(sagAfter)) {
-    const change = percentChange(sagBefore, sagAfter);
     const described = describeChange(
-      change,
+      sagBefore,
+      sagAfter,
       true,
-      sagAfter - sagBefore,
       1.5
     );
 
