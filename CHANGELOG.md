@@ -59,10 +59,31 @@ is that answer.
   rise from nothing to almost nothing can never read as a
   deterioration.
 
+- **The loop actually closes.** Every recommendation names the
+  number the next log must improve — and Compare Flights now shows
+  those exact numbers: stick-response events needing review,
+  headspeed excursion counts, the precomp balance reads, the tail
+  kick ratio. The shareable report carries the What To Try Next
+  cards, the excursion summary and the precomp reads, so the second
+  pair of eyes sees what the pilot sees. And the tuning order is
+  enforced everywhere: an open vibration finding silences governor
+  advice exactly as it silences PID advice — including the tail
+  read, which is measured from the most vibration-sensitive signal
+  of all.
+
 ### Also in
 
 - Governor & precomp settings from the craft's saved configuration
   shown beside the events they produced (advanced view).
+- The governor verdict sentence carries the excursion summary when
+  events exist; headspeed excursions ride the Replay scrub bar
+  beside the stick-command ticks; the Technical PID analysis
+  drilldown says in one line how it relates to the What To Try Next
+  card above it.
+- The contributed-data description now names the derived analysis
+  results that travel with a contribution — command events,
+  excursion events, precomp reads — and the in-app sharing
+  description says the same.
 - Contribution schema 1.2: governor excursion events and the
   precomp balance reads now travel with contributed flights — the
   same allowlist-on-write, consent and caps as the command events;
