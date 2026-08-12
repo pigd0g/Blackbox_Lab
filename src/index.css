@@ -46,7 +46,10 @@ body {
   width: 250px;
   flex-shrink: 0;
   background: var(--panel);
-  padding: 26px 18px;
+  /* Fourteen nav entries have to fit a 125%-scaled laptop screen —
+     the sidebar economizes vertically so Settings never hides below
+     the fold. */
+  padding: 18px 18px;
   border-right: 1px solid var(--line-soft);
   overflow-y: auto;
   display: flex;
@@ -168,8 +171,8 @@ button {
 .nav-button {
   display: block;
   width: 100%;
-  margin: 6px 0;
-  padding: 11px 14px;
+  margin: 2px 0;
+  padding: 8px 14px;
   background: transparent;
   color: var(--ink-soft);
   border: 1px solid transparent;
