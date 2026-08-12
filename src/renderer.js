@@ -106,6 +106,7 @@ import {
   detectGovernorEvents,
   governorEventWindow
 } from "./analysis/governorEvents.js";
+import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import {
   sliceWindow,
   windowStats,
@@ -2219,6 +2220,50 @@ function renderGovernorEvents(dataset) {
   }
 }
 
+// ---- "What to try next" — recommendation cards ----
+//
+// One block per recommendation. Above the gate it names one
+// setting family, a direction and a magnitude class; below it,
+// the same object renders as the review finding it is.
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function renderNextSteps(cardId, listId, recommendations) {
+  const card = el(cardId);
+  const list = el(listId);
+
+  if (!card || !list) return;
+
+  if (!recommendations || recommendations.length === 0) {
+    card.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+
+  card.hidden = false;
+  list.innerHTML = recommendations
+    .map((rec) => {
+      const action = rec.suggestion
+        ? `<p><strong>Try:</strong> one ${escapeHtml(rec.suggestion.magnitudeClass)} ${rec.suggestion.direction === "up" ? "up" : "down"} on <code>${escapeHtml(rec.suggestion.family)}</code>. Change only this, fly the same moves again, and watch ${escapeHtml(rec.verifyMetric ?? "the same finding")} — expected: ${escapeHtml(rec.expectedResult ?? "")}</p>`
+        : `<p><strong>Not calling it yet:</strong> ${escapeHtml(rec.gatedReason ?? "more evidence needed.")}</p>`;
+
+      return `
+        <div class="event-detail-explain">
+          <p><strong>${escapeHtml(rec.finding)}</strong></p>
+          <p>${escapeHtml(rec.hypothesis)}</p>
+          ${action}
+          <p class="chart-hint">Confidence: ${escapeHtml(rec.confidence)} · based on ${rec.evidence.length} event${rec.evidence.length === 1 ? "" : "s"} on this page</p>
+        </div>`;
+    })
+    .join("");
+}
+
 // The governor- and precomp-family settings worth showing beside
 // the headspeed events, in reading order. Names verified against a
 // real Rotorflight 4.6 `dump all`; keys a firmware version does not
@@ -3738,6 +3783,29 @@ function analyzeFlight(flightIndex) {
   );
   renderGovernorEvents(currentDataset);
   renderGovernorSettings(currentDataset);
+
+  // "What to try next": the recommendation engine reads what the
+  // analyses measured; the vibration precedence comes from the same
+  // verdict card the pilot sees.
+  const nextSteps = buildRecommendations({
+    trackingAnalysis: pidAnalysis?.detectedColumns?.trackingAnalysis,
+    commandBalanceReviewAxes:
+      pidAnalysis?.technicalSummary?.commandBalanceReviewAxes ?? [],
+    timeSeconds: currentDataset?.timeSeconds,
+    governorEvents: currentDataset?.governorEvents,
+    vibrationConcern: Boolean(
+      currentDataset?.verdict?.cards?.some(
+        (card) =>
+          card.key === "vibration" && card.status === "attention"
+      )
+    )
+  });
+  renderNextSteps("pidNextCard", "pidNextList", nextSteps.pid);
+  renderNextSteps(
+    "governorNextCard",
+    "governorNextList",
+    nextSteps.governor
+  );
   renderLab(
     currentDataset?.labs.esc,
     escStory,
