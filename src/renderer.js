@@ -50,6 +50,7 @@ import {
   peakMagnitudeAbove
 } from "./analysis/dsp/fft.js";
 import {
+  isUsableGovernorTarget,
   detectStableFlightPhase
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
@@ -1378,7 +1379,17 @@ function buildDataset(lines, pidAnalysis) {
   );
 
   const headspeed = firstColumn([/headspeed/i, /^rpm/i]);
-  const governorTarget = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
+  const governorTargetRaw = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
+  // DIRECT-mode / passthrough targets are not rotor-speed targets —
+  // treat them as absent so every consumer (labs, events, precomp,
+  // phase detection, verdict) falls back to headspeed-only reads.
+  // The Log Viewer still charts the raw column as recorded.
+  const governorTarget = isUsableGovernorTarget(
+    headspeed,
+    governorTargetRaw
+  )
+    ? governorTargetRaw
+    : [];
   const vbat = firstColumn([/^vbat/i]);
 const escVoltage = firstColumn([/^EscV$/i]);
 const amperage = firstColumn([/^amperage/i, /^Ibat/i, /^current/i]);

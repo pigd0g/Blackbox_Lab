@@ -746,3 +746,50 @@ export function detectInFlightSamples({ timeSeconds, headspeed }) {
 
   return inFlightIndexes.length >= 100 ? inFlightIndexes : null;
 }
+
+// A logged governor target is only a TARGET if the rotor plausibly
+// chased it. Rotorflight's DIRECT mode (and FUNCTION throttle) logs
+// a govTarget column that is not a rotor-speed target at all — on
+// such flights it sits far below the measured headspeed, and every
+// governed-flight comparison built on it rejects a perfectly good
+// flight. The test is the ratio of in-flight medians: a real
+// governed rotor lives near its target; a passthrough number does
+// not. Implausible targets are treated as absent, which routes the
+// flight to the headspeed-only analysis it should have had.
+export function isUsableGovernorTarget(headspeed, governorTarget) {
+  if (
+    !Array.isArray(governorTarget) ||
+    !Array.isArray(headspeed) ||
+    !governorTarget.some((value) => Number(value) > 300)
+  ) {
+    return false;
+  }
+
+  const pairedRatios = [];
+
+  for (let index = 0; index < governorTarget.length; index += 1) {
+    const target = Number(governorTarget[index]);
+    const actual = Number(headspeed[index]);
+
+    if (
+      Number.isFinite(target) &&
+      Number.isFinite(actual) &&
+      target > 300 &&
+      actual > 500
+    ) {
+      pairedRatios.push(target / actual);
+    }
+  }
+
+  if (pairedRatios.length < 100) {
+    // Too little overlap to judge — keep the old behavior and let
+    // the sample-count guards downstream speak.
+    return true;
+  }
+
+  pairedRatios.sort((a, b) => a - b);
+  const medianRatio =
+    pairedRatios[Math.floor(pairedRatios.length / 2)];
+
+  return medianRatio >= 0.7 && medianRatio <= 1.3;
+}

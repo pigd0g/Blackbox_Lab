@@ -135,3 +135,47 @@ test("a bench run with no rotor speed is not mistaken for flight", () => {
   assert.equal(phase.stableSampleCount, 0);
   assert.match(phase.reason, /did not move/i);
 });
+
+// ---- governor-target plausibility (issue #23) ----
+
+import { isUsableGovernorTarget } from "../src/analysis/flightPhase.js";
+
+test("a DIRECT-mode passthrough target is not a usable target", () => {
+  // The M4 380 case: headspeed ~2664 rpm, govTarget a constant 781.
+  const headspeed = new Array(5000).fill(2664);
+  const governorTarget = new Array(5000).fill(781);
+
+  assert.equal(
+    isUsableGovernorTarget(headspeed, governorTarget),
+    false
+  );
+});
+
+test("a real governed target stays usable, droop included", () => {
+  const headspeed = new Array(5000).fill(1750); // 4% droop
+  const governorTarget = new Array(5000).fill(1820);
+
+  assert.equal(
+    isUsableGovernorTarget(headspeed, governorTarget),
+    true
+  );
+});
+
+test("no target and dead columns stay unusable", () => {
+  assert.equal(
+    isUsableGovernorTarget(new Array(5000).fill(2000), new Array(5000).fill(0)),
+    false
+  );
+  assert.equal(isUsableGovernorTarget(new Array(5000).fill(2000), null), false);
+});
+
+test("too little in-flight overlap keeps the old behavior", () => {
+  // 50 overlapping samples is not enough to call a target fake.
+  const headspeed = [...new Array(50).fill(2000), ...new Array(5000).fill(0)];
+  const governorTarget = new Array(5050).fill(700);
+
+  assert.equal(
+    isUsableGovernorTarget(headspeed, governorTarget),
+    true
+  );
+});

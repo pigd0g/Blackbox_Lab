@@ -634,14 +634,14 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
 
   const story =
     status === "good"
-      ? `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+      ? `Without a usable rotor-speed target in the log (none recorded, or a passthrough mode like DIRECT), hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
           meanRpm
         )} rpm and stayed within ${Math.round(
           worstDeviation
         )} rpm (${deviationPercent.toFixed(
           1
         )}%) of it. Deliberate headspeed changes are not counted against this.`
-      : `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+      : `Without a usable rotor-speed target in the log (none recorded, or a passthrough mode like DIRECT), hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
           meanRpm
         )} rpm, with a largest short-term swing of ${Math.round(
           worstDeviation

@@ -11,6 +11,7 @@ import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
 import {
+  isUsableGovernorTarget,
   detectStableFlightPhase,
   hasUsableRotorSpeed
 } from "./flightPhase.js";
@@ -476,6 +477,19 @@ const governorTargetSamples = getColumnSamples(
   telemetryHeaderIndex,
   governorTargetHeader
 );
+
+// DIRECT-mode / passthrough targets are not rotor-speed targets —
+// blank them here so profiles, labs and the report all fall back
+// to headspeed-only reads (mirrors the renderer's dataset rule).
+const governorTargetUsable = isUsableGovernorTarget(
+  headspeedValues,
+  governorTargetValues
+);
+
+if (!governorTargetUsable) {
+  governorTargetValues.length = 0;
+  governorTargetSamples.length = 0;
+}
 
 const governorTargetByRow = new Map(
   governorTargetSamples.map((sample) => [
