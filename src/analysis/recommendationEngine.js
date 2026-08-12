@@ -34,6 +34,13 @@ import { commandEvidenceConfidence } from "./pidAnalysis.js";
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
   SLOW_SETTLING_MS: 500,
+  // Fleet-calibrated 2026-08-12 (78 contributed flights, 178 axes):
+  // slow settling is rare per COMMAND (the median axis: 2.3% of its
+  // commands), but absolute counts grow with flight length — over
+  // half of fleet axes accumulate two slow events eventually. The
+  // trigger therefore needs a share of commands, not a count alone:
+  // at 15% (≈ fleet p90) the recommendation lands on 7% of axes.
+  SLOW_SETTLE_SHARE_MINIMUM: 0.15,
   HUNTING_MINIMUM_CROSSINGS: 3,
   // Governor excursions are fleet-rare by calibration (median
   // machine: zero), so three same-cause excursions in ONE flight
@@ -253,7 +260,18 @@ function buildPidRecommendations({
       recommendations.push(overshootRecommendation);
     };
 
-    if (slowEvents.length < gate.MINIMUM_EVENTS) {
+    // Count AND share: a long flight accumulates slow events the
+    // way any flight accumulates minutes — only an axis where slow
+    // settling is a real fraction of its commands has a pattern.
+    const slowShare =
+      cleanResponses.length > 0
+        ? slowEvents.length / cleanResponses.length
+        : 0;
+
+    if (
+      slowEvents.length < gate.MINIMUM_EVENTS ||
+      slowShare < gate.SLOW_SETTLE_SHARE_MINIMUM
+    ) {
       pushOvershoot(false);
       continue;
     }

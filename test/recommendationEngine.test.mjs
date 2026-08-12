@@ -639,3 +639,27 @@ test("ordinary fleet-level overshoot never triggers a recommendation", () => {
     undefined
   );
 });
+
+test("slow events diluted across a long flight never trigger", () => {
+  // Two slow settles among forty commands is the fleet's ordinary
+  // background, not a pattern — however real each event was.
+  const events = [];
+  for (let index = 0; index < 2; index += 1) {
+    events.push(commandEvent({ slow: true, hunting: true }));
+  }
+  while (events.length < 40) {
+    events.push(commandEvent());
+  }
+
+  const result = buildRecommendations({
+    trackingAnalysis: {
+      commandEvents: [axisEvents("Pitch", events)]
+    },
+    timeSeconds
+  });
+
+  assert.equal(
+    result.pid.find((r) => r.id === "pid:Pitch:slow-settling"),
+    undefined
+  );
+});
