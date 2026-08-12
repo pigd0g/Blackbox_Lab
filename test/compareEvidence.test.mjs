@@ -265,7 +265,7 @@ test("disagreeing ESC voltage yields to the FC's pack reading, with a note", () 
 
   assert.equal(selected, vbat);
   assert.match(note, /disagrees/);
-  assert.match(note, /calibrate/);
+  assert.match(note, /calibration/);
 });
 
 test("agreeing sources keep the ESC's reading, no note", () => {
@@ -305,4 +305,23 @@ test("a regression from a zero baseline is never 'about the same'", () => {
 
   const events = rows.find((r) => r.title === "Stick response events");
   assert.equal(events.direction, "worse", events.sentence);
+});
+
+test("unit differences are not disagreements — the cross-check is scale-free", () => {
+  // A 2S micro: FC logs decivolts (avg 76 raw = 7.6 V), ESC logs
+  // volts (7.6). Same pack, different units — no conflict, ESC
+  // preferred as before.
+  const escVoltage = new Array(500).fill(7.6);
+  const vbat = new Array(500).fill(76);
+
+  const { selected, note } = chooseVoltageSource(escVoltage, vbat);
+  assert.equal(selected, escVoltage);
+  assert.equal(note, null);
+
+  // Decade-boundary readings that agree must not fake a conflict.
+  const nearTen = chooseVoltageSource(
+    new Array(500).fill(9.8),
+    new Array(500).fill(10.2)
+  );
+  assert.equal(nearTen.note, null);
 });

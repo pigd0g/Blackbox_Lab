@@ -15,6 +15,8 @@
 //
 // ======================================================
 
+import { estimateSampleRate } from "./flightPhase.js";
+
 // Verdict thresholds — deliberately few and readable.
 const OVERSHOOT_REVIEW_PERCENT = 25;
 const SLOW_SETTLING_MS = 500;
@@ -26,16 +28,12 @@ function toSeconds(timeSeconds, sampleIndex) {
     : null;
 }
 
+// Gap-robust: a logging dropout stretches an endpoint average and
+// would inflate every settling_ms shown to the pilot; the median
+// interval is unaffected.
 function sampleSpacingMs(timeSeconds) {
-  if (!timeSeconds || timeSeconds.length < 2) {
-    return null;
-  }
-  const spacing =
-    (timeSeconds[timeSeconds.length - 1] - timeSeconds[0]) /
-    (timeSeconds.length - 1);
-  return Number.isFinite(spacing) && spacing > 0
-    ? spacing * 1000
-    : null;
+  const rate = estimateSampleRate(timeSeconds);
+  return Number.isFinite(rate) && rate > 0 ? 1000 / rate : null;
 }
 
 function eventVerdict(event, settlingMs) {

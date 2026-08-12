@@ -205,6 +205,12 @@ export function buildContribution(flight, fileType, categories, appVersion) {
 // 1.2 = 1.1 + governor excursion events, their summary, and the
 // precomp balance reads — derived mechanical metrics only, same
 // allowlist-on-write discipline as everything else here.
+//
+// Upload paths are contrib/<schema>/<content-hash>/ — the SAME
+// flight contributed under two schema generations therefore lands
+// at two keys. That is accepted: the content hash inside each
+// payload is version-independent, and corpus tooling deduplicates
+// by flight fingerprint, never by path.
 export const CONTRIBUTION_SCHEMA_VERSION = "1.2";
 
 // SHA-256 over the decoded main-frame values of THIS

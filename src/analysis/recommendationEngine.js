@@ -30,6 +30,7 @@
 // ======================================================
 
 import { commandEvidenceConfidence } from "./pidAnalysis.js";
+import { estimateSampleRate } from "./flightPhase.js";
 
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
@@ -134,18 +135,12 @@ function spearmanCorrelation(a, b) {
   return varA > 0 && varB > 0 ? cov / Math.sqrt(varA * varB) : null;
 }
 
+// Gap-robust: a logging dropout stretches an endpoint average and
+// would inflate every settling duration; the median interval the
+// sibling modules use is unaffected.
 function sampleSpacingMs(timeSeconds) {
-  if (!Array.isArray(timeSeconds) || timeSeconds.length < 2) {
-    return null;
-  }
-
-  const spacing =
-    (timeSeconds[timeSeconds.length - 1] - timeSeconds[0]) /
-    (timeSeconds.length - 1);
-
-  return Number.isFinite(spacing) && spacing > 0
-    ? spacing * 1000
-    : null;
+  const rate = estimateSampleRate(timeSeconds);
+  return Number.isFinite(rate) && rate > 0 ? 1000 / rate : null;
 }
 
 // The Rotorflight CLI family a suggestion points at, per axis.

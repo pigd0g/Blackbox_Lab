@@ -481,10 +481,30 @@ const governorTargetSamples = getColumnSamples(
 // DIRECT-mode / passthrough targets are not rotor-speed targets —
 // blank them here so profiles, labs and the report all fall back
 // to headspeed-only reads (mirrors the renderer's dataset rule).
-const governorTargetUsable = isUsableGovernorTarget(
-  headspeedValues,
-  governorTargetValues
-);
+const governorTargetUsable = (() => {
+  // Pair by SOURCE ROW, not by compacted array position —
+  // getColumnValues drops non-finite cells per column, so the two
+  // value arrays can be time-shifted against each other, and a
+  // shifted pairing on a multi-bank flight reads ratios that are
+  // nothing like the truth.
+  const targetByRow = new Map(
+    governorTargetSamples.map((sample) => [sample.rowIndex, sample.value])
+  );
+
+  const pairedHeadspeed = [];
+  const pairedTarget = [];
+
+  for (const sample of headspeedSamples) {
+    const target = targetByRow.get(sample.rowIndex);
+
+    if (target !== undefined) {
+      pairedHeadspeed.push(sample.value);
+      pairedTarget.push(target);
+    }
+  }
+
+  return isUsableGovernorTarget(pairedHeadspeed, pairedTarget);
+})();
 
 if (!governorTargetUsable) {
   governorTargetValues.length = 0;
@@ -688,7 +708,7 @@ const pidProfiles =
 
         [
           "Governor Target",
-          governorTargetHeader
+          governorTargetUsable ? governorTargetHeader : null
         ]
       ];
      
@@ -716,7 +736,7 @@ const pidProfiles =
     governorP: findHeader(headers, ["govp"]),
     governorI: findHeader(headers, ["govi"]),
     governorD: findHeader(headers, ["govd"]),
-    governorTarget: governorTargetHeader
+    governorTarget: governorTargetUsable ? governorTargetHeader : null
   },
 
   evidenceSources: {

@@ -804,5 +804,11 @@ export function isUsableGovernorTarget(headspeed, governorTarget) {
   const medianRatio =
     pairedRatios[Math.floor(pairedRatios.length / 2)];
 
-  return medianRatio >= 0.7 && medianRatio <= 1.3;
+  // Asymmetric band: passthrough targets sit far BELOW the rotor
+  // (the reported DIRECT case reads 0.29), while a REAL target on a
+  // struggling machine sits ABOVE the rotor — sustained heavy droop
+  // pushes the ratio up, and blanking that target would hide
+  // exactly the failure it exposes. Up to 2× (a 50% droop median,
+  // beyond anything that stays airborne) the target is believed.
+  return medianRatio >= 0.7 && medianRatio <= 2.0;
 }

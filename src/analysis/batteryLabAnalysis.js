@@ -64,10 +64,12 @@ function hasUsablePositiveData(values) {
 
   return false;
 }
-// Scale a raw voltage column the way this Lab does everywhere,
-// and return its average in real volts — for source cross-checks
-// before any column is chosen.
-function scaledAverageVolts(values) {
+// Raw average of a voltage column — no unit inference here. The
+// cross-check below compares sources scale-invariantly, because
+// unit inference is exactly what cannot be trusted at this point
+// (a 2S micro's decivolt vbat averages 76 raw, which the magnitude
+// rule reads as 76 V and would turn into a phantom conflict).
+function rawAverage(values) {
   if (!Array.isArray(values)) {
     return null;
   }
@@ -84,15 +86,41 @@ function scaledAverageVolts(values) {
     }
   }
 
-  if (count === 0) {
+  return count > 0 ? sum / count : null;
+}
+
+// Scale-free disagreement between two positive readings: fold
+// their ratio by powers of ten into [1/√10, √10) and measure the
+// distance from 1. Two sources measuring the same pack in ANY
+// units (volts, decivolts, centivolts) fold to ~1; a genuine
+// reading difference survives every power-of-ten alignment.
+// (Folding, not mantissas: 9.8 V vs 10.2 V sit on either side of a
+// decade boundary and must still read as agreement.)
+function scaleFreeDisagreement(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
     return null;
   }
 
-  const rawAverage = sum / count;
-  const scale =
-    rawAverage > 1000 ? 100 : rawAverage > 100 ? 10 : 1;
+  let ratio = a / b;
+  const edge = Math.sqrt(10);
 
-  return rawAverage / scale;
+  while (ratio >= edge) ratio /= 10;
+  while (ratio < 1 / edge) ratio *= 10;
+
+  return Math.max(ratio, 1 / ratio) - 1;
+}
+
+// The Lab's display scale rule — used for the note's numbers only,
+// after the scale-free comparison has decided the winner.
+function scaledAverageVolts(values) {
+  const average = rawAverage(values);
+
+  if (average === null) {
+    return null;
+  }
+
+  const scale = average > 1000 ? 100 : average > 100 ? 10 : 1;
+  return average / scale;
 }
 
 /**
@@ -112,18 +140,15 @@ export function chooseVoltageSource(escVoltage, vbat) {
   const vbatUsable = hasUsablePositiveData(vbat);
 
   if (escUsable && vbatUsable) {
-    const escAvg = scaledAverageVolts(escVoltage);
-    const vbatAvg = scaledAverageVolts(vbat);
+    const disagreement = scaleFreeDisagreement(
+      rawAverage(escVoltage),
+      rawAverage(vbat)
+    );
 
-    if (
-      Number.isFinite(escAvg) &&
-      Number.isFinite(vbatAvg) &&
-      vbatAvg > 0 &&
-      Math.abs(escAvg - vbatAvg) / vbatAvg > 0.08
-    ) {
+    if (disagreement !== null && disagreement > 0.08) {
       return {
         selected: vbat,
-        note: `The ESC's voltage telemetry (${escAvg.toFixed(1)} V avg) disagrees with the flight controller's own pack reading (${vbatAvg.toFixed(1)} V avg) — this assessment uses the flight controller's, which is the one you calibrate.`
+        note: `The ESC's voltage telemetry (reading ~${scaledAverageVolts(escVoltage)?.toFixed(1)} V) disagrees with the flight controller's pack measurement (~${scaledAverageVolts(vbat)?.toFixed(1)} V) — this assessment uses the flight controller's. If the FC's voltage calibration is off, correcting it there fixes both readings at once.`
       };
     }
 
@@ -410,11 +435,19 @@ export function analyzeBatteryLab({
   //
   // Only evaluate current steps that occur fully inside
   // stable flight. This avoids startup and transition sag.
+  //
+  // And only when voltage and current tell one story: when the
+  // voltage cross-check had to override the ESC's reading, the
+  // volts here come from the FC while the amps come from the ESC —
+  // two sensors with different filtering, whose step response is
+  // not an internal-resistance measurement. Better no estimate
+  // than a trended wrong one.
   let internalResistancePerCell = null;
 
   if (
     amps &&
-    amps.length === volts.length
+    amps.length === volts.length &&
+    voltageSourceNote === null
   ) {
     const stableSet =
       new Set(stableIndexes);

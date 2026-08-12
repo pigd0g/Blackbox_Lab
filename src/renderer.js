@@ -2160,12 +2160,20 @@ function showGovernorEventDetail(event) {
     { yLabel: "rpm", markers, linkGroup: "governorEventSync" }
   );
 
-  // One output series, whichever telemetry name this log carries —
-  // ESC throttle when present, motor[0] otherwise.
-  const outputPatterns =
-    currentDataset.findColumnsIn([/^EscThr$/i]).length > 0
-      ? [/^EscThr$/i]
-      : [/^motor\[0\]$/i];
+  // One output series, picked the way the ANALYSIS picked it — by
+  // carrying data, not by existing. An all-zero EscThr column must
+  // not put a flat line under a power-limit classification that
+  // motor[0] produced.
+  const escThrottleColumn =
+    currentDataset.findColumnsIn([/^EscThr$/i])[0] ?? null;
+  const escThrottleCarriesData =
+    escThrottleColumn &&
+    currentDataset
+      .columnValues(escThrottleColumn)
+      .some((value) => Number(value) > 0);
+  const outputPatterns = escThrottleCarriesData
+    ? [/^EscThr$/i]
+    : [/^motor\[0\]$/i];
 
   renderSyncedChart(
     driveChart,
@@ -2412,8 +2420,15 @@ function renderGovernorSettings(dataset) {
 
   if (!card || !table) return;
 
-  const craftName = dataset?.craftName;
-  const dump = craftName ? getCraftDump(localStorage, craftName) : null;
+  // Dumps are filed under the NORMALIZED craft key — a log without
+  // a craft-name header reads "Not found" here but saves under
+  // "Unknown craft", and the two must meet or the card never shows.
+  const rawCraftName = dataset?.craftName;
+  const craftName =
+    !rawCraftName || rawCraftName === "Not found"
+      ? "Unknown craft"
+      : rawCraftName;
+  const dump = getCraftDump(localStorage, craftName);
   const parsed = dump?.parsed ?? null;
 
   const rows = parsed
@@ -4567,7 +4582,7 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
           dataset: extras.dataset,
           pidAnalysis: extras.pidAnalysis
         }),
-        flightEvents: currentFlightEvents,
+        flightEvents: extras.dataset?.flightEvents ?? null,
         governorEvents: extras.dataset?.governorEvents ?? null,
         precomp: extras.dataset?.precomp ?? null
       }
