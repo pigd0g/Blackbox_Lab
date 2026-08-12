@@ -1876,6 +1876,15 @@ if (sampleRate && hasSpectrumRuns) {
       yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
       yawGyro: firstColumn([/^gyroADC\[2\]$/i])
     }),
+    // The stick-command event layer lives ON the dataset so every
+    // consumer — the PID page, Compare Flights, contributions —
+    // reads the same list.
+    flightEvents: buildFlightEvents({
+      trackingAnalysis:
+        pidAnalysis?.detectedColumns?.trackingAnalysis,
+      timeSeconds,
+      dataRowOffset: headerIndex + 1
+    }),
     verdict
   };
 }
@@ -3831,14 +3840,7 @@ function analyzeFlight(flightIndex) {
     ? readPilotInput(currentDataset)
     : null;
 
-  renderFlightEvents(
-    buildFlightEvents({
-      trackingAnalysis:
-        pidAnalysis?.detectedColumns?.trackingAnalysis,
-      timeSeconds: currentDataset?.timeSeconds,
-      dataRowOffset: findTelemetryHeaderIndex(lines) + 1
-    })
-  );
+  renderFlightEvents(currentDataset?.flightEvents ?? null);
 
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);

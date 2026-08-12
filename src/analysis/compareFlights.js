@@ -238,6 +238,162 @@ export function compareFlights(baseline, comparison) {
     }
   }
 
+  // ---- stick response events ----
+  //
+  // The recommendation cards name "the slow-settle count" and "the
+  // overshoot count in Flight Events" as their verify metric — this
+  // row is where that promise is kept. Counts are compared as a
+  // RATE per measured command: two flights rarely contain the same
+  // number of stick inputs, and 3-of-40 versus 3-of-8 are different
+  // machines.
+  const eventsBefore = baseline.flightEvents?.summary;
+  const eventsAfter = comparison.flightEvents?.summary;
+
+  if (eventsBefore?.total > 0 && eventsAfter?.total > 0) {
+    const reviewBefore = eventsBefore.overshoot + eventsBefore.slow;
+    const reviewAfter = eventsAfter.overshoot + eventsAfter.slow;
+
+    const rateBefore = reviewBefore / eventsBefore.total;
+    const rateAfter = reviewAfter / eventsAfter.total;
+
+    const change = percentChange(rateBefore, rateAfter);
+    const described = describeChange(
+      change,
+      true,
+      reviewAfter - reviewBefore,
+      1
+    );
+
+    const describeSide = (summary, review) =>
+      `${review} of ${summary.total} command${summary.total === 1 ? "" : "s"}` +
+      (review > 0
+        ? ` (${summary.overshoot} overshot · ${summary.slow} slow)`
+        : "");
+
+    rows.push({
+      title: "Stick response events",
+      direction: described.direction,
+      before: describeSide(eventsBefore, reviewBefore),
+      after: describeSide(eventsAfter, reviewAfter),
+      sentence:
+        reviewBefore === 0 && reviewAfter === 0
+          ? "Every measured stick command tracked cleanly in both flights."
+          : described.direction === "same"
+            ? `The share of commands needing review is about the same (${reviewAfter} of ${eventsAfter.total}).`
+            : `The share of commands needing review got ${described.word}: ${reviewBefore} of ${eventsBefore.total} → ${reviewAfter} of ${eventsAfter.total}.`
+    });
+  }
+
+  // ---- governor excursions ----
+  const govExBefore = baseline.governorEvents?.summary;
+  const govExAfter = comparison.governorEvents?.summary;
+
+  if (govExBefore && govExAfter) {
+    const countBefore = govExBefore.totalFound;
+    const countAfter = govExAfter.totalFound;
+
+    const change = percentChange(countBefore, countAfter);
+    const described = describeChange(
+      change,
+      true,
+      countAfter - countBefore,
+      1
+    );
+
+    const describeSide = (summary, count) =>
+      count === 0
+        ? "none"
+        : `${count} (${summary.under} under · ${summary.over} over)`;
+
+    rows.push({
+      title: "Headspeed excursions",
+      direction:
+        countBefore === 0 && countAfter === 0
+          ? "same"
+          : described.direction,
+      before: describeSide(govExBefore, countBefore),
+      after: describeSide(govExAfter, countAfter),
+      sentence:
+        countBefore === 0 && countAfter === 0
+          ? "The rotor stayed inside the event band in both flights."
+          : described.direction === "same"
+            ? `Headspeed excursions are about the same (${countAfter}).`
+            : `Headspeed excursions got ${described.word}: ${countBefore} → ${countAfter}.`
+    });
+  }
+
+  // ---- precomp balance ----
+  //
+  // The precomp recommendations name these exact numbers as their
+  // before/after judge. Each side must have READ a balance (enough
+  // collective moves both ways) for the row to appear.
+  const precompRows = [
+    {
+      key: "riseDroopPercent",
+      title: "Collective-rise droop",
+      unit: "%",
+      minimumDelta: 1
+    },
+    {
+      key: "dropOvershootPercent",
+      title: "Collective-drop overspeed",
+      unit: "%",
+      minimumDelta: 1
+    }
+  ];
+
+  for (const { key, title, unit, minimumDelta } of precompRows) {
+    const valueBefore = baseline.precomp?.governor?.[key];
+    const valueAfter = comparison.precomp?.governor?.[key];
+
+    if (!Number.isFinite(valueBefore) || !Number.isFinite(valueAfter)) {
+      continue;
+    }
+
+    const change = percentChange(valueBefore, valueAfter);
+    const described = describeChange(
+      change,
+      true,
+      valueAfter - valueBefore,
+      minimumDelta
+    );
+
+    rows.push({
+      title,
+      direction: described.direction,
+      before: `${valueBefore}${unit}`,
+      after: `${valueAfter}${unit}`,
+      sentence:
+        described.direction === "same"
+          ? `${title} is about the same (${valueAfter}${unit}).`
+          : `${title} got ${described.word}: ${valueBefore}${unit} → ${valueAfter}${unit}.`
+    });
+  }
+
+  const kickBefore = baseline.precomp?.tail?.kickRatio;
+  const kickAfter = comparison.precomp?.tail?.kickRatio;
+
+  if (Number.isFinite(kickBefore) && Number.isFinite(kickAfter)) {
+    const change = percentChange(kickBefore, kickAfter);
+    const described = describeChange(
+      change,
+      true,
+      kickAfter - kickBefore,
+      0.8
+    );
+
+    rows.push({
+      title: "Tail kick on collective moves",
+      direction: described.direction,
+      before: `${kickBefore}× baseline`,
+      after: `${kickAfter}× baseline`,
+      sentence:
+        described.direction === "same"
+          ? `The tail's reaction to collective moves is about the same (${kickAfter}× its baseline error).`
+          : `The tail's reaction to collective moves got ${described.word}: ${kickBefore}× → ${kickAfter}× its baseline error.`
+    });
+  }
+
   // ---- battery sag ----
   const sagBefore = baseline.batterySagPercent;
   const sagAfter = comparison.batterySagPercent;

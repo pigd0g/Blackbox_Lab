@@ -157,3 +157,97 @@ test("an unnamed craft does not block comparison", () => {
   assert.equal(result.sameAircraft, true);
   assert.match(result.summary, /wrong way|revert/i);
 });
+
+// ---- verify-metric rows (v1.1) ----
+
+function verifyDataset({
+  events = null,
+  governorEvents = null,
+  precomp = null
+} = {}) {
+  return {
+    spectra: [],
+    labs: {},
+    pidScore: null,
+    batterySagPercent: null,
+    flightEvents: events,
+    governorEvents,
+    precomp
+  };
+}
+
+test("stick-response row keeps the recommendation cards' promise", () => {
+  const before = verifyDataset({
+    events: { summary: { total: 40, clean: 30, overshoot: 4, slow: 6 } }
+  });
+  const after = verifyDataset({
+    events: { summary: { total: 35, clean: 34, overshoot: 1, slow: 0 } }
+  });
+
+  const { rows } = compareFlights(before, after);
+  const row = rows.find((r) => r.title === "Stick response events");
+
+  assert.ok(row);
+  assert.equal(row.direction, "better");
+  assert.match(row.sentence, /10 of 40 → 1 of 35/);
+});
+
+test("governor excursion row compares counts, zero-both stays calm", () => {
+  const noisy = verifyDataset({
+    governorEvents: {
+      summary: { totalFound: 5, under: 3, over: 2, powerLimit: 0, hunting: 1 }
+    }
+  });
+  const calm = verifyDataset({
+    governorEvents: {
+      summary: { totalFound: 0, under: 0, over: 0, powerLimit: 0, hunting: 0 }
+    }
+  });
+
+  const improved = compareFlights(noisy, calm).rows.find(
+    (r) => r.title === "Headspeed excursions"
+  );
+  assert.equal(improved.direction, "better");
+  assert.equal(improved.after, "none");
+
+  const bothCalm = compareFlights(calm, calm).rows.find(
+    (r) => r.title === "Headspeed excursions"
+  );
+  assert.equal(bothCalm.direction, "same");
+  assert.match(bothCalm.sentence, /both flights/);
+});
+
+test("precomp rows appear only when both flights read a balance", () => {
+  const read = verifyDataset({
+    precomp: {
+      governor: { riseDroopPercent: 4.2, dropOvershootPercent: 0.6 },
+      tail: { kickRatio: 5.5 }
+    }
+  });
+  const unread = verifyDataset({ precomp: { governor: null, tail: null } });
+
+  const withBoth = compareFlights(
+    read,
+    verifyDataset({
+      precomp: {
+        governor: { riseDroopPercent: 1.8, dropOvershootPercent: 0.7 },
+        tail: { kickRatio: 1.9 }
+      }
+    })
+  ).rows;
+
+  assert.ok(withBoth.find((r) => r.title === "Collective-rise droop"));
+  assert.equal(
+    withBoth.find((r) => r.title === "Collective-rise droop").direction,
+    "better"
+  );
+  assert.ok(
+    withBoth.find((r) => r.title === "Tail kick on collective moves")
+  );
+
+  const withOne = compareFlights(read, unread).rows;
+  assert.equal(
+    withOne.find((r) => r.title === "Collective-rise droop"),
+    undefined
+  );
+});
