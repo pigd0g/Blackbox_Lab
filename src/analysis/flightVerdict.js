@@ -365,6 +365,10 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: governorLab.status,
+      // The stability RESULT may be favorable, but without a target
+      // there is no governed contract to score — the label says
+      // partial, never a scored-quality word.
+      statusLabel: "Partial — stability only",
       headline:
         governorLab.status === "good"
           ? `Headspeed held steady near ${governorLab.averageHeadspeed} rpm`

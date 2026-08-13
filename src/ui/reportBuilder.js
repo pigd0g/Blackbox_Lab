@@ -200,7 +200,7 @@ export function buildReportHtml({
       <div class="verdict" style="border-left-color:${status.color};background:${status.soft};">
         <div class="verdict-top">
           <span class="verdict-title">${escapeHtml(card.title)}</span>
-          <span class="verdict-status" style="color:${status.color};">${status.word}</span>
+          <span class="verdict-status" style="color:${status.color};">${escapeHtml(card.statusLabel ?? status.word)}</span>
         </div>
         <div class="verdict-headline">${escapeHtml(card.headline)}</div>
         <div class="verdict-detail">${escapeHtml(card.detail)}</div>

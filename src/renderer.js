@@ -2474,12 +2474,15 @@ function showEventDetail(event) {
   // An event without a timeline anchor gets no invented moment —
   // the card says what is known and the chart stays un-zoomed.
   if (!Number.isFinite(event.t)) {
-    explain.textContent = `A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} command was analyzed, but its exact position on the flight timeline could not be anchored, so no zoomed chart is shown for it.`;
+    explain.textContent = `A ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} setpoint step was analyzed, but its exact position on the flight timeline could not be anchored, so no zoomed chart is shown for it.`;
     chartElement.innerHTML = "";
     return;
   }
 
-  const asked = `At ${event.t.toFixed(1)} s you asked for a ${event.magnitude ?? "?"}°/s ${event.axis.toLowerCase()} rotation.`;
+  // The magnitude is the setpoint STEP, not the absolute rate — a
+  // pirouette already running at 200°/s can step by 23°/s, and the
+  // chart plots the absolute target. The words must match the chart.
+  const asked = `At ${event.t.toFixed(1)} s the ${event.axis.toLowerCase()} setpoint ${event.direction === -1 ? "stepped down" : "stepped up"} by ${event.magnitude ?? "?"}°/s.`;
   explain.textContent =
     event.verdict === "overshoot"
       ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
@@ -2591,7 +2594,7 @@ function renderVerdict(dataset) {
     tile.innerHTML = `
       <div class="verdict-item-top">
         <span class="status-dot"></span>
-        <span class="verdict-item-title">${card.title}</span>
+        <span class="verdict-item-title">${card.statusLabel ? `${card.title} · ${card.statusLabel}` : card.title}</span>
       </div>
       <div class="verdict-tile-headline">${card.headline}</div>
       <div class="verdict-tile-evidence">Show me → ${card.evidence}</div>

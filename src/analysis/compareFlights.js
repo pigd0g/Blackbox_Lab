@@ -444,6 +444,16 @@ export function compareFlights(baseline, comparison) {
   const comparedRows = better + worse;
   const aircraft = sameAircraft(baseline.craftName, comparison.craftName);
 
+  // Different helicopters: the numbers are shown for reference, but
+  // "90% better" is a tuning judgment and there is no tune being
+  // judged — every row becomes descriptive, not directional.
+  if (!aircraft.same) {
+    for (const row of rows) {
+      row.direction = "unknown";
+      row.sentence = `${row.title}: ${row.before} vs ${row.after} — two different machines, shown side by side for reference only.`;
+    }
+  }
+
   const summary =
     rows.length === 0
       ? "Not enough shared data between the two flights to compare."

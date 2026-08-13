@@ -1085,6 +1085,7 @@ if (controlMotionAxes.length > 0) {
     confidence,
 sampleCount,
 controlMotionAssessment,
+    controlMotionAvailable: controlMotionAxes.length > 0,
     strongestAxis: strongestAxis.name,
     strongestFilteredAverage:
       strongestAxis.data.filteredAverage,
@@ -1314,6 +1315,16 @@ if (profileSpecificFilterAnalysis.length === 1) {
 
   if (onlyProfile.mechanicalFinding?.status === "Cleanest Profile") {
     onlyProfile.mechanicalFinding.status = "Only Profile Measured";
+
+    // The summary sentence was baked with the comparative word —
+    // it must tell the same story as the status it carries.
+    if (typeof onlyProfile.mechanicalFinding.summary === "string") {
+      onlyProfile.mechanicalFinding.summary =
+        onlyProfile.mechanicalFinding.summary.replace(
+          "is rated Cleanest Profile",
+          "is rated Only Profile Measured (nothing to compare against)"
+        );
+    }
   }
 }
   
@@ -1844,9 +1855,14 @@ const averageReduction =
 const remainingVibration =
   quietestProfile?.mechanicalFinding?.averageFiltered ?? null;
 
+// The unavailability sentence is also a string — the flag must ask
+// whether the assessment could actually RUN, or the penalty for
+// missing evidence never fires and confidence reads High while the
+// profile text says the evidence was unavailable.
 const hasControlMotionEvidence =
   profileSpecificFilterAnalysis.some(
-    (profile) => profile.mechanicalFinding?.controlMotionAssessment
+    (profile) =>
+      profile.mechanicalFinding?.controlMotionAvailable === true
   );
 
 const {
@@ -1906,8 +1922,12 @@ if (!hasSufficientFilterEvidence) {
 // whether the checks that need commanded motion or a stable profile
 // could be run at all.
 const missingEvidencePenalty =
-  (hasControlMotionEvidence ? 0 : 20) +
-  (hasStableProfileEvidence ? 0 : 15);
+  (hasControlMotionEvidence ? 0 : 25) +
+  (hasStableProfileEvidence ? 0 : 15) +
+  // Peaks the matcher could not explain are evidence the verdict
+  // does NOT rest on — they lower confidence, never the score
+  // (the fleet lesson: unmatched measures the matcher's reach).
+  (unmatchedMechanicalPeakCount > matchedMechanicalPeakCount ? 15 : 0);
 
   const confidenceScore =
   hasSufficientFilterEvidence

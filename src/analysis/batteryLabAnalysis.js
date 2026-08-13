@@ -217,12 +217,12 @@ export function analyzeBatteryLab({
       ? governorTarget.slice(0, sampleCount)
       : [];
 
-  const rawAverage = averageOf(alignedVbat);
+  const rawVoltsAverage = averageOf(alignedVbat);
 
   const voltsScale =
-    rawAverage > 1000
+    rawVoltsAverage > 1000
       ? 100
-      : rawAverage > 100
+      : rawVoltsAverage > 100
         ? 10
         : 1;
 
@@ -373,8 +373,14 @@ export function analyzeBatteryLab({
   const minimumPerCell =
     flightMinVolts / cellCount;
 
-  const flightVoltageDropPercent =
-    ((startVolts - endVolts) / startVolts) * 100;
+  // A pack that reads fractionally higher at the end (recovery
+  // after the last load, sensor ripple) has zero net drop — a
+  // negative "sag" is not a measurement, and it confuses every
+  // comparison built on it.
+  const flightVoltageDropPercent = Math.max(
+    0,
+    ((startVolts - endVolts) / startVolts) * 100
+  );
 
   // ---- consumed capacity during stable flight only ----
   let consumedMah = null;
@@ -443,6 +449,14 @@ export function analyzeBatteryLab({
   // not an internal-resistance measurement. Better no estimate
   // than a trended wrong one.
   let internalResistancePerCell = null;
+  let internalResistanceNote = null;
+
+  if (!amps) {
+    internalResistanceNote = "needs a current sensor";
+  } else if (voltageSourceNote !== null) {
+    internalResistanceNote =
+      "not estimated — voltage and current came from different sensors";
+  }
 
   if (
     amps &&
@@ -490,6 +504,9 @@ export function analyzeBatteryLab({
     if (best !== null) {
       internalResistancePerCell =
         (best / cellCount) * 1000;
+    } else {
+      internalResistanceNote =
+        "no clean load steps in stable flight to measure from";
     }
   }
 
@@ -546,6 +563,10 @@ export function analyzeBatteryLab({
       )} V/cell)`
     },
     {
+      label: "Stable-flight voltage drop",
+      value: `${flightVoltageDropPercent.toFixed(1)}%`
+    },
+    {
       label: "Stable samples used",
       value: stableIndexes.length.toLocaleString()
     }
@@ -559,6 +580,11 @@ export function analyzeBatteryLab({
       label: "Stable-flight consumption",
       value: `~${consumedMah} mAh (est.)`
     });
+  } else {
+    metrics.push({
+      label: "Stable-flight consumption",
+      value: "— needs a current sensor"
+    });
   }
 
   if (
@@ -569,6 +595,11 @@ export function analyzeBatteryLab({
       value: `~${internalResistancePerCell.toFixed(
         1
       )} mΩ/cell (est.)`
+    });
+  } else if (internalResistanceNote) {
+    metrics.push({
+      label: "Internal resistance",
+      value: `— ${internalResistanceNote}`
     });
   }
 
