@@ -1,3 +1,65 @@
+## v1.2.0 — The Events-Integrity Round
+
+The community's first deep-review wave — issues on the events
+analysis, the governor verdict, battery sag and servo limits, plus
+a real before/after tuning case from the field — answered in one
+build. The theme throughout: every number the app shows must be the
+answer to the question it claims to answer.
+
+### Flight events, rebuilt
+
+- A command event now means a real stick step (20 deg/s or more)
+  toward a target that holds still. Tiny nudges and still-moving
+  targets are not step responses and are no longer scored.
+- Overshoot only exists after the response actually reaches the
+  target, only while it persists past it, and is bounded by
+  settling — the response-peak marker always points at the moment
+  it names. Reported in deg/s alongside percent, and both must be
+  meaningful for the verdict to fire.
+- Two new verdicts: **oscillation** — the response swings across
+  the target repeatedly, bigger than the command itself — and
+  **still approaching** — the response had not arrived when its
+  window closed. Both were previously lumped into other labels.
+- All response measurements run on a lightly smoothed trace, so a
+  single noisy sample can no longer fake a peak or break a settle.
+
+### Governor Lab
+
+- Multi-bank flights get one verdict row per commanded headspeed
+  bank — average, dip and percent against that bank's own target.
+  A cross-bank average describes nothing the pilot commanded.
+- Commanded bank changes no longer register as droop, and a dip
+  with the motor output at its ceiling is named a power-system
+  limit, pointing at the ESC Lab instead of governor gain.
+
+### ESC and Battery
+
+- Load-event sag is measured against the pack's level just before
+  each event, and the table shows both voltages — the reference is
+  visible, never implied. Ordinary discharge no longer reads as
+  event sag.
+
+### New: Servo Travel Check
+
+- The PID Lab watches for servo commands frozen at the edge of
+  their own travel while the controller is actively working — the
+  servo-level confirmation of a saturation condition. Each event
+  lists time, edge, duration and command value. Silent on logs
+  without servo data.
+
+### Scores that name their demand
+
+- A tracking score from a gently flown flight now says so ("at
+  gentle demand"), carries Medium confidence, and Compare Flights
+  shows — but does not subtract — scores from flights flown at
+  different intensities.
+
+### Calibration
+
+- Every fleet-anchored threshold behind the event verdicts and the
+  What To Try Next gates was re-measured on the contributed corpus
+  (370 flights) under the new measurement.
+
 ## v1.1.0 — The Recommendation Engine
 
 v1.0.0 finished the analysis half of the mission; this release starts
