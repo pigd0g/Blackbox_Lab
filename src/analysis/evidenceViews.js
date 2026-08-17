@@ -280,7 +280,7 @@ export function explainLoadEvent({
     return {
       cause: "battery-sag",
       sentence:
-        "Pack voltage sagged noticeably during this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it."
+        "Pack voltage fell well below its level from just before this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it — the table shows the exact before → during voltages."
     };
   }
 

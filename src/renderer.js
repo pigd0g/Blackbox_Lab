@@ -3106,12 +3106,44 @@ function renderEscEvidence(dataset) {
   } else {
     loadEventsCard.hidden = false;
 
-    // Voltage baseline: the calm top end of the whole flight.
+    // Voltage baseline: the pack's level JUST BEFORE each event.
+    // A whole-flight baseline conflates ordinary discharge with
+    // load sag — an event late in the pack always looked "sagged"
+    // against the fresh-pack top end, which is exactly the
+    // unfounded read the field called out. The calm top end of
+    // the flight remains only as a fallback for an event with no
+    // usable run-up.
     const sortedVoltage = voltageVolts
       .filter(Number.isFinite)
       .sort((first, second) => first - second);
-    const baselineVoltage =
+    const flightTopVoltage =
       sortedVoltage[Math.floor(sortedVoltage.length * 0.95)] ?? null;
+
+    const sampleRateHz = dataset.sampleRateHz ?? 100;
+
+    const preEventVoltage = (startIndex) => {
+      const lookback = Math.round(sampleRateHz * 3);
+      const from = Math.max(0, startIndex - lookback);
+      const values = voltageVolts
+        .slice(from, startIndex)
+        .filter(Number.isFinite)
+        .sort((first, second) => first - second);
+
+      // A meaningful local baseline needs at least a second of
+      // pre-event samples; otherwise fall back to the flight's
+      // calm top end.
+      if (values.length < sampleRateHz) {
+        return {
+          volts: flightTopVoltage,
+          reference: "flight"
+        };
+      }
+
+      return {
+        volts: values[Math.floor(values.length / 2)],
+        reference: "pre-event"
+      };
+    };
 
     const describedEvents = events.map((event) => {
       const output = windowStats(
@@ -3138,9 +3170,13 @@ function renderEscEvidence(dataset) {
         event.endIndex
       );
 
+      const baseline = preEventVoltage(event.startIndex);
+
       const sagPercent =
-        baselineVoltage && voltage
-          ? ((baselineVoltage - voltage.min) / baselineVoltage) * 100
+        Number.isFinite(baseline.volts) &&
+        baseline.volts > 0 &&
+        voltage
+          ? ((baseline.volts - voltage.min) / baseline.volts) * 100
           : null;
 
       const watts = windowStats(
@@ -3171,7 +3207,15 @@ function renderEscEvidence(dataset) {
         })
       });
 
-      return { event, output, voltage, sagPercent, watts, explanation };
+      return {
+        event,
+        output,
+        voltage,
+        baseline,
+        sagPercent,
+        watts,
+        explanation
+      };
     });
 
     const cell = (value, digits = 1, suffix = "") =>
@@ -3182,18 +3226,24 @@ function renderEscEvidence(dataset) {
     escEventsTable.innerHTML = `
       <tr>
         <th>When</th><th>Avg current</th><th>Peak current</th>
-        <th>Peak output</th><th>Peak power</th><th>Sag</th><th>Reading</th>
+        <th>Peak output</th><th>Peak power</th><th>Sag under load</th><th>Reading</th>
       </tr>
       ${describedEvents
         .map(
-          ({ event, output, sagPercent, watts, explanation }) => `
+          ({ event, output, voltage, baseline, sagPercent, watts, explanation }) => `
         <tr>
           <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
           <td>${cell(event.averageLoad, 1, " A")}</td>
           <td>${cell(event.peakLoad, 1, " A")}</td>
           <td>${cell(output?.max, 0, "%")}</td>
           <td>${cell(watts?.max, 0, " W")}</td>
-          <td>${cell(sagPercent, 1, "%")}</td>
+          <td>${
+            Number.isFinite(sagPercent) &&
+            Number.isFinite(baseline?.volts) &&
+            Number.isFinite(voltage?.min)
+              ? `${baseline.volts.toFixed(1)} → ${voltage.min.toFixed(1)} V (${sagPercent.toFixed(1)}%)`
+              : "—"
+          }</td>
           <td>${
             explanation.cause === "headroom-limit"
               ? "At the limit"
