@@ -19,7 +19,21 @@ import { estimateSampleRate } from "./flightPhase.js";
 
 // Verdict thresholds — deliberately few and readable.
 const OVERSHOOT_REVIEW_PERCENT = 25;
+// A percentage alone lies on small steps (10 deg/s past a
+// 20 deg/s nudge = "50%"): overshoot must also be a movement
+// worth naming in absolute terms.
+const OVERSHOOT_MINIMUM_DEG_S = 10;
 const SLOW_SETTLING_MS = 500;
+// Oscillation: repeated strong swings across the target after
+// the command — a different story than one overshoot, and the
+// more specific verdict wins.
+const OSCILLATION_MINIMUM_CROSSINGS = 4;
+const OSCILLATION_MINIMUM_DEG_S = 10;
+
+// A response can only be called "still on its way" when the
+// window actually left it time to arrive: a window cut short by
+// the next stick input proves nothing about the machine.
+const LAGGING_MINIMUM_WINDOW_MS = 500;
 
 function toSeconds(timeSeconds, sampleIndex) {
   const value = timeSeconds?.[sampleIndex];
@@ -36,10 +50,22 @@ function sampleSpacingMs(timeSeconds) {
   return Number.isFinite(rate) && rate > 0 ? 1000 / rate : null;
 }
 
-function eventVerdict(event, settlingMs) {
+function eventVerdict(event, settlingMs, windowMs) {
+  if (
+    event.ringingEligible &&
+    (event.strongRingingCrossingCount ?? 0) >=
+      OSCILLATION_MINIMUM_CROSSINGS &&
+    Number.isFinite(event.ringingAmplitude) &&
+    event.ringingAmplitude >= OSCILLATION_MINIMUM_DEG_S
+  ) {
+    return "oscillation";
+  }
+
   if (
     Number.isFinite(event.overshootPercent) &&
-    event.overshootPercent >= OVERSHOOT_REVIEW_PERCENT
+    event.overshootPercent >= OVERSHOOT_REVIEW_PERCENT &&
+    Number.isFinite(event.overshootAmount) &&
+    event.overshootAmount >= OVERSHOOT_MINIMUM_DEG_S
   ) {
     return "overshoot";
   }
@@ -50,6 +76,17 @@ function eventVerdict(event, settlingMs) {
     settlingMs > SLOW_SETTLING_MS
   ) {
     return "slow";
+  }
+
+  // The response never came within tolerance of the target
+  // inside a window long enough to give it a fair chance:
+  // not clean, not overshoot — it was still on its way.
+  if (
+    event.responseReachedTarget === false &&
+    Number.isFinite(windowMs) &&
+    windowMs >= LAGGING_MINIMUM_WINDOW_MS
+  ) {
+    return "lagging";
   }
 
   return "clean";
@@ -88,7 +125,13 @@ export function buildFlightEvents({
           ? Math.round(raw.settlingDurationSamples * dtMs)
           : null;
 
-      const verdict = eventVerdict(raw, settlingMs);
+      const windowMs =
+        Number.isFinite(dtMs) &&
+        Array.isArray(raw.responseWindow)
+          ? raw.responseWindow.length * dtMs
+          : null;
+
+      const verdict = eventVerdict(raw, settlingMs, windowMs);
 
       // Events measured on the compacted stable-flight arrays carry
       // their absolute source row; the flight timeline is ONLY read
@@ -131,6 +174,14 @@ export function buildFlightEvents({
         overshoot_percent: Number.isFinite(raw.overshootPercent)
           ? Math.round(raw.overshootPercent * 10) / 10
           : null,
+        overshoot_ds: Number.isFinite(raw.overshootAmount)
+          ? Math.round(raw.overshootAmount)
+          : null,
+        oscillation_ds:
+          verdict === "oscillation" &&
+          Number.isFinite(raw.ringingAmplitude)
+            ? Math.round(raw.ringingAmplitude)
+            : null,
         settling_ms: settlingMs,
         verdict
       });
@@ -150,30 +201,45 @@ export function buildFlightEvents({
     return (a.t ?? 0) - (b.t ?? 0);
   });
 
-  const counts = { clean: 0, overshoot: 0, slow: 0 };
+  const counts = {
+    clean: 0,
+    overshoot: 0,
+    slow: 0,
+    lagging: 0,
+    oscillation: 0
+  };
   for (const event of events) {
     counts[event.verdict] += 1;
   }
 
-  // The worst moment: biggest overshoot first, slowest
-  // settle as runner-up.
+  // The worst moment: ranked by the size of the movement in
+  // deg/s — absolute swings compare fairly across commands,
+  // percentages don't. Slowest settle breaks ties.
+  const excursionSize = (event) =>
+    Math.max(event.oscillation_ds ?? 0, event.overshoot_ds ?? 0);
+
   const worst =
     [...events]
       .filter((event) => event.verdict !== "clean")
       .sort((a, b) => {
-        const overshootGap =
-          (b.overshoot_percent ?? 0) - (a.overshoot_percent ?? 0);
-        if (overshootGap !== 0) return overshootGap;
+        const sizeGap = excursionSize(b) - excursionSize(a);
+        if (sizeGap !== 0) return sizeGap;
         return (b.settling_ms ?? 0) - (a.settling_ms ?? 0);
       })[0] ?? null;
 
   const sentence =
     events.length === 0
       ? "No distinct stick commands found in the stable flight sections — smooth cruising, or not enough command activity to judge."
-      : `${events.length} stick command${events.length === 1 ? "" : "s"} analyzed — ` +
+      : `${events.length} clear stick command${events.length === 1 ? "" : "s"} analyzed — ` +
         `${counts.clean} tracked cleanly` +
         (counts.overshoot > 0 ? `, ${counts.overshoot} overshot` : "") +
+        (counts.oscillation > 0
+          ? `, ${counts.oscillation} oscillated after the input`
+          : "") +
         (counts.slow > 0 ? `, ${counts.slow} settled slowly` : "") +
+        (counts.lagging > 0
+          ? `, ${counts.lagging} still approaching the target when their window closed`
+          : "") +
         "." +
         (worst && worst.t !== null
           ? ` Worst: ${worst.axis.toLowerCase()} at ${worst.t.toFixed(1)} s.`

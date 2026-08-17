@@ -387,7 +387,9 @@ export async function buildContributionV1(
           total: extras.flightEvents.summary.total,
           clean: extras.flightEvents.summary.clean,
           overshoot: extras.flightEvents.summary.overshoot,
-          slow: extras.flightEvents.summary.slow
+          slow: extras.flightEvents.summary.slow,
+          lagging: extras.flightEvents.summary.lagging ?? 0,
+          oscillation: extras.flightEvents.summary.oscillation ?? 0
         }
       : null,
 

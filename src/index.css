@@ -1484,6 +1484,31 @@ body:not(.log-loaded) .loaded-only { display: none; }
   color: var(--good);
 }
 
+.event-card.chip-oscillation {
+  border-color: var(--attention);
+}
+
+.event-card.chip-oscillation .event-card-metric {
+  color: var(--attention);
+}
+
+.event-card.chip-oscillation::after {
+  background: var(--attention);
+}
+
+.event-card.chip-lagging {
+  border-color: var(--watch);
+  opacity: 0.9;
+}
+
+.event-card.chip-lagging .event-card-metric {
+  color: var(--watch);
+}
+
+.event-card.chip-lagging::after {
+  background: var(--watch);
+}
+
 .event-detail-explain {
   margin: 14px 0 10px 0;
   padding: 10px 14px;
@@ -1740,6 +1765,8 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .replay-tick.tick-clean { background: var(--good, #58c08a); opacity: 0.7; }
 .replay-tick.tick-overshoot { background: var(--attention, #ff7a6b); }
 .replay-tick.tick-slow { background: var(--watch, #ffc46b); }
+.replay-tick.tick-lagging { background: var(--watch, #ffc46b); opacity: 0.75; }
+.replay-tick.tick-oscillation { background: var(--attention, #ff7a6b); }
 
 #replayScrub {
   width: 100%;

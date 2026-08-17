@@ -92,7 +92,11 @@ test("verdict thresholds: overshoot beats slow, clean is the default", () => {
         {
           axis: "Roll",
           events: [
-            rawEvent({ sampleIndex: 2000, overshootPercent: 40 }),
+            rawEvent({
+              sampleIndex: 2000,
+              overshootPercent: 40,
+              overshootAmount: 72 // deg/s — clears the absolute bar
+            }),
             rawEvent({
               sampleIndex: 6000,
               overshootPercent: 3,
@@ -115,8 +119,102 @@ test("verdict thresholds: overshoot beats slow, clean is the default", () => {
   assert.equal(summary.slow, 1);
   assert.equal(summary.clean, 1);
   assert.equal(summary.worst.verdict, "overshoot");
-  assert.ok(summary.sentence.includes("3 stick commands analyzed"));
+  assert.ok(summary.sentence.includes("3 clear stick commands analyzed"));
   assert.ok(summary.sentence.includes("Worst: roll at 1.0 s"));
+});
+
+test("overshoot needs an absolute movement, not just a percentage", () => {
+  // 50% of a 16 deg/s nudge is 8 deg/s — noise-sized. The percent
+  // clears the review bar, the movement does not, and the verdict
+  // must stay clean (this is the RS6 hover-log failure mode).
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Roll",
+          events: [
+            rawEvent({
+              sampleIndex: 2000,
+              commandMagnitude: 16,
+              overshootPercent: 50,
+              overshootAmount: 8
+            })
+          ]
+        }
+      ]
+    },
+    timeSeconds
+  });
+
+  assert.equal(events[0].verdict, "clean");
+});
+
+test("repeated strong swings across the target read as oscillation, not overshoot", () => {
+  const { events, summary } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Roll",
+          events: [
+            rawEvent({
+              sampleIndex: 2000,
+              overshootPercent: 120,
+              overshootAmount: 30,
+              ringingEligible: true,
+              strongRingingCrossingCount: 5,
+              ringingAmplitude: 45
+            })
+          ]
+        }
+      ]
+    },
+    timeSeconds
+  });
+
+  assert.equal(events[0].verdict, "oscillation");
+  assert.equal(events[0].oscillation_ds, 45);
+  assert.equal(summary.oscillation, 1);
+  assert.ok(summary.sentence.includes("oscillated after the input"));
+});
+
+test("a response that never reached the target in a fair window reads lagging, not clean", () => {
+  const longWindow = new Array(1200).fill(0); // 600 ms at 2 kHz
+
+  const { events } = buildFlightEvents({
+    trackingAnalysis: {
+      commandEvents: [
+        {
+          axis: "Pitch",
+          events: [
+            rawEvent({
+              axis: "Pitch",
+              sampleIndex: 2000,
+              overshootPercent: null,
+              settlingDetected: false,
+              settlingDurationSamples: null,
+              responseReachedTarget: false,
+              responseWindow: longWindow
+            }),
+            // Window cut short by the next input: proves nothing,
+            // stays clean.
+            rawEvent({
+              axis: "Pitch",
+              sampleIndex: 6000,
+              overshootPercent: null,
+              settlingDetected: false,
+              settlingDurationSamples: null,
+              responseReachedTarget: false,
+              responseWindow: new Array(40).fill(0)
+            })
+          ]
+        }
+      ]
+    },
+    timeSeconds
+  });
+
+  assert.equal(events[0].verdict, "lagging");
+  assert.equal(events[1].verdict, "clean");
 });
 
 test("events merge across axes and sort by time", () => {

@@ -5,7 +5,8 @@ import {
 } from "./mathHelpers.js";
 
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  buildRollingMean
 } from "./flightPhase.js";
 function findMatchingColumns(columns, searchTerms) {
   if (!Array.isArray(columns)) {
@@ -385,6 +386,18 @@ const eventWindowSamples = (seconds, minimumSamples) =>
 
 const commandChangeWindowSamples = eventWindowSamples(0.2, 5);
 const commandStableWindowSamples = eventWindowSamples(0.2, 5);
+
+// The smallest setpoint step (deg/s, unrounded) that counts as a
+// deliberate stick command. Below this bar a "command" is hover
+// correction or stick noise: scoring one produces events like a
+// 16 deg/s nudge reported as several hundred percent overshoot,
+// because the denominator is noise-sized.
+const meaningfulCommandMinimum = 20;
+
+// Response measurements run on a ~25 ms rolling mean of the
+// response window (raw gyro noise breaks consecutive-sample
+// settle detection and fakes single-sample "peaks").
+const responseSmoothingSamples = eventWindowSamples(0.025, 3);
 const commandEndLookaheadSamples = eventWindowSamples(3, 60);
 const responseWindowLimitSamples = eventWindowSamples(2, 40);
 const minimumEventSpacingSamples = eventWindowSamples(0.5, 10);
@@ -657,6 +670,12 @@ let commandEndSampleIndex =
 let stableSampleCount = 0;
 const requiredStableSamples = commandStableWindowSamples;
 
+// A step response can only be measured against a target that
+// actually holds still: when the lookahead never finds the
+// command settling, the pilot was still moving the stick and
+// the "event" is continuous flying, not a step.
+let targetStabilized = false;
+
 // Both look-aheads stop at the segment edge: past it the
 // compacted array jumps to a different moment of the flight,
 // and a window that crosses that seam would read two distant
@@ -693,12 +712,43 @@ for (
       requiredStableSamples +
       1;
 
+    targetStabilized = true;
+
     break;
   }
 }
 
 const commandTarget =
   values[commandEndSampleIndex];
+
+// ---- event qualification ----
+// Two bars before anything is measured or reported:
+// the command must be big enough to be a deliberate stick
+// input (tiny nudges are normal hover corrections and read
+// as absurd percentages when scored), and the target must
+// have stabilized (a target still moving through the
+// response window pairs an old command with a newer,
+// different setpoint).
+const qualifiedMagnitude =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(previousValue)
+    ? Math.abs(commandTarget - previousValue)
+    : null;
+
+if (
+  !targetStabilized ||
+  !Number.isFinite(qualifiedMagnitude) ||
+  qualifiedMagnitude < meaningfulCommandMinimum
+) {
+  // Still one stick movement: resume after it, exactly like
+  // an accepted event, so it cannot re-trigger along its
+  // own rise.
+  sampleIndex = Math.max(
+    sampleIndex,
+    commandEndSampleIndex
+  );
+  continue;
+}
 
 const responseResult =
   reconstructedAxisResponse[axisIndex];
@@ -767,79 +817,230 @@ const validResponseWindow =
     Number.isFinite(value)
   );
 
-const responsePeak =
-  validResponseWindow.length > 0
-    ? validResponseWindow.reduce(
-        (peak, value) =>
-          Math.abs(value) > Math.abs(peak)
-            ? value
-            : peak,
-        validResponseWindow[0]
-      )
-    : null;
-
-const responsePeakOffset =
-  Number.isFinite(responsePeak)
-    ? responseWindow.findIndex(
-        (value) => value === responsePeak
-      )
-    : -1;
-
-const responsePeakSampleIndex =
-  responsePeakOffset >= 0
-    ? responseWindowStart +
-      responsePeakOffset
-    : null;
- 
-
 const commandDirection =
   Math.sign(commandChange);
 
-const responseStart =
-  responseWindow.length > 0
-    ? responseWindow[0]
+const commandMagnitude = qualifiedMagnitude;
+
+// Every response read below runs on a lightly smoothed trace
+// (~25 ms): raw gyro noise otherwise breaks the consecutive
+// settle window on every real log and turns single-sample
+// spikes into "peaks". The charts still draw the raw trace;
+// only the measurements smooth.
+const measuredResponseWindow = buildRollingMean(
+  responseWindow,
+  responseSmoothingSamples
+);
+
+// Signed error in the command direction: positive means the
+// response has gone BEYOND the target, negative means it has
+// not reached it yet. Every response read below works in this
+// space, so "peak", "reached" and "overshoot" all refer to the
+// same movement the command asked for.
+const directionalError = (value) =>
+  Number.isFinite(value) &&
+  Number.isFinite(commandTarget)
+    ? (value - commandTarget) * commandDirection
     : null;
 
-const responsePeakChange =
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(responseStart)
-    ? responsePeak - responseStart
+const approachTolerance =
+  Number.isFinite(commandMagnitude)
+    ? Math.max(2, commandMagnitude * 0.1)
+    : 2;
+
+// How far the response actually got, measured along the
+// commanded direction — a wandering gyro on another errand can
+// no longer supply the "peak" of this command's response.
+let responsePeak = null;
+let responsePeakOffset = -1;
+
+for (
+  let offset = 0;
+  offset < measuredResponseWindow.length;
+  offset += 1
+) {
+  const value = measuredResponseWindow[offset];
+  if (!Number.isFinite(value)) continue;
+  if (
+    responsePeak === null ||
+    value * commandDirection >
+      responsePeak * commandDirection
+  ) {
+    responsePeak = value;
+    responsePeakOffset = offset;
+  }
+}
+
+// The response has ANSWERED the command once it comes within
+// tolerance of the target. Overshoot exists only after that
+// moment, and only as the FIRST excursion beyond the target:
+// later wandering inside the window is ringing or disturbance,
+// not the answer to this command.
+let reachedOffset = -1;
+
+for (
+  let offset = 0;
+  offset < measuredResponseWindow.length;
+  offset += 1
+) {
+  const error = directionalError(measuredResponseWindow[offset]);
+  if (
+    Number.isFinite(error) &&
+    error >= -approachTolerance
+  ) {
+    reachedOffset = offset;
+    break;
+  }
+}
+
+// Settling is measured BEFORE overshoot on purpose: once the
+// response has demonstrably settled at the target, anything the
+// gyro does afterwards is a new disturbance, and the overshoot
+// scan below must not read it as this command's answer.
+const settlingTolerance =
+  Number.isFinite(commandMagnitude)
+    ? Math.max(
+        2,
+        commandMagnitude * 0.1
+      )
+    : null;
+const settlingInToleranceFlags =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(settlingTolerance)
+    ? measuredResponseWindow.map((value) =>
+        Number.isFinite(value) &&
+        Math.abs(value - commandTarget) <=
+          settlingTolerance
+      )
+    : [];
+const requiredSettledSamples = settledWindowSamples;
+let settlingStartOffset = null;
+let consecutiveSettledSamples = 0;
+
+for (
+  let offset = 0;
+  offset < settlingInToleranceFlags.length;
+  offset += 1
+) {
+  if (settlingInToleranceFlags[offset]) {
+    consecutiveSettledSamples += 1;
+  } else {
+    consecutiveSettledSamples = 0;
+  }
+
+  if (
+    consecutiveSettledSamples >=
+    requiredSettledSamples
+  ) {
+    settlingStartOffset =
+      offset -
+      requiredSettledSamples +
+      1;
+
+    break;
+  }
+}
+
+let overshootAmount = null;
+let overshootPeakOffset = -1;
+
+if (reachedOffset >= 0 && !hasOverlappingCommand) {
+  // Overshoot lives between arrival and rest: the scan stops
+  // where the settled window ends, so a disturbance half a
+  // second after a clean settle can never be scored as this
+  // command's overshoot.
+  const excursionScanEnd = Number.isInteger(settlingStartOffset)
+    ? Math.min(
+        settlingStartOffset + requiredSettledSamples,
+        measuredResponseWindow.length
+      )
+    : measuredResponseWindow.length;
+  // An overshoot is a movement, not an instant: a one-sample
+  // spike at the moment the stick is released reads as a
+  // beyond-target value but proves nothing about the tune. An
+  // excursion only scores when it PERSISTS beyond the target.
+  const excursionMinimumSamples = minimumBounceBackSamples;
+
+  let runLength = 0;
+  let runPeak = null;
+  let runPeakOffset = -1;
+
+  for (
+    let offset = reachedOffset;
+    offset < excursionScanEnd;
+    offset += 1
+  ) {
+    const error = directionalError(measuredResponseWindow[offset]);
+    if (!Number.isFinite(error)) continue;
+
+    if (error > 0) {
+      runLength += 1;
+      if (runPeak === null || error > runPeak) {
+        runPeak = error;
+        runPeakOffset = offset;
+      }
+    } else {
+      if (runLength >= excursionMinimumSamples) {
+        // First persistent excursion ended — anything after
+        // this is a separate story.
+        overshootAmount = runPeak;
+        overshootPeakOffset = runPeakOffset;
+        break;
+      }
+      // A blip too short to be a movement: discard and keep
+      // scanning.
+      runLength = 0;
+      runPeak = null;
+      runPeakOffset = -1;
+    }
+  }
+
+  // The window can end while still beyond the target.
+  if (
+    overshootAmount === null &&
+    runLength >= excursionMinimumSamples
+  ) {
+    overshootAmount = runPeak;
+    overshootPeakOffset = runPeakOffset;
+  }
+}
+
+const responseReachedTarget = reachedOffset >= 0;
+
+// Bounce-back is recovery from having been AT (or past) the
+// target — a response that only came within tolerance has
+// nothing to bounce back from, and its steady-state gap must
+// not be measured as a reversal.
+const peakDirectionalError = Number.isFinite(responsePeak)
+  ? directionalError(responsePeak)
+  : null;
+
+const responseTouchedTarget =
+  Number.isFinite(peakDirectionalError) &&
+  peakDirectionalError >= 0;
+
+// The response-peak anchor names the moment the pilot should
+// look at: the top of the overshoot when there is one,
+// otherwise how far the tracked response got.
+const anchorOffset =
+  overshootPeakOffset >= 0
+    ? overshootPeakOffset
+    : responsePeakOffset;
+
+const responsePeakSampleIndex =
+  anchorOffset >= 0
+    ? responseWindowStart + anchorOffset
     : null;
 
 const responsePeakInCommandDirection =
-  Number.isFinite(responsePeakChange) &&
-  Math.sign(responsePeakChange) ===
-    commandDirection;
+  responseReachedTarget;
 const crossedCommandTarget =
-  Number.isFinite(responsePeak) &&
-  (
-    commandDirection > 0
-      ? responsePeak > commandTarget
-      : responsePeak < commandTarget
-  );
-const commandMagnitude =
-  Number.isFinite(commandTarget) &&
-  Number.isFinite(previousValue)
-    ? Math.abs(
-        commandTarget - previousValue
-      )
-    : null;
-
-const overshootAmount =
-  !hasOverlappingCommand &&
-  responsePeakInCommandDirection &&
-  crossedCommandTarget &&
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(commandTarget)
-    ? Math.abs(
-        responsePeak - commandTarget
-      )
-    : null;
+  Number.isFinite(overshootAmount);
 
 const overshootPercent =
   Number.isFinite(overshootAmount) &&
   Number.isFinite(commandMagnitude) &&
-  commandMagnitude >= 10
+  commandMagnitude >= meaningfulCommandMinimum
     ? (
         overshootAmount /
         commandMagnitude
@@ -875,16 +1076,8 @@ const hasSufficientBounceBackWindow =
       : Math.max(...validBounceBackWindow)
     : null;
 
-    const responseReachedTarget =
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(commandTarget)
-    ? commandDirection > 0
-      ? responsePeak >= commandTarget
-      : responsePeak <= commandTarget
-    : false;
-
 const bounceBackAmount =
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(commandTarget) &&
   Number.isFinite(bounceBackExtreme)
     ? commandDirection > 0
@@ -901,7 +1094,7 @@ const bounceBackAmount =
 
     const bounceBackPercent =
   hasSufficientBounceBackWindow &&
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(bounceBackAmount) &&
   Number.isFinite(commandMagnitude) &&
   commandMagnitude >= 10
@@ -912,51 +1105,8 @@ const bounceBackAmount =
     : null;
     const bounceBackEligible =
   hasSufficientBounceBackWindow &&
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(bounceBackPercent);
-  const settlingTolerance =
-  Number.isFinite(commandMagnitude)
-    ? Math.max(
-        2,
-        commandMagnitude * 0.1
-      )
-    : null;
-    const settlingInToleranceFlags =
-  Number.isFinite(commandTarget) &&
-  Number.isFinite(settlingTolerance)
-    ? responseWindow.map((value) =>
-        Number.isFinite(value) &&
-        Math.abs(value - commandTarget) <=
-          settlingTolerance
-      )
-    : [];
-    const requiredSettledSamples = settledWindowSamples;
-    let settlingStartOffset = null;
-let consecutiveSettledSamples = 0;
-
-for (
-  let offset = 0;
-  offset < settlingInToleranceFlags.length;
-  offset += 1
-) {
-  if (settlingInToleranceFlags[offset]) {
-    consecutiveSettledSamples += 1;
-  } else {
-    consecutiveSettledSamples = 0;
-  }
-
-  if (
-    consecutiveSettledSamples >=
-    requiredSettledSamples
-  ) {
-    settlingStartOffset =
-      offset -
-      requiredSettledSamples +
-      1;
-
-    break;
-      }
-    }
 
     const settlingSampleIndex =
   Number.isInteger(settlingStartOffset)
@@ -1030,6 +1180,48 @@ const hasSufficientRingingWindow =
  Number.isFinite(commandMagnitude) &&
 commandMagnitude >= 10
 
+// A separate, deliberately deaf read of the same window: how
+// big were the swings, and how often did they cross the target
+// counting only swings a pilot would call a swing. The noise
+// threshold above (~1-2 deg/s) is right for "has it settled",
+// but a verdict of OSCILLATION must not be reachable by sensor
+// noise alone.
+const strongRingingThreshold = Math.max(
+  5,
+  Number.isFinite(settlingTolerance) ? settlingTolerance : 5
+);
+
+let ringingAmplitude = null;
+let strongRingingCrossingCount = 0;
+let previousStrongSign = 0;
+
+for (const error of ringingErrorWindow) {
+  if (!Number.isFinite(error)) continue;
+
+  const size = Math.abs(error);
+
+  if (
+    ringingAmplitude === null ||
+    size > ringingAmplitude
+  ) {
+    ringingAmplitude = size;
+  }
+
+  if (size < strongRingingThreshold) {
+    continue;
+  }
+
+  const sign = Math.sign(error);
+
+  if (
+    previousStrongSign !== 0 &&
+    sign !== previousStrongSign
+  ) {
+    strongRingingCrossingCount += 1;
+  }
+
+  previousStrongSign = sign;
+}
 
 events.push({
   axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
@@ -1042,6 +1234,7 @@ commandTarget,
   commandMagnitude,
 commandDirection,
 responsePeakInCommandDirection,
+responseReachedTarget,
 overshootAmount,
 overshootPercent,
 bounceBackWindowStart,
@@ -1068,6 +1261,8 @@ ringingTargetCrossingCount,
 ringingSampleCount,
 hasSufficientRingingWindow,
 ringingEligible,
+ringingAmplitude,
+strongRingingCrossingCount,
   responseWindowStart,
   responseWindowEnd,
   responseWindow,

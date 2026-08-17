@@ -264,8 +264,16 @@ export function compareFlights(baseline, comparison) {
   const eventsAfter = comparison.flightEvents?.summary;
 
   if (eventsBefore?.total > 0 && eventsAfter?.total > 0) {
-    const reviewBefore = eventsBefore.overshoot + eventsBefore.slow;
-    const reviewAfter = eventsAfter.overshoot + eventsAfter.slow;
+    const reviewBefore =
+      eventsBefore.overshoot +
+      eventsBefore.slow +
+      (eventsBefore.lagging ?? 0) +
+      (eventsBefore.oscillation ?? 0);
+    const reviewAfter =
+      eventsAfter.overshoot +
+      eventsAfter.slow +
+      (eventsAfter.lagging ?? 0) +
+      (eventsAfter.oscillation ?? 0);
 
     const rateBefore = reviewBefore / eventsBefore.total;
     const rateAfter = reviewAfter / eventsAfter.total;
@@ -281,7 +289,14 @@ export function compareFlights(baseline, comparison) {
     const describeSide = (summary, review) =>
       `${review} of ${summary.total} command${summary.total === 1 ? "" : "s"}` +
       (review > 0
-        ? ` (${summary.overshoot} overshot · ${summary.slow} slow)`
+        ? ` (${summary.overshoot} overshot · ${summary.slow} slow` +
+          ((summary.oscillation ?? 0) > 0
+            ? ` · ${summary.oscillation} oscillated`
+            : "") +
+          ((summary.lagging ?? 0) > 0
+            ? ` · ${summary.lagging} late`
+            : "") +
+          `)`
         : "");
 
     rows.push({

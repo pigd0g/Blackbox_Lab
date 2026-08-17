@@ -2058,10 +2058,14 @@ function renderFlightEvents(flightEvents) {
 
     const metric =
       event.verdict === "overshoot"
-        ? `+${event.overshoot_percent}%`
-        : event.verdict === "slow"
-          ? `${event.settling_ms} ms`
-          : "clean";
+        ? `+${event.overshoot_ds ?? event.overshoot_percent}°/s`
+        : event.verdict === "oscillation"
+          ? `±${event.oscillation_ds}°/s`
+          : event.verdict === "slow"
+            ? `${event.settling_ms} ms`
+            : event.verdict === "lagging"
+              ? "late"
+              : "clean";
 
     chip.innerHTML = `
       <span class="event-card-time">${event.t?.toFixed(1) ?? "?"} s</span>
@@ -2485,10 +2489,14 @@ function showEventDetail(event) {
   const asked = `At ${event.t.toFixed(1)} s the ${event.axis.toLowerCase()} setpoint ${event.direction === -1 ? "stepped down" : "stepped up"} by ${event.magnitude ?? "?"}°/s.`;
   explain.textContent =
     event.verdict === "overshoot"
-      ? `${asked} The response went ${event.overshoot_percent}% PAST the target before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
-      : event.verdict === "slow"
-        ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
-        : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
+      ? `${asked} The response went ${event.overshoot_ds ?? "?"}°/s PAST the target (${event.overshoot_percent}% of the step) before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
+      : event.verdict === "oscillation"
+        ? `${asked} After the input the response swung back and forth across the target, up to ±${event.oscillation_ds}°/s — an oscillation, not a single overshoot. If this repeats on hard inputs, it is classic gain feedback: watch the gyro line below.`
+        : event.verdict === "slow"
+          ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
+          : event.verdict === "lagging"
+            ? `${asked} The response was still approaching the target when its measurement window closed, so it is not scored as overshoot or settling. If this repeats on deliberate inputs, it reads as a slow response.`
+            : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
 
   // The evidence, right here: the same setpoint-vs-gyro chart the
   // Tuning matrix draws, windowed to THIS event's own extent —
