@@ -94,6 +94,28 @@ export function comparableEvidence(beforeConfidence, afterConfidence) {
   const beforeThin = thin(beforeConfidence);
   const afterThin = thin(afterConfidence);
 
+  // Same-demand flights only: a hover-level score and a
+  // maneuvering score are different measurements wearing the same
+  // number, and subtracting them ranks the flying style, not the
+  // change. (This is how a mis-set-up machine hovering calmly
+  // "outscored" its own fixed self on a sport flight.)
+  const beforeDemand = beforeConfidence?.demand ?? null;
+  const afterDemand = afterConfidence?.demand ?? null;
+
+  if (
+    beforeDemand &&
+    afterDemand &&
+    beforeDemand !== afterDemand
+  ) {
+    return {
+      comparable: false,
+      reason:
+        beforeDemand === "gentle"
+          ? "the earlier flight was flown gently while the later one was flown much harder — the two scores measure different demands, not the change."
+          : "the later flight was flown gently while the earlier one was flown much harder — the two scores measure different demands, not the change."
+    };
+  }
+
   if (!beforeThin && !afterThin) {
     return { comparable: true, reason: "" };
   }

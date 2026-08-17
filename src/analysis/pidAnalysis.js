@@ -1456,11 +1456,16 @@ const averageAbsoluteAxisError =
 // invisible in a full-rate flip. Each axis's error is read relative
 // to its own commanded magnitude, with a floor so a hover-only log
 // cannot divide by almost nothing.
+const axisSetpointMagnitudes = averageAbsoluteAxisError.map(
+  (axisResult, index) =>
+    calculateAverageAbsolute(
+      axisSetpointValues[index]?.values ?? []
+    )
+);
+
 const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
   (axisResult, index) => {
-    const setpointMagnitude = calculateAverageAbsolute(
-      axisSetpointValues[index]?.values ?? []
-    );
+    const setpointMagnitude = axisSetpointMagnitudes[index];
 
     return Number.isFinite(axisResult.averageAbsoluteError) &&
       Number.isFinite(setpointMagnitude)
@@ -1472,6 +1477,23 @@ const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
       : null;
   }
 );
+
+// How hard was the machine actually flown? When EVERY axis's
+// average commanded rate sits below the scoring floor, all the
+// relative errors above were measured against the floor rather
+// than real demand — the score then describes gentle flying and
+// cannot be compared with a score earned in hard maneuvers. This
+// is exactly how a mis-set-up machine hovering calmly outscored
+// its own fixed self on a sport flight.
+const finiteSetpointMagnitudes =
+  axisSetpointMagnitudes.filter(Number.isFinite);
+
+const hoverLevelDemand =
+  finiteSetpointMagnitudes.length > 0 &&
+  finiteSetpointMagnitudes.every(
+    (magnitude) =>
+      magnitude < TRACKING_SCORE_TUNING.SETPOINT_ACTIVITY_FLOOR
+  );
 
 const finiteRelativeErrors = axisRelativeTrackingErrors.filter(
   Number.isFinite
@@ -2216,6 +2238,13 @@ if (motionBasisOnly) {
   confidenceScore = Math.min(confidenceScore, 65);
 }
 
+// A hover-level flight can supply thousands of samples and still
+// interrogate the machine gently: sample count must not read as
+// certainty about behavior the flight never demanded.
+if (hoverLevelDemand) {
+  confidenceScore = Math.min(confidenceScore, 65);
+}
+
 const confidenceLevel =
   confidenceScore >= 80
     ? "High"
@@ -2386,6 +2415,14 @@ const pidScoreExplanation = [
   ? pidScoreExplanation
   : [],
     technicalSummary: {
+  demand: {
+    hoverLevel: hoverLevelDemand,
+    axisSetpointMagnitudes: axisSetpointMagnitudes.map((value) =>
+      Number.isFinite(value)
+        ? Math.round(value * 10) / 10
+        : null
+    )
+  },
   highestTrackingErrorAxis:
     highestTrackingErrorAxis?.axis ?? null,
   meanRelativeTrackingError:
@@ -2434,14 +2471,21 @@ const pidScoreExplanation = [
   confidence: hasCompleteTrackingEvidence
   ? {
       level: confidenceLevel,
-      score: confidenceScore
+      score: confidenceScore,
+      demand: hoverLevelDemand ? "gentle" : "normal"
     }
   : {
       level: "Insufficient",
-      score: 0
+      score: 0,
+      demand: hoverLevelDemand ? "gentle" : "normal"
     },
 
     findings: [
+      ...(hoverLevelDemand
+        ? [
+            "Stick demand: gentle — the average commanded rate stayed below the scoring floor on every axis, so this score describes gentle flying and is not comparable to a score earned in hard maneuvers."
+          ]
+        : []),
       `Axis setpoint columns detected: ${axisSetpointColumns.length}`,
       axisErrorColumns.length === 3
   ? `Tracking-error source: recorded axis-error columns (${axisErrorColumns.join(", ")})`

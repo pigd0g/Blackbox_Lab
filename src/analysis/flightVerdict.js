@@ -220,6 +220,14 @@ function tuningVerdict(pidAnalysis) {
   const overallStatus =
     pidAnalysis?.overallStatus ?? null;
 
+  // A score earned in a gentle hover and one earned in hard
+  // maneuvers are different measurements wearing the same number
+  // — the card says which one this was, so nobody compares them.
+  const hoverDemand =
+    pidAnalysis?.technicalSummary?.demand?.hoverLevel === true;
+
+  const demandSuffix = hoverDemand ? " at gentle demand" : "";
+
   if (
     overallStatus === "Insufficient Data" ||
     !Number.isFinite(score)
@@ -261,7 +269,7 @@ function tuningVerdict(pidAnalysis) {
       key: "tuning",
       title: "Tuning",
       status: "watch",
-      headline: `Tracking score ${score}/100 — with items to review`,
+      headline: `Tracking score ${score}/100 — with items to review${demandSuffix}`,
       detail:
         "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
       action:
@@ -276,7 +284,7 @@ function tuningVerdict(pidAnalysis) {
       key: "tuning",
       title: "Tuning",
       status: "watch",
-      headline: `Tracking score ${score}/100 — decent, not crisp`,
+      headline: `Tracking score ${score}/100 — decent, not crisp${demandSuffix}`,
       detail:
         "Response mostly follows the sticks; the PID Lab shows where it loosens.",
       action:
@@ -290,8 +298,10 @@ function tuningVerdict(pidAnalysis) {
     key: "tuning",
     title: "Tuning",
     status: "good",
-    headline: `Tracking score ${score}/100 — crisp response`,
-    detail: "The machine follows the sticks faithfully.",
+    headline: `Tracking score ${score}/100 — crisp response${demandSuffix}`,
+    detail: hoverDemand
+      ? "The machine follows the sticks faithfully — at the gentle demand this flight asked of it. A score from a harder flight is a different measurement."
+      : "The machine follows the sticks faithfully.",
     action: "Nothing to do — enjoy it.",
     screen: "pid",
     evidence: "PID Lab findings"
