@@ -108,6 +108,7 @@ import {
   governorEventWindow
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
+import { analyzeServoLimits } from "./analysis/servoLimitAnalysis.js";
 import { analyzePrecomp } from "./analysis/precompAnalysis.js";
 import { chooseVoltageSource } from "./analysis/batteryLabAnalysis.js";
 import {
@@ -1911,6 +1912,16 @@ if (sampleRate && hasSpectrumRuns) {
       yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
       yawGyro: firstColumn([/^gyroADC\[2\]$/i])
     }),
+    // Servo commands frozen at their own travel edge — the
+    // second layer that confirms whether a saturation condition
+    // reached the actual servo command.
+    servoLimits: analyzeServoLimits({
+      timeSeconds,
+      headspeed,
+      servos: findColumns(headerLine, [/^servo\[\d\]$/i]).map(
+        (name) => ({ name, values: columnValues(name) })
+      )
+    }),
     // The stick-command event layer lives ON the dataset so every
     // consumer — the PID page, Compare Flights, contributions —
     // reads the same list.
@@ -2287,6 +2298,56 @@ function renderGovernorEvents(dataset) {
 
     list.appendChild(chip);
   }
+}
+
+// ---- servo travel check ----
+//
+// Hidden entirely when the log offers nothing to judge (no servo
+// columns, or servos that never moved) — a check that never ran
+// must not imply it passed.
+function renderServoLimits(servoLimits) {
+  const card = el("servoLimitCard");
+  const summary = el("servoLimitSummary");
+  const table = el("servoLimitTable");
+
+  if (!card || !summary || !table) {
+    return;
+  }
+
+  if (!servoLimits) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+  summary.textContent = servoLimits.summary;
+
+  if (servoLimits.status !== "detected") {
+    table.innerHTML = "";
+    return;
+  }
+
+  const rows = servoLimits.events
+    .map(
+      (event) => `
+        <tr>
+          <td>${event.servo}</td>
+          <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
+          <td>${event.side === "max" ? "upper" : "lower"} edge</td>
+          <td>${event.durationMs} ms</td>
+          <td>${Math.round(event.valueUs)} µs</td>
+        </tr>`
+    )
+    .join("");
+
+  table.innerHTML = `
+    <table class="metric-table">
+      <tr>
+        <th>Servo</th><th>When</th><th>Edge</th><th>Held for</th><th>Command</th>
+      </tr>
+      ${rows}
+    </table>
+  `;
 }
 
 // ---- "What to try next" — recommendation cards ----
@@ -3953,6 +4014,7 @@ function analyzeFlight(flightIndex) {
     : null;
 
   renderFlightEvents(currentDataset?.flightEvents ?? null);
+  renderServoLimits(currentDataset?.servoLimits ?? null);
 
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);
