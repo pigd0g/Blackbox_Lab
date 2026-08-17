@@ -35,41 +35,36 @@ import { estimateSampleRate } from "./flightPhase.js";
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
   SLOW_SETTLING_MS: 500,
-  // Fleet-calibrated 2026-08-12 (78 contributed flights, 178 axes):
-  // slow settling is rare per COMMAND overall, but each axis has its
-  // own normal — roll settles fast on the whole fleet (p50 share
-  // 0.000), while yaw settles slow as its NATURE (p50 0.076, p90
-  // 0.167: tail dynamics plus sustained pirouette commands measured
-  // as one long settle). One shared bar over-fires on yaw and never
-  // fires on roll — three unrelated reference machines all earned
-  // the same yaw advice before this split. Bars sit above each
-  // axis's p90 (yaw above p95, since its measurement inflates), so
-  // a slow-settle card names the machine, not the axis's nature.
+  // Slow-settle shares re-anchored 2026-08-17 on the
+  // events-integrity measurement (same sweep as the overshoot
+  // anchors; the per-axis split and its rationale are unchanged:
+  // yaw settles slow as its nature, roll fast). Bars sit at each
+  // axis's fleet p90, yaw at p95: Roll p90 0.107, Pitch p90
+  // 0.125, Yaw p95 0.224.
   SLOW_SETTLE_SHARE_MINIMUM: {
-    Roll: 0.1,
-    Pitch: 0.15,
-    Yaw: 0.25
+    Roll: 0.11,
+    Pitch: 0.13,
+    Yaw: 0.23
   },
   HUNTING_MINIMUM_CROSSINGS: 3,
   // Governor excursions are fleet-rare by calibration (median
   // machine: zero), so three same-cause excursions in ONE flight
   // is already a strong pattern.
   GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3,
-  // Overshoot: fleet-calibrated 2026-08-12 (247 contributed
-  // flights, 528 axes with enough clean commands). The raw
-  // overshoot measurement reads high as its NORM — the fleet's
-  // median axis shows 73% of its commands past 25% overshoot with
-  // a median magnitude of 47% — so an absolute-percent trigger
-  // would fire on the median machine and describe the formula.
-  // The recommendation trigger is therefore anchored to the fleet
-  // distribution: nearly every command overshooting (share ≥ 0.95
-  // ≈ fleet p90), by a lot (median ≥ 115% ≈ fleet p90 of per-axis
-  // medians), at least three times. 4.9% of fleet axes clear all
-  // three bars — an overshoot recommendation means something.
+  // Overshoot: re-calibrated 2026-08-17 on the events-integrity
+  // measurement (370 contributed flights, 743 axes with >=5 clean
+  // responses). The rework changed the distribution completely —
+  // overshoot is now the first persistent excursion beyond a
+  // stabilized target, so the old inflation-compensating bars
+  // (share 0.95 / median 115%) would never fire again. Same
+  // doctrine, new anchors: share of clean commands overshooting
+  // >=25% AND >=10 deg/s at fleet p90 (0.55), per-axis median
+  // overshoot at fleet p90 (40%), at least three events.
   OVERSHOOT_REVIEW_PERCENT: 25,
+  OVERSHOOT_MINIMUM_DEG_S: 10,
   OVERSHOOT_MINIMUM_EVENTS: 3,
-  OVERSHOOT_SHARE_MINIMUM: 0.95,
-  OVERSHOOT_MEDIAN_MINIMUM_PERCENT: 115,
+  OVERSHOOT_SHARE_MINIMUM: 0.55,
+  OVERSHOOT_MEDIAN_MINIMUM_PERCENT: 40,
   OVERSHOOT_CORRELATION_MINIMUM_EVENTS: 5,
   OVERSHOOT_CORRELATION_STRONG: 0.6,
   OVERSHOOT_CORRELATION_GAP: 0.25
@@ -403,7 +398,9 @@ function buildOvershootRecommendation({
 
   const big = measured.filter(
     (event) =>
-      event.overshootPercent >= gate.OVERSHOOT_REVIEW_PERCENT
+      event.overshootPercent >= gate.OVERSHOOT_REVIEW_PERCENT &&
+      Number.isFinite(event.overshootAmount) &&
+      event.overshootAmount >= gate.OVERSHOOT_MINIMUM_DEG_S
   );
 
   const medianBig = big.length

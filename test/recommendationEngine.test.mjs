@@ -377,6 +377,11 @@ function overshootEvent({
     settlingDurationSamples: 20,
     ringingTargetCrossingCount: ringing,
     overshootPercent: overshoot,
+    // deg/s past the target, consistent with the percent and the
+    // command size — the gate requires both bars.
+    overshootAmount: Number.isFinite(overshoot)
+      ? (overshoot / 100) * size
+      : NaN,
     commandMagnitude: size,
     sampleIndex: 1000 + index * 500,
     commandEndSampleIndex: 1000 + index * 500 + durationSamples,
@@ -561,6 +566,7 @@ test("damping advice is not said twice on one axis", () => {
     settlingDurationSamples: 90,
     ringingTargetCrossingCount: 4,
     overshootPercent: 30 + index,
+    overshootAmount: 30 + index,
     commandMagnitude: 100,
     sampleIndex: 1000 + index * 500,
     commandEndSampleIndex: 1010 + index * 500,
@@ -624,9 +630,11 @@ test("vibration silences governor advice too — filters before governor", () =>
 
 
 test("ordinary fleet-level overshoot never triggers a recommendation", () => {
-  // The fleet's MEDIAN axis: most commands overshoot ~47%. That is
-  // the measurement's norm, not a tuning fault — no card.
-  const events = [40, 55, 47, 60, 35, 50, 45, 52, 38, 48, 44, 58].map(
+  // The fleet's MEDIAN axis under the events-integrity measurement:
+  // roughly a quarter of commands cross the 25% review bar, with a
+  // per-axis median around 21%. That is the fleet's ordinary
+  // background, not a tuning fault — no card.
+  const events = [10, 15, 20, 18, 26, 30, 12, 22, 28, 16, 19, 24].map(
     (overshoot, index) => overshootEvent({ overshoot, index })
   );
 

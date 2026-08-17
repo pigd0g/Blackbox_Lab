@@ -158,10 +158,11 @@ test("repeated strong swings across the target read as oscillation, not overshoo
           events: [
             rawEvent({
               sampleIndex: 2000,
+              commandMagnitude: 30,
               overshootPercent: 120,
               overshootAmount: 30,
               ringingEligible: true,
-              strongRingingCrossingCount: 5,
+              strongRingingCrossingCount: 9,
               ringingAmplitude: 45
             })
           ]

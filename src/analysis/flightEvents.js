@@ -26,9 +26,14 @@ const OVERSHOOT_MINIMUM_DEG_S = 10;
 const SLOW_SETTLING_MS = 500;
 // Oscillation: repeated strong swings across the target after
 // the command — a different story than one overshoot, and the
-// more specific verdict wins.
-const OSCILLATION_MINIMUM_CROSSINGS = 4;
-const OSCILLATION_MINIMUM_DEG_S = 10;
+// more specific verdict wins. Fleet-calibrated 2026-08-17
+// (80-flight sample): post-command ringing of a few tens of
+// deg/s is the fleet's NORM after hard inputs, so the verdict
+// demands swings that exceed the command itself, many times —
+// at these bars the median flight reads zero and what remains
+// is genuine hunting.
+const OSCILLATION_MINIMUM_CROSSINGS = 8;
+const OSCILLATION_MINIMUM_DEG_S = 15;
 
 // A response can only be called "still on its way" when the
 // window actually left it time to arrive: a window cut short by
@@ -51,12 +56,19 @@ function sampleSpacingMs(timeSeconds) {
 }
 
 function eventVerdict(event, settlingMs, windowMs) {
+  const oscillationAmplitudeBar = Math.max(
+    OSCILLATION_MINIMUM_DEG_S,
+    Number.isFinite(event.commandMagnitude)
+      ? event.commandMagnitude
+      : OSCILLATION_MINIMUM_DEG_S
+  );
+
   if (
     event.ringingEligible &&
     (event.strongRingingCrossingCount ?? 0) >=
       OSCILLATION_MINIMUM_CROSSINGS &&
     Number.isFinite(event.ringingAmplitude) &&
-    event.ringingAmplitude >= OSCILLATION_MINIMUM_DEG_S
+    event.ringingAmplitude >= oscillationAmplitudeBar
   ) {
     return "oscillation";
   }
