@@ -128,7 +128,7 @@ function classifySource(peakHz, headspeedRpm) {
   return { source: "not rotor-linked (electrical or frame resonance)", rpmLinked: false };
 }
 
-function magnitudeNear(spectrum, hz) {
+export function magnitudeNear(spectrum, hz) {
   const { frequencies, magnitudes } = spectrum;
   let best = 0;
 
@@ -157,7 +157,8 @@ export function adviseFilters({
       story:
         "No significant vibration peaks found in the UNFILTERED gyro — the raw signal is about as clean as they come. Whatever your filters are set to, they are not being challenged.",
       rows: [],
-      recommendations: []
+      recommendations: [],
+      filteredSpectrum: filteredSpectrum ?? null
     };
   }
 
@@ -322,5 +323,10 @@ if (
   ? `Found ${rows.length} vibration peak(s). The table shows each peak's likely source and how much that exact frequency peak is reduced after filtering. This does not mean the helicopter's overall vibration is reduced by the same percentage.`
   : `Found ${rows.length} vibration peak(s) in the unfiltered gyro. This log doesn't include the filtered gyro trace, so filter effectiveness cannot be measured.`;
 
-  return { story, rows, recommendations };
+  return {
+    story,
+    rows,
+    recommendations,
+    filteredSpectrum: filteredSpectrum ?? null
+  };
 }

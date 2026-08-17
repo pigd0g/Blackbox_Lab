@@ -16,6 +16,7 @@
 
 import { VIBRATION_FLOOR_HZ } from "./dsp/fft.js";
 import { assessVibrationConclusion } from "./vibrationSeverity.js";
+import { magnitudeNear } from "./filterAdvisor.js";
 
 function averageOf(values) {
   if (!values || values.length === 0) {
@@ -87,12 +88,39 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
       (row) => Math.abs(row.hz - peakHz) <= 3
     ) ?? null;
 
+  // The verdict's peak and the advisor's rows come from separate
+  // peak-finders, so a peak the advisor kept no row for is normal
+  // — but when a filtered spectrum EXISTS, the card must not claim
+  // the log has no filtered trace. Read the residual at this
+  // peak's own frequency directly instead.
+  let reductionPercent = advisorRow?.reductionPercent ?? null;
+  let residualMagnitude = advisorRow?.filteredMagnitude ?? null;
+
+  if (
+    !advisorRow &&
+    filterAdvice?.filteredSpectrum &&
+    peakMagnitude > 0
+  ) {
+    const residual = magnitudeNear(
+      filterAdvice.filteredSpectrum,
+      peakHz
+    );
+
+    if (Number.isFinite(residual)) {
+      residualMagnitude = residual;
+      reductionPercent = Math.max(
+        0,
+        ((peakMagnitude - residual) / peakMagnitude) * 100
+      );
+    }
+  }
+
   const conclusion = assessVibrationConclusion({
     rawMagnitude: peakMagnitude,
     hz: peakHz,
     source,
-    reductionPercent: advisorRow?.reductionPercent ?? null,
-    residualMagnitude: advisorRow?.filteredMagnitude ?? null,
+    reductionPercent,
+    residualMagnitude,
     trackingConcern: Number.isFinite(pidAnalysis?.score)
       ? pidAnalysis.score < 70
       : null
