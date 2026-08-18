@@ -1,3 +1,57 @@
+## v1.3.0 — Signal Lab, BEC Lab, and the Confirm Round
+
+Built from the field's own verification pass of v1.2.0: six
+refinements confirmed against real logs, plus two new labs that
+extend the mission from tune and power to the radio link and the
+receiver's own power supply.
+
+### New: Signal Lab
+
+- "Was the radio link healthy the whole flight?" — signal strength
+  judged against this flight's own typical level (never an absolute
+  threshold: protocols scale these numbers differently), with the
+  firmware's failsafe and signal-valid flags as the only authority
+  on loss of control. A telemetry hiccup is never read as loss of
+  control, and fields the log doesn't carry report Not Evaluated.
+
+### New: BEC Lab
+
+- "Did the receiver and servos receive stable power?" — the
+  reference is the flight's own median voltage, so a system
+  deliberately running 6.0 V is never judged against one running
+  8.4 V. Dips are judged by depth, duration and repetition
+  together, each with its servo-demand context: voltage following
+  hard servo work is load; voltage sagging with the servos quiet
+  points at wiring, connectors or the BEC. Brownout language
+  appears only near the absolute floor where receivers genuinely
+  let go — and when the receiver kept reporting a healthy link
+  through a "brownout" reading, the lab says what that means: a
+  measurement-path story, not a power loss.
+- When a link event and a power event overlap, each lab points at
+  the other — correlation named, causation never claimed.
+
+### Flight events
+
+- A command that materially reverses direction before ever holding
+  now ends at the reversal: several slurred movements can no longer
+  anchor as one event measured against a target from seconds later,
+  and the response-peak marker always belongs to the command the
+  card names. Response measurements end at the settled point.
+
+### Consistency
+
+- Compare Flights' spectrum caption follows the page's own
+  comparability ruling — no "shrinking peaks = progress" between
+  two different machines.
+- The exported report's Governor Lab status now renders the same
+  capability state the app shows: a partial (stability-only)
+  analysis is never labeled with a scored-quality word.
+- Governor Lab help opens with what the current log can support;
+  Filter Lab help keeps mechanics-first for real mechanical
+  evidence without implying every well-managed harmonic needs a
+  wrench; PID Lab help now defines bounce-back, oscillation,
+  still-approaching and sustained PID-term activity.
+
 ## v1.2.0 — The Events-Integrity Round
 
 The community's first deep-review wave — issues on the events
