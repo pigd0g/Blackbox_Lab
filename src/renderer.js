@@ -2685,7 +2685,7 @@ function renderHomeFirstSteps(entries) {
     const row = document.createElement("button");
     row.className = "first-steps-row";
     row.dataset.tone = entry.tone;
-    row.innerHTML = `<strong>${entry.title}</strong><span>${entry.text}</span>`;
+    row.innerHTML = `<span class="status-dot"></span><strong>${entry.title}</strong><span>${entry.text}</span>`;
     row.addEventListener("click", () => {
       navigation.showScreen(entry.screen);
     });
