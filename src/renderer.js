@@ -2399,51 +2399,117 @@ function recommendationFirstStep(rec) {
 }
 
 function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
-  // PID: earned advice, the gate reason, or an honest clear —
-  // with the demand caveat when the flight was flown gently.
+  const events = dataset?.flightEvents?.summary ?? null;
+
+  // PID: earned advice, the gate reason — or an honest read of
+  // the event strip. The panel's tone must AGREE with the chips
+  // beside it: orange events with no earned advice reads amber
+  // ("normal range, nothing earned yet"), never green.
   const pidRec = recommendationFirstStep(nextSteps?.pid?.[0]);
   const gentleDemand =
     pidAnalysis?.technicalSummary?.demand?.hoverLevel === true;
 
+  const nonCleanEvents = events
+    ? (events.overshoot ?? 0) +
+      (events.oscillation ?? 0) +
+      (events.slow ?? 0) +
+      (events.lagging ?? 0)
+    : 0;
+
+  const eventBits = events
+    ? [
+        events.overshoot > 0 ? `${events.overshoot} overshot` : null,
+        events.oscillation > 0
+          ? `${events.oscillation} oscillated`
+          : null,
+        events.slow > 0 ? `${events.slow} settled slowly` : null
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
+
   setFirstStep(
     "pidFirstStep",
     pidRec?.text ??
-      (gentleDemand
-        ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps — clear inputs, held briefly — and read this page again."
-        : "Nothing to change from this flight — tracking sits inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
-    pidRec ? pidRec.tone : "clear"
+      (nonCleanEvents > 0
+        ? `Of ${events.total} commands, ${eventBits} — that rate is inside the fleet's normal range, so no tuning change is earned from this flight alone. What flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
+        : gentleDemand
+          ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps — clear inputs, held briefly — and read this page again."
+          : "Nothing to change from this flight — every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
+    pidRec ? pidRec.tone : nonCleanEvents > 0 ? "watch" : "clear"
   );
 
-  // Governor: earned advice first, else the lab's own status.
+  // Governor: ANSWER the dip from the data we already have —
+  // power limit, load response, or genuine tune territory — never
+  // point at a chart, least of all a hidden one.
   const govRec = recommendationFirstStep(nextSteps?.governor?.[0]);
   const governor = dataset?.labs?.governor;
 
-  setFirstStep(
-    "governorFirstStep",
-    govRec?.text ??
-      (governor?.status === "attention" || governor?.status === "watch"
-        ? "Review the worst-droop moment below before touching gain — its context chart shows whether the dip came from load, from the power system, or from the governor."
-        : governor
-          ? "Nothing to change — the governor is holding. Keep logging flights; the Health Record turns them into trends."
-          : null),
-    govRec ? govRec.tone : governor?.status === "good" ? "clear" : "action"
-  );
+  let governorText = null;
+  let governorTone = "clear";
 
-  // Filter: the advisor's own top recommendation (mechanics first).
+  if (govRec) {
+    governorText = govRec.text;
+    governorTone = govRec.tone;
+  } else if (governor?.status === "attention" || governor?.status === "watch") {
+    const dipRpm = Math.round(governor.droopRpm ?? 0);
+    const dipOutput =
+      governor.stableDipOutputPercent ??
+      governor.flightDroopOutputPercent ??
+      null;
+
+    const loadDriven = (dataset?.governorEvents?.events ?? []).some(
+      (event) => event.cause === "load" || event.cause === "collective-drop"
+    );
+
+    if (governor.stableDipAtPowerLimit || (Number.isFinite(dipOutput) && dipOutput >= 95)) {
+      governorText = `The ${dipRpm} rpm dip is a power-system limit, not a tuning problem: the motor output was already at ${Math.round(dipOutput)}% when it happened, so no governor setting can add power that isn't there. Adjust the gearing/Kv to match your target headspeed, or lower the target.`;
+      governorTone = "action";
+    } else if (loadDriven) {
+      governorText = `The ${dipRpm} rpm dip followed a real load demand with output headroom to spare — the governor answered a hard ask, which is a power system doing its job. Nothing to change; if the same maneuver keeps dipping deeper across flights, that trend is the signal.`;
+      governorTone = "watch";
+    } else {
+      governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand — that is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
+      governorTone = "watch";
+    }
+  } else if (governor) {
+    governorText =
+      "Nothing to change — the governor is holding. Keep logging flights; the Health Record turns them into trends.";
+    governorTone = "clear";
+  }
+
+  setFirstStep("governorFirstStep", governorText, governorTone);
+
+  // Filter: ONE distilled sentence — the advisor below carries
+  // the frequencies and the teaching.
   const advisorRecs = dataset?.filterAdvice?.recommendations ?? [];
   const topAdvisor =
     advisorRecs.find((rec) => rec.priority === "first") ??
     advisorRecs[0] ??
     null;
 
-  setFirstStep(
-    "filterFirstStep",
-    topAdvisor?.text ??
-      (dataset?.spectra?.length
-        ? "No filter change indicated — the noise picture is clean at this log's resolution."
-        : null),
-    topAdvisor ? "action" : "clear"
-  );
+  let filterText = null;
+  let filterTone = "clear";
+
+  if (topAdvisor?.priority === "first") {
+    filterText =
+      "Fix the mechanical source first — filtering can suppress what the gyro sees, but it never removes the shake from the airframe. The Filter Advisor below names the exact frequencies and where they point.";
+    filterTone = "action";
+  } else if (topAdvisor?.priority === "filters") {
+    filterText =
+      "Let the RPM filter do this work: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
+    filterTone = "action";
+  } else if (topAdvisor) {
+    filterText =
+      "Vibration is present but well managed — no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
+    filterTone = "watch";
+  } else if (dataset?.spectra?.length) {
+    filterText =
+      "No filter change indicated — the noise picture is clean at this log's resolution.";
+    filterTone = "clear";
+  }
+
+  setFirstStep("filterFirstStep", filterText, filterTone);
 
   // ESC: the headroom answer, in the right words.
   const escLab = dataset?.labs?.esc;
@@ -2457,7 +2523,11 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           ? "Fine for now — remember this margin before asking the machine for more headspeed or pitch."
           : "Nothing to change — healthy headroom throughout the flight."
       : null,
-    escLab?.status === "attention" ? "action" : "clear"
+    escLab?.status === "attention"
+      ? "action"
+      : escLab?.status === "watch"
+        ? "watch"
+        : "clear"
   );
 
   // Battery: condition checks before conclusions.
@@ -2472,7 +2542,11 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           ? "Compare the voltage dip with current demand below — and keep logging: the Health Record turns single dips into a trend you can trust."
           : "Nothing to change — the pack held up well."
       : null,
-    batteryLab?.status === "attention" ? "action" : "clear"
+    batteryLab?.status === "attention"
+      ? "action"
+      : batteryLab?.status === "watch"
+        ? "watch"
+        : "clear"
   );
 }
 
@@ -2523,7 +2597,11 @@ function renderSignalLab(dataset) {
       : lab.status === "watch"
         ? "Glance at the dip moments below — repeated dips in the same flight orientation point at antenna placement or shading."
         : "Nothing to change — the link held all flight.",
-    lab.status === "good" ? "clear" : "action"
+    lab.status === "good"
+      ? "clear"
+      : lab.status === "watch"
+        ? "watch"
+        : "action"
   );
 
   const correlation = correlateSignalAndPower(

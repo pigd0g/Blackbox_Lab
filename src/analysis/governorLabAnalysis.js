@@ -598,6 +598,12 @@ export function analyzeGovernorLab({
         ? Math.round(flightDip.outputPercent * 10) / 10
         : null,
 
+    stableDipOutputPercent: Number.isFinite(stableDipOutputPercent)
+      ? Math.round(stableDipOutputPercent * 10) / 10
+      : null,
+
+    stableDipAtPowerLimit,
+
     averageHeadspeed:
       Math.round(averageActual),
 
