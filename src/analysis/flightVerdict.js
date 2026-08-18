@@ -274,7 +274,12 @@ function tuningVerdict(pidAnalysis) {
     };
   }
 
-  if (score < 50) {
+  // Bands follow the fleet, like every other status in the app:
+  // the corpus median tracking score sits near 87, so "crisp"
+  // is reserved for the better half of real machines. 65 is the
+  // worse-than-most line (score-space p90 territory), not a
+  // universal grade scale.
+  if (score < 65) {
     return {
       key: "tuning",
       title: "Tuning",
@@ -307,7 +312,7 @@ function tuningVerdict(pidAnalysis) {
     };
   }
 
-  if (score < 75) {
+  if (score < 85) {
     return {
       key: "tuning",
       title: "Tuning",

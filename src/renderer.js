@@ -1023,10 +1023,10 @@ function currentScreenName() {
 }
 
 function beginLoadProgress() {
-  if (currentScreenName() === "home") {
-    return;
-  }
-
+  // Every load gets the dialog — a 15-second decode with no
+  // feedback reads as a hang wherever it starts. On Home it
+  // closes itself when done (the pilot is already at the
+  // overview); elsewhere it ends with the stay-or-go choice.
   loadProgressTitle.textContent = "Reading your flight…";
   loadProgressText.textContent = "";
   loadSpinner.hidden = false;
@@ -1047,11 +1047,29 @@ function finishLoadProgress(succeeded) {
     return;
   }
 
+  // Already at the overview: a successful load needs no
+  // stay-or-go question — show the arrival for a beat, then get
+  // out of the way. Failures stay up everywhere until dismissed.
+  if (succeeded && currentScreenName() === "home") {
+    loadProgressTitle.textContent = "Flight analyzed";
+    loadSpinner.hidden = true;
+    setTimeout(() => {
+      loadProgress.hidden = true;
+    }, 650);
+    return;
+  }
+
   loadProgressTitle.textContent = succeeded
     ? "Flight analyzed"
     : "Could not read this log";
   loadSpinner.hidden = true;
   loadProgressActions.hidden = false;
+
+  // On Home the stay-or-go question makes no sense — offer only
+  // a dismiss for the failure case.
+  const onHome = currentScreenName() === "home";
+  loadGoOverview.hidden = onHome;
+  loadStayHere.textContent = onHome ? "Close" : "Stay on this page";
 }
 
 loadGoOverview.addEventListener("click", () => {
