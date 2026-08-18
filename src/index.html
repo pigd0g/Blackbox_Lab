@@ -24,6 +24,8 @@
       <button class="nav-button" data-target="governor">Governor Lab</button>
       <button class="nav-button" data-target="esc">ESC Lab</button>
       <button class="nav-button" data-target="battery">Battery Lab</button>
+      <button class="nav-button" data-target="signal">Signal Lab</button>
+      <button class="nav-button" data-target="bec">BEC Lab</button>
       <button class="nav-button" data-target="compare">Compare Flights</button>
       <button class="nav-button" data-target="history">Health Record</button>
       <button class="nav-button" data-target="reports">Reports</button>
@@ -1200,6 +1202,111 @@ current demand; the steady downward slope is normal discharge.
           <div class="chart-container" id="chartBattery">
             <p class="chart-empty">Open a log to see this chart.</p>
           </div>
+        </section>
+      </section>
+
+      <!-- ============ SIGNAL LAB ============ -->
+      <section data-screen="signal">
+        <section class="hero">
+          <h2>Signal Lab</h2>
+          <p>Was the radio link healthy the whole flight?</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page reads the control link the way the flight
+            controller saw it: signal strength when the receiver
+            reports it, and the firmware's own failsafe and
+            signal-valid flags — the authoritative account of
+            whether control was ever at risk.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Signal strength is compared against this flight's own
+              typical level — different receivers and protocols
+              scale these numbers differently, so no absolute
+              threshold is ever applied. Brief dips during
+              orientation changes are normal; what matters is
+              repetition, depth, and above all the receiver's own
+              flags: failsafe or invalid-signal moments are the
+              firmware saying the link was genuinely interrupted.
+              A telemetry hiccup is never read as loss of control.
+              Fields the log doesn't carry are reported as not
+              evaluated, never guessed.</p>
+          </details>
+        </div>
+
+        <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="signalStory">Open a log with link telemetry to analyze the radio signal.</p>
+          <div class="metric-grid" id="signalMetrics"></div>
+        </section>
+
+        <section class="card" id="signalEventsCard" hidden>
+          <h3>Link Events</h3>
+          <div id="signalEventsTable"></div>
+        </section>
+
+        <section class="card" id="signalChartCard" hidden>
+          <h3>Signal Over the Flight</h3>
+          <p class="chart-hint">
+            As logged by the receiver — judged against this
+            flight's own typical level, not an absolute scale.
+          </p>
+          <div class="chart-container" id="chartSignal">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ BEC LAB ============ -->
+      <section data-screen="bec">
+        <section class="hero">
+          <h2>BEC Lab</h2>
+          <p>Did your receiver and servos ever go hungry?</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page watches the power feeding your receiver and
+            servos: how steady the voltage held, whether it dipped
+            when the servos worked hard, and whether anything came
+            near genuine brownout territory.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>The reference is this flight's own typical voltage —
+              a system deliberately running 6.0 V is never judged
+              against one running 8.4 V. Dips are judged by depth,
+              duration and repetition together, never by a single
+              lowest sample, and each event is read with its servo
+              context: voltage following a hard collective pump is
+              a power system answering load; voltage sagging with
+              the servos quiet points at wiring, connectors or the
+              BEC itself. Brownout language appears only near the
+              absolute floor where receivers genuinely let go — and
+              only when the receiver's own behavior agrees.</p>
+          </details>
+        </div>
+
+        <section class="card">
+          <h3>Verdict</h3>
+          <p class="lab-story" id="becStory">Open a log with BEC voltage telemetry to analyze receiver power.</p>
+          <div class="metric-grid" id="becMetrics"></div>
+        </section>
+
+        <section class="card" id="becEventsCard" hidden>
+          <h3>Voltage Events</h3>
+          <div id="becEventsTable"></div>
+        </section>
+
+        <section class="card" id="becChartCard" hidden>
+          <h3>BEC Voltage Over the Flight</h3>
+          <p class="chart-hint">
+            Receiver-power voltage with servo activity beneath it —
+            dips that line up with servo work are load; dips without
+            it deserve a look at the wiring.
+          </p>
+          <div class="chart-container" id="chartBecVoltage">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+          <div class="chart-container" id="chartBecServo"></div>
         </section>
       </section>
 

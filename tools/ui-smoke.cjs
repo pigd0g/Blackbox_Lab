@@ -616,7 +616,7 @@ const { mkdirSync } = require("node:fs");
   // what-am-I-looking-at paragraph, deeper text folded behind
   // the summary — the one explanation home per screen.
   const introState = await window.evaluate(() => {
-    const screens = ["viewer", "replay", "filter", "pid", "governor", "esc", "battery", "compare", "history", "reports"];
+    const screens = ["viewer", "replay", "filter", "pid", "governor", "esc", "battery", "signal", "bec", "compare", "history", "reports"];
     return screens.map((name) => ({
       name,
       present: Boolean(
@@ -628,7 +628,7 @@ const { mkdirSync } = require("node:fs");
   if (missingIntros.length) {
     throw new Error("screen intros missing: " + missingIntros.map((entry) => entry.name).join(", "));
   }
-  console.log("screen intros ok: 10/10 pages introduce themselves");
+  console.log(`screen intros ok: ${introState.length}/${introState.length} pages introduce themselves`);
 
   // Pilot-input inset: the governor droop card shows the sticks
   // at the marked moment (the Bell sample carries rcCommand).

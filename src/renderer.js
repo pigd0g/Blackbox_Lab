@@ -109,6 +109,11 @@ import {
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import { analyzeServoLimits } from "./analysis/servoLimitAnalysis.js";
+import { analyzeSignalLab } from "./analysis/signalLabAnalysis.js";
+import {
+  analyzeBecLab,
+  correlateSignalAndPower
+} from "./analysis/becLabAnalysis.js";
 import { analyzePrecomp } from "./analysis/precompAnalysis.js";
 import { chooseVoltageSource } from "./analysis/batteryLabAnalysis.js";
 import {
@@ -1912,6 +1917,39 @@ if (sampleRate && hasSpectrumRuns) {
       yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
       yawGyro: firstColumn([/^gyroADC\[2\]$/i])
     }),
+    // Radio-link and receiver-power health. The BEC lab reads
+    // the Signal lab's conclusion: a "brownout" on the voltage
+    // trace while the receiver demonstrably kept flying is a
+    // measurement-path story, not a power-loss story.
+    ...(() => {
+      const servoColumns = findColumns(headerLine, [
+        /^servo\[\d\]$/i
+      ]).map((name) => ({ name, values: columnValues(name) }));
+
+      const signalLab = analyzeSignalLab({
+        timeSeconds,
+        rssi: firstColumn([/^rssi$/i]),
+        failsafePhase: firstColumn([/^failsafePhase$/i]),
+        rxSignalReceived: firstColumn([/^rxSignalReceived$/i]),
+        rxFlightChannelsValid: firstColumn([
+          /^rxFlightChannelsValid$/i
+        ]),
+        headspeed
+      });
+
+      const becLab = analyzeBecLab({
+        timeSeconds,
+        vbec: firstColumn([/^Vbec$/i]),
+        servos: servoColumns,
+        headspeed,
+        receiverStayedAlive: signalLab
+          ? signalLab.counts.failsafe === 0 &&
+            signalLab.counts.linkLoss === 0
+          : null
+      });
+
+      return { signalLab, becLab };
+    })(),
     // Servo commands frozen at their own travel edge — the
     // second layer that confirms whether a saturation condition
     // reached the actual servo command.
@@ -2300,6 +2338,172 @@ function renderGovernorEvents(dataset) {
   }
 }
 
+// ---- signal + BEC labs ----
+//
+// Both labs stay honest about scope: a missing column means the
+// verdict says what could not be judged, never a guessed score.
+// When a link event and a power event overlap, each page points
+// at the other — correlation named, causation never claimed.
+function renderEventTable(tableElement, headers, rows) {
+  tableElement.innerHTML = `
+    <table class="history-table">
+      <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
+      ${rows.join("")}
+    </table>
+  `;
+}
+
+function renderSignalLab(dataset) {
+  const story = el("signalStory");
+  const metricsElement = el("signalMetrics");
+  const eventsCard = el("signalEventsCard");
+  const eventsTable = el("signalEventsTable");
+  const chartCard = el("signalChartCard");
+
+  if (!story || !metricsElement) return;
+
+  const lab = dataset?.signalLab ?? null;
+
+  if (!lab) {
+    story.textContent =
+      "This log carries no link telemetry (no signal strength and no receiver flags), so radio-link health cannot be assessed.";
+    metricsElement.innerHTML = "";
+    if (eventsCard) eventsCard.hidden = true;
+    if (chartCard) chartCard.hidden = true;
+    return;
+  }
+
+  const correlation = correlateSignalAndPower(
+    lab,
+    dataset?.becLab ?? null
+  );
+
+  story.textContent =
+    lab.story + (correlation ? correlation.signalSentence : "");
+  story.className = `lab-story status-text-${lab.status}`;
+
+  renderMetricGrid(metricsElement, lab.metrics);
+
+  if (eventsCard && eventsTable) {
+    if (lab.events.length === 0) {
+      eventsCard.hidden = true;
+    } else {
+      eventsCard.hidden = false;
+      renderEventTable(
+        eventsTable,
+        ["When", "What", "Duration", "Detail"],
+        lab.events.map(
+          (event) => `
+          <tr>
+            <td>${event.startSeconds.toFixed(1)} s</td>
+            <td>${
+              event.kind === "failsafe"
+                ? "Failsafe"
+                : event.kind === "link-loss"
+                  ? "Link loss"
+                  : event.kind === "deep-degradation"
+                    ? "Deep signal dip"
+                    : "Signal dip"
+            }</td>
+            <td>${event.durationMs} ms</td>
+            <td>${event.detail}</td>
+          </tr>`
+        )
+      );
+    }
+  }
+
+  if (chartCard) {
+    const hasRssi = lab.capability === "full";
+    chartCard.hidden = !hasRssi;
+    if (hasRssi) {
+      renderSeriesChart(el("chartSignal"), dataset, [/^rssi$/i], {
+        yLabel: "signal (as logged)"
+      });
+    }
+  }
+}
+
+function renderBecLab(dataset) {
+  const story = el("becStory");
+  const metricsElement = el("becMetrics");
+  const eventsCard = el("becEventsCard");
+  const eventsTable = el("becEventsTable");
+  const chartCard = el("becChartCard");
+
+  if (!story || !metricsElement) return;
+
+  const lab = dataset?.becLab ?? null;
+
+  if (!lab) {
+    story.textContent =
+      "This log carries no usable BEC voltage telemetry, so receiver power cannot be assessed.";
+    metricsElement.innerHTML = "";
+    if (eventsCard) eventsCard.hidden = true;
+    if (chartCard) chartCard.hidden = true;
+    return;
+  }
+
+  const correlation = correlateSignalAndPower(
+    dataset?.signalLab ?? null,
+    lab
+  );
+
+  story.textContent =
+    lab.story + (correlation ? correlation.becSentence : "");
+  story.className = `lab-story status-text-${lab.status}`;
+
+  renderMetricGrid(metricsElement, lab.metrics);
+
+  if (eventsCard && eventsTable) {
+    if (lab.events.length === 0) {
+      eventsCard.hidden = true;
+    } else {
+      eventsCard.hidden = false;
+      renderEventTable(
+        eventsTable,
+        ["When", "Lowest", "Depth", "Duration", "Servo context"],
+        lab.events.map(
+          (event) => `
+          <tr>
+            <td>${event.startSeconds.toFixed(1)} s</td>
+            <td>${event.lowestVolts.toFixed(2)} V</td>
+            <td>${event.depthPercent.toFixed(1)}%</td>
+            <td>${event.durationMs} ms${event.sustained ? " (sustained)" : ""}</td>
+            <td>${
+              event.demandContext === "high-demand"
+                ? "high servo demand — consistent with load"
+                : event.demandContext === "quiet"
+                  ? "servos quiet — look at wiring/BEC"
+                  : "—"
+            }</td>
+          </tr>`
+        )
+      );
+    }
+  }
+
+  if (chartCard) {
+    chartCard.hidden = false;
+    const scale = lab.scale ?? 100;
+    renderScaledChart(
+      el("chartBecVoltage"),
+      dataset,
+      [
+        {
+          patterns: [/^Vbec$/i],
+          label: "BEC voltage (V)",
+          convert: (value) => value / scale
+        }
+      ],
+      "BEC voltage (V)"
+    );
+    renderSeriesChart(el("chartBecServo"), dataset, [/^servo\[\d\]$/i], {
+      yLabel: "servo command (µs)"
+    });
+  }
+}
+
 // ---- servo travel check ----
 //
 // Hidden entirely when the log offers nothing to judge (no servo
@@ -2341,7 +2545,7 @@ function renderServoLimits(servoLimits) {
     .join("");
 
   table.innerHTML = `
-    <table class="metric-table">
+    <table class="history-table">
       <tr>
         <th>Servo</th><th>When</th><th>Edge</th><th>Held for</th><th>Command</th>
       </tr>
@@ -4015,6 +4219,8 @@ function analyzeFlight(flightIndex) {
 
   renderFlightEvents(currentDataset?.flightEvents ?? null);
   renderServoLimits(currentDataset?.servoLimits ?? null);
+  renderSignalLab(currentDataset);
+  renderBecLab(currentDataset);
 
   renderVerdict(currentDataset);
   renderQuality(currentDataset, flight.stats);
@@ -4199,7 +4405,9 @@ buildReportButton.addEventListener("click", () => {
     labs: [
       { title: "Governor Lab", analysis: currentDataset.labs.governor },
       { title: "ESC Lab", analysis: currentDataset.labs.esc },
-      { title: "Battery Lab", analysis: currentDataset.labs.battery }
+      { title: "Battery Lab", analysis: currentDataset.labs.battery },
+      { title: "Signal Lab", analysis: currentDataset.signalLab },
+      { title: "BEC Lab", analysis: currentDataset.becLab }
     ],
     chartElements: [
       { title: "Noise Spectrum", element: chartSpectrum },
