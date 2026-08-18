@@ -676,6 +676,16 @@ const requiredStableSamples = commandStableWindowSamples;
 // the "event" is continuous flying, not a step.
 let targetStabilized = false;
 
+// One command moves one way. A long sustained ramp (a full
+// pirouette input building over a second) is still one command
+// — but once the setpoint materially REVERSES before ever
+// holding, the pilot has started a new movement, and gluing
+// both into one event would anchor the measurement on a target
+// from seconds later. The event terminates at the reversal;
+// the scan re-triggers on the movement that follows.
+const commandNetDirection = Math.sign(commandChange);
+let counterMovement = 0;
+
 // Both look-aheads stop at the segment edge: past it the
 // compacted array jumps to a different moment of the flight,
 // and a window that crosses that seam would read two distant
@@ -698,10 +708,28 @@ for (
     stableSampleCount += 1;
   } else {
     stableSampleCount = 0;
+
+    if (
+      lookAheadChange * commandNetDirection < 0
+    ) {
+      counterMovement += Math.abs(lookAheadChange);
+    }
   }
 
   commandEndSampleIndex =
     lookAheadIndex;
+
+  const netMovement = Math.abs(
+    values[lookAheadIndex] - previousValue
+  );
+
+  if (
+    counterMovement >
+    Math.max(10, netMovement * 0.2)
+  ) {
+    // Material reversal before any hold: not one step.
+    break;
+  }
 
   if (
     stableSampleCount >=
@@ -848,29 +876,6 @@ const approachTolerance =
     ? Math.max(2, commandMagnitude * 0.1)
     : 2;
 
-// How far the response actually got, measured along the
-// commanded direction — a wandering gyro on another errand can
-// no longer supply the "peak" of this command's response.
-let responsePeak = null;
-let responsePeakOffset = -1;
-
-for (
-  let offset = 0;
-  offset < measuredResponseWindow.length;
-  offset += 1
-) {
-  const value = measuredResponseWindow[offset];
-  if (!Number.isFinite(value)) continue;
-  if (
-    responsePeak === null ||
-    value * commandDirection >
-      responsePeak * commandDirection
-  ) {
-    responsePeak = value;
-    responsePeakOffset = offset;
-  }
-}
-
 // The response has ANSWERED the command once it comes within
 // tolerance of the target. Overshoot exists only after that
 // moment, and only as the FIRST excursion beyond the target:
@@ -941,6 +946,41 @@ for (
   }
 }
 
+// Every response measurement ends where the response's own story
+// ends: at the settled window when one exists, else at the window
+// edge. The peak marker a pilot sees must belong to THIS command
+// — a directional maximum found after the settle (or under a
+// later target wiggle) is a different moment's story.
+const responseMeasureEnd = Number.isInteger(settlingStartOffset)
+  ? Math.min(
+      settlingStartOffset + requiredSettledSamples,
+      measuredResponseWindow.length
+    )
+  : measuredResponseWindow.length;
+
+// How far the response actually got, measured along the
+// commanded direction — a wandering gyro on another errand can
+// no longer supply the "peak" of this command's response.
+let responsePeak = null;
+let responsePeakOffset = -1;
+
+for (
+  let offset = 0;
+  offset < responseMeasureEnd;
+  offset += 1
+) {
+  const value = measuredResponseWindow[offset];
+  if (!Number.isFinite(value)) continue;
+  if (
+    responsePeak === null ||
+    value * commandDirection >
+      responsePeak * commandDirection
+  ) {
+    responsePeak = value;
+    responsePeakOffset = offset;
+  }
+}
+
 let overshootAmount = null;
 let overshootPeakOffset = -1;
 
@@ -949,12 +989,7 @@ if (reachedOffset >= 0 && !hasOverlappingCommand) {
   // where the settled window ends, so a disturbance half a
   // second after a clean settle can never be scored as this
   // command's overshoot.
-  const excursionScanEnd = Number.isInteger(settlingStartOffset)
-    ? Math.min(
-        settlingStartOffset + requiredSettledSamples,
-        measuredResponseWindow.length
-      )
-    : measuredResponseWindow.length;
+  const excursionScanEnd = responseMeasureEnd;
   // An overshoot is a movement, not an instant: a one-sample
   // spike at the moment the stick is released reads as a
   // beyond-target value but proves nothing about the tune. An

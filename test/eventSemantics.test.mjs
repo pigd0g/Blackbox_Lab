@@ -163,6 +163,45 @@ test("a disturbance after the response settled is not this command's overshoot",
   );
 });
 
+test("a material setpoint reversal terminates the command instead of anchoring on a later target", () => {
+  // The pilot pushes to -60, immediately reverses through zero up
+  // to +40, then holds +40: two movements. Gluing them into one
+  // event would report a command that "started" at the first push
+  // but is measured against the +40 target from a second later —
+  // the marker-outside-the-command failure. The reversal must
+  // split them: whatever events emerge, no event may pair the
+  // downward push with the +40 target.
+  const fixture = buildFlight(
+    (t) => {
+      if (t < 10) return 0;
+      if (t < 10.3) return -60;
+      if (t < 10.6) return 40;
+      if (t < 14) return 40;
+      return 0;
+    },
+    (t) => {
+      if (t < 10.05) return 0;
+      if (t < 10.35) return -55;
+      if (t < 10.65) return 35;
+      if (t < 14) return 40;
+      return 0;
+    }
+  );
+
+  const events = rollEvents(fixture);
+
+  const glued = events.find(
+    (event) =>
+      event.commandDirection === -1 && event.commandTarget > 0
+  );
+
+  assert.equal(
+    glued,
+    undefined,
+    "a downward command must never be measured against a later upward target"
+  );
+});
+
 test("a real persistent crossing is overshoot, measured beyond the target", () => {
   // Step 0 → 60 at t=10; the response rises through the target to
   // 90 (50% past), stays beyond for 150 ms, then settles at 60.
