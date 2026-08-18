@@ -158,6 +158,18 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     headline,
     detail,
     action: conclusion.recommendation,
+    // Structured peak facts, so downstream text (the Try First
+    // panel) can speak about the same peak without parsing prose.
+    peak: {
+      hz: Math.round(peakHz),
+      magnitude: Math.round(peakMagnitude * 10) / 10,
+      source,
+      reductionPercent: Number.isFinite(reductionPercent)
+        ? Math.round(reductionPercent)
+        : null,
+      managed: conclusion.managed === true,
+      identified: source !== "an unidentified source"
+    },
     screen: "filter",
     evidence: "Noise Spectrum chart, Filter Lab"
   };

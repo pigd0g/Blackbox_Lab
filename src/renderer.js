@@ -2532,21 +2532,27 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     governorTone
   );
 
-  // ---- Filter: one distilled sentence ----
+  // ---- Filter: speak about THE peak the verdict named ----
   const advisorRecs = dataset?.filterAdvice?.recommendations ?? [];
   const topAdvisor =
     advisorRecs.find((rec) => rec.priority === "first") ??
     advisorRecs[0] ??
     null;
 
+  const vibrationCard = dataset?.verdict?.cards?.find(
+    (card) => card.key === "vibration"
+  );
+  const peak = vibrationCard?.peak ?? null;
+
   let filterText = null;
 
-  if (topAdvisor?.priority === "first") {
-    filterText =
-      "Fix the mechanical source first — filtering can suppress what the gyro sees, but it never removes the shake from the airframe. The Filter Advisor below names the exact frequencies and where they point.";
+  if (vibrationCard?.status === "attention" && peak) {
+    filterText = `Address the mechanical source first: the ${peak.hz} Hz peak points at ${peak.identified ? peak.source : "a physical source"}. Filters can only hide it from the gyro — they never remove the shake from the airframe. The Filter Advisor below carries the exact frequencies.`;
+  } else if (peak?.managed && peak.magnitude > 3) {
+    filterText = `Filtering is containing the ${peak.hz} Hz shake${Number.isFinite(peak.reductionPercent) ? ` (${peak.reductionPercent}% suppressed, nothing meaningful reaching the control loop)` : ""} — but the vibration itself is mechanical: ${peak.identified ? peak.source : "a physical source worth locating"}. A bench check when convenient is the real fix; across flights, a growing raw peak is the signal to act.`;
   } else if (topAdvisor?.priority === "filters") {
     filterText =
-      "Let the RPM filter do this work: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
+      "Turn the RPM filter loose on this: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
   } else if (topAdvisor) {
     filterText =
       "Vibration is present but well managed — no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
