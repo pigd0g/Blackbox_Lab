@@ -1462,6 +1462,24 @@ const bestTrackingProfile =
     null
   );
 
+// A ranking is only as good as its thinnest side: a profile a few
+// hundred samples deep can "win" simply by containing less flight.
+// Best-profile claims are qualified when the winner is severely
+// under-sampled in absolute terms or against the best-measured bank.
+const largestProfileSampleCount =
+  validProfileTrackingResults.reduce(
+    (max, profile) =>
+      Math.max(max, profile.sampleCount ?? 0),
+    0
+  );
+
+const bestProfileUnderSampled =
+  canCompareProfiles &&
+  bestTrackingProfile !== null &&
+  ((bestTrackingProfile.sampleCount ?? 0) < 5000 ||
+    (bestTrackingProfile.sampleCount ?? 0) * 20 <
+      largestProfileSampleCount);
+
 const worstTrackingProfile =
   validProfileTrackingResults.reduce(
     (worst, profile) => {
@@ -2389,7 +2407,9 @@ const pidSummary = [
     : "No sustained PID-term saturation pattern was identified.",
 
   canCompareProfiles
-    ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
+    ? bestProfileUnderSampled
+      ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error, but only ${bestTrackingProfile.sampleCount} samples were measured at that headspeed — collect more flight time there before comparing headspeeds.`
+      : `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
     : onlyTrackingProfile
       ? Number.isFinite(onlyTrackingProfile.targetRpm)
         ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
@@ -2436,10 +2456,12 @@ const pidScoreExplanation = [
     : "No points were deducted for PID-term saturation.",
 
   bestTrackingProfile
-  ? "No points were deducted for profile comparison data."
+  ? bestProfileUnderSampled
+    ? "Profile comparison carries limited evidence (severe sample imbalance between headspeeds) and did not affect the PID score."
+    : "No points were deducted for profile comparison data."
   : "Profile comparison was not available and did not affect the PID score."
 ];
-  return {
+  const pidResult = {
     status: hasCompleteTrackingEvidence
   ? "PID Tracking Analysis Complete"
   : "PID Tracking Analysis Unavailable",
@@ -3237,9 +3259,13 @@ highestTrackingErrorAxis
 
 ...(canCompareProfiles
   ? [
-      `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
-        2
-      )}.`,
+      bestProfileUnderSampled
+        ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+            2
+          )} — from only ${bestTrackingProfile.sampleCount} samples (best-measured bank: ${largestProfileSampleCount}), a limited read rather than an established comparison.`
+        : `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+            2
+          )}.`,
       `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(
         2
       )}.`
@@ -3566,4 +3592,30 @@ highestTrackingErrorAxis
       ? lines.length
       : 0
   };
+
+  // "Clear" is a promise that nothing below needs follow-up. The
+  // per-axis behavior checks (bounce-back, settling, ringing) file
+  // their statuses inside the technical findings — an overall Clear
+  // must not sit on top of Review lines a pilot would only find by
+  // reading that far.
+  const behaviorReviewCount = pidResult.findings.filter((line) =>
+    typeof line === "string" &&
+    / (bounce-back|settling|ringing) status: Review$/.test(line)
+  ).length;
+
+  if (
+    pidResult.overallStatus === "Clear" &&
+    behaviorReviewCount > 0
+  ) {
+    pidResult.overallStatus = "Review";
+    if (Array.isArray(pidResult.summary)) {
+      pidResult.summary.push(
+        `${behaviorReviewCount} response-behavior check${
+          behaviorReviewCount === 1 ? "" : "s"
+        } (bounce-back, settling or ringing) flagged for confirmation — nothing to change yet, but fly the same maneuvers again and see whether the pattern returns.`
+      );
+    }
+  }
+
+  return pidResult;
 }
