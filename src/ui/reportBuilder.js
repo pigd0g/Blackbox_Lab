@@ -218,6 +218,23 @@ export function buildReportHtml({
     .map((lab) => {
       const status = STATUS[lab.analysis.status] ?? STATUS.insufficient;
 
+      // A lab that could only run a partial analysis must not wear
+      // a scored-quality word: "Looks good" on a governor page that
+      // could not measure the governor reads as a judgment it never
+      // made. The capability state the app renders governs the
+      // report too — one semantics, two surfaces.
+      const capability = lab.analysis.capability ?? "full";
+
+      const statusWord =
+        capability === "partial"
+          ? "Partial — stability only"
+          : capability === "unavailable"
+            ? "Not evaluated"
+            : status.word;
+
+      const statusColor =
+        capability === "full" ? status.color : "#7c8da1";
+
       const tiles = lab.analysis.metrics
         .map(
           (metric) => `
@@ -232,9 +249,9 @@ export function buildReportHtml({
       <div class="lab">
         <div class="lab-head">
           <span class="lab-name">${escapeHtml(lab.title)}</span>
-          <span class="lab-status" style="color:${status.color};">${status.word}</span>
+          <span class="lab-status" style="color:${statusColor};">${escapeHtml(statusWord)}</span>
         </div>
-        <p class="lab-story" style="border-left-color:${status.color};">${escapeHtml(lab.analysis.story)}</p>
+        <p class="lab-story" style="border-left-color:${statusColor};">${escapeHtml(lab.analysis.story)}</p>
         <div class="tiles">${tiles}</div>
       </div>`;
     })
