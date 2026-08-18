@@ -1044,6 +1044,7 @@ const controlMotionAxes = [
 
 let controlMotionAssessment =
   "Control-motion evidence was not available for this profile.";
+let controlMotionConcern = null;
 
 if (controlMotionAxes.length > 0) {
   const controlRatios = controlMotionAxes
@@ -1068,6 +1069,13 @@ if (controlMotionAxes.length > 0) {
         current.ratio > highest.ratio ? current : highest
     );
 
+    controlMotionConcern =
+      highestControlRatio.ratio >= 0.5
+        ? "high"
+        : highestControlRatio.ratio >= 0.25
+          ? "moderate"
+          : "none";
+
     if (highestControlRatio.ratio >= 0.5) {
       controlMotionAssessment =
         `${highestControlRatio.axis} shows a high control-error ratio during the available commanded-motion samples. This indicates a tracking concern, but Filter Lab cannot determine by itself whether the cause is filtering, PID balance, mechanics, or the command-event mix. Cross-check PID Lab before changing filter settings.`;
@@ -1085,6 +1093,7 @@ if (controlMotionAxes.length > 0) {
     confidence,
 sampleCount,
 controlMotionAssessment,
+controlMotionConcern,
     controlMotionAvailable: controlMotionAxes.length > 0,
     strongestAxis: strongestAxis.name,
     strongestFilteredAverage:
@@ -2004,8 +2013,19 @@ if (Number.isFinite(averageReduction)) {
       ? " Measurable vibration remained afterwards, so the filters are not removing much of what is there."
       : " There was little vibration to remove, so filters doing little is the expected result here.";
   } else if (averageReduction > 60) {
-    filterReductionAssessment =
-      " The high average reduction deserves a closer check for possible over-filtering.";
+    // High reduction alone is the filters doing a big job, not proof
+    // they are doing harm. The caution is only actionable when the
+    // control-motion evidence shows tracking actually suffering;
+    // without that, the number is informational and must not read as
+    // a recommendation the verdict does not share.
+    const controlSuffering = profileSpecificFilterAnalysis.some(
+      (profile) =>
+        profile.mechanicalFinding?.controlMotionConcern === "high" ||
+        profile.mechanicalFinding?.controlMotionConcern === "moderate"
+    );
+    filterReductionAssessment = controlSuffering
+      ? " The high average reduction deserves a closer check for possible over-filtering — the control-motion evidence shows tracking being affected."
+      : " The high average reduction reflects how much vibration the filters had to remove; with no control-motion impact in evidence, this is informational — not a call to action.";
   }
 }
 
@@ -2013,11 +2033,21 @@ if (Number.isFinite(averageReduction)) {
 // which profile was measured, not which one won.
 const onlyOneProfile = profileSpecificFilterAnalysis.length === 1;
 
+// "Use this as the baseline" turns an observation into a testing
+// decision — a Low-confidence, short-window profile has not earned
+// that promotion. It is still reported as the lowest OBSERVED, with
+// the ask to collect more time at that headspeed first.
+const quietestIsEstablished =
+  quietestProfile.mechanicalFinding?.confidence === "High" ||
+  quietestProfile.mechanicalFinding?.confidence === "Moderate";
+
 recommendations.push(
   `${quietestProfile.targetRpm} RPM ${
     onlyOneProfile
       ? "was the only headspeed profile analyzed, so profiles cannot be compared"
-      : "currently has the lowest remaining filtered vibration"
+      : quietestIsEstablished
+        ? "currently has the lowest remaining filtered vibration"
+        : `showed the lowest remaining filtered vibration in the limited samples available (${quietestProfile.mechanicalFinding?.sampleCount ?? "few"} samples)`
   }` +
   `${
     Number.isFinite(averageReduction)
@@ -2025,7 +2055,9 @@ recommendations.push(
       : ""
   }.` +
   filterReductionAssessment +
-  ` It should be used as the baseline for the next comparison flight.`
+  (quietestIsEstablished
+    ? ` It should be used as the baseline for the next comparison flight.`
+    : ` Collect more time at this headspeed before using it as a comparison baseline.`)
 );
 
 for (const finding of unresolvedFindings) {

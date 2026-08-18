@@ -1555,6 +1555,20 @@ const hasSpectrumRuns = (
 
 const spectra = [];
 
+// When the chart cannot be drawn, the empty state must name the
+// actual gate that failed — telling a pilot with 300k gyro samples
+// that there is "not enough gyro data" contradicts the verdict
+// sitting right above the chart.
+let spectraUnavailableReason = null;
+
+if (gyroColumnNames.length === 0) {
+  spectraUnavailableReason = "no-gyro";
+} else if (!sampleRate) {
+  spectraUnavailableReason = "no-rate";
+} else if (!hasSpectrumRuns) {
+  spectraUnavailableReason = "no-stable-run";
+}
+
 if (sampleRate && hasSpectrumRuns) {
   gyroColumnNames.forEach(
     (name, index) => {
@@ -1617,6 +1631,10 @@ if (sampleRate && hasSpectrumRuns) {
     (headspeed
       ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
       : null);
+
+  if (spectra.length === 0 && spectraUnavailableReason === null) {
+    spectraUnavailableReason = "no-stable-run";
+  }
 
   const markers = buildSpectrumMarkers(spectra, governedHeadspeed);
 
@@ -1967,6 +1985,7 @@ if (sampleRate && hasSpectrumRuns) {
     voltagePatterns,
     amperage,
     spectra,
+    spectraUnavailableReason,
     markers,
     perBankFilter,
     labs,
@@ -4264,8 +4283,13 @@ function renderAllCharts(dataset) {
       markers: dataset.markers
     });
   } else {
-    chartSpectrum.innerHTML =
-      '<p class="chart-empty">Not enough gyro data for a spectrum.</p>';
+    chartSpectrum.innerHTML = `<p class="chart-empty">${
+      dataset.spectraUnavailableReason === "no-stable-run"
+        ? "No uninterrupted stable-flight stretch long enough for a spectrum window — the flight's stable phase was too fragmented. Gyro data itself is present; the verdict's peak numbers come from the filter analysis, which reads shorter windows."
+        : dataset.spectraUnavailableReason === "no-rate"
+          ? "The logging rate could not be determined, so the spectrum's frequency axis cannot be computed."
+          : "No gyro data in this log for a spectrum."
+    }</p>`;
   }
 
   renderGovernorEvidence(dataset);
