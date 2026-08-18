@@ -826,6 +826,7 @@ const compareFlightSelect = el("compareFlightSelect");
 const compareResultCard = el("compareResultCard");
 const compareChartCard = el("compareChartCard");
 const compareSummary = el("compareSummary");
+const comparePairInfo = el("comparePairInfo");
 const compareRows = el("compareRows");
 const chartCompareSpectrum = el("chartCompareSpectrum");
 
@@ -4925,7 +4926,17 @@ function renderComparison(comparisonDataset, comparisonName) {
 
   const result = compareFlights(currentDataset, comparisonDataset);
 
+  const beforeIdentity =
+    summaryFileName.textContent +
+    (currentFlightSummary ? ` — ${currentFlightSummary}` : "");
+
   compareResultCard.hidden = false;
+  if (comparePairInfo) {
+    comparePairInfo.textContent =
+      `Before: ${beforeIdentity} · After: ${comparisonName}`;
+  }
+  compareBaselineInfo.textContent =
+    `Before: ${beforeIdentity} · After: ${comparisonName}`;
   compareSummary.textContent = result.summary;
   compareRows.innerHTML = "";
 
