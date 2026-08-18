@@ -5131,7 +5131,8 @@ function refreshHistoryScreen(selectedCraft) {
       series: [{ label: yLabel, values }],
       yLabel,
       xLabel: "Flight #",
-      height: 200
+      height: 200,
+      formatX: (value) => `Flight ${Math.round(value)}`
     });
   };
 

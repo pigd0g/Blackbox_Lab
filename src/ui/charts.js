@@ -186,7 +186,11 @@ const fmt = (value) =>
     ? String(Math.round(value))
     : String(Math.round(value * 10) / 10);
 
-function buildChartFooter(element, chart, seriesMeta, { withStats }) {
+function buildChartFooter(element, chart, seriesMeta, { withStats, formatX }) {
+  // Extrema positions are labeled by the x-axis's own unit: seconds
+  // for flight time, "Flight N" for history trends — never "2.0s"
+  // for what is actually the second logged flight.
+  const xText = formatX ?? ((value) => `${value.toFixed(1)}s`);
   const footer = document.createElement("div");
   footer.className = "chart-footer";
 
@@ -210,8 +214,8 @@ function buildChartFooter(element, chart, seriesMeta, { withStats }) {
         (entry) =>
           `<span class="chart-stat"><i style="background:${entry.color}"></i>` +
           `${entry.label}: ` +
-          `<b>▾ ${fmt(entry.min)}</b> @ ${entry.minX.toFixed(1)}s · ` +
-          `<b>▴ ${fmt(entry.max)}</b> @ ${entry.maxX.toFixed(1)}s</span>`
+          `<b>▾ ${fmt(entry.min)}</b> @ ${xText(entry.minX)} · ` +
+          `<b>▴ ${fmt(entry.max)}</b> @ ${xText(entry.maxX)}</span>`
       )
       .join("");
   };
@@ -271,7 +275,8 @@ export function renderTimeSeriesChart(element, options) {
     yLabel = "",
     xLabel = "Flight time (s)",
     markers = [],
-    linkGroup = null
+    linkGroup = null,
+    formatX = null
   } = options;
 
   destroyExistingChart(element);
@@ -389,7 +394,7 @@ export function renderTimeSeriesChart(element, options) {
 
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
-  buildChartFooter(element, chart, seriesMeta, { withStats: true });
+  buildChartFooter(element, chart, seriesMeta, { withStats: true, formatX });
 
   if (linkGroup) {
     joinLinkGroup(linkGroup, chart, element);
