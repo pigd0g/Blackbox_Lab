@@ -93,6 +93,7 @@ import {
   hashFlightLines,
   migrateHistory,
   assessTrends,
+  rotorTrendWording,
   deleteFlight,
   clearHistory,
   getCraftCard,
@@ -5136,7 +5137,22 @@ function refreshHistoryScreen(selectedCraft) {
 
   historyTrendCard.hidden = false;
   trendChart(chartTrendVibration, "vibrationPeak", "vibration peak");
-  trendChart(chartTrendDroop, "droopRpm", "largest RPM deviation");
+
+  // Title, hint and axis follow what these flights measured:
+  // target-relative droop only when every charted flight had a
+  // logged governor target, rotor-speed stability otherwise.
+  const rotorWording = rotorTrendWording(entries);
+  const trendDroopTitle = el("trendDroopTitle");
+  const trendDroopHint = el("trendDroopHint");
+  if (trendDroopTitle) trendDroopTitle.textContent = rotorWording.title;
+  if (trendDroopHint) trendDroopHint.textContent = rotorWording.hint;
+  trendChart(
+    chartTrendDroop,
+    "droopRpm",
+    rotorWording.label === "Governor droop"
+      ? "worst droop (rpm)"
+      : "largest RPM deviation"
+  );
 
   // ---- flights table ----
   historyTableCard.hidden = false;

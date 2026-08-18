@@ -367,3 +367,17 @@ test("history entries from before v1.1 trend cleanly without the fields", () => 
   const { findings } = assessTrends(entries);
   assert.ok(Array.isArray(findings));
 });
+
+test("rotor trend speaks droop only when every flight had a target", async () => {
+  const { rotorTrendWording } = await import("../src/analysis/craftHistory.js");
+
+  const full = { droopRpm: 40, governorCapability: "full" };
+  const headspeedOnly = { droopRpm: 120, governorCapability: "partial" };
+  const legacy = { droopRpm: 60 }; // pre-capability entry
+
+  assert.match(rotorTrendWording([full, full]).title, /Governor Droop/);
+  assert.match(rotorTrendWording([full, headspeedOnly]).title, /Stability/);
+  assert.match(rotorTrendWording([full, legacy]).title, /Stability/);
+  assert.match(rotorTrendWording([]).title, /Stability/);
+  assert.doesNotMatch(rotorTrendWording([headspeedOnly]).adviceUp, /losing headroom/i);
+});

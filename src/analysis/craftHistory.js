@@ -215,6 +215,11 @@ export function buildHistoryEntry({
     vibrationPeak: peak ? Math.round(peak.magnitude * 10) / 10 : null,
     vibrationHz: peak ? Math.round(peak.hz * 10) / 10 : null,
     droopRpm: dataset.labs?.governor?.droopRpm ?? null,
+    // Whether that number was measured against a logged governor
+    // target ("full") or against the rotor's own trend — the Health
+    // Record wording depends on it. Older entries lack the key and
+    // read as unknown, which the wording treats as target-free.
+    governorCapability: dataset.labs?.governor?.capability ?? null,
     trackingScore:
   dataset.pidAnalysis?.score ??
   dataset.pidScore ??
@@ -716,6 +721,42 @@ function assessMetric(
   };
 }
 
+/**
+ * How the rotor-speed trend may speak, given what these flights
+ * actually measured.
+ *
+ * "Droop" is a target-relative word: it may only appear when every
+ * flight carrying a number was measured against a logged governor
+ * target. One target-free (or pre-capability) flight in the set and
+ * the whole trend speaks in stability terms — mixing the two
+ * measurements under one target-relative title would misname the
+ * very distinction the labs are careful about.
+ */
+export function rotorTrendWording(entries = []) {
+  const measured = entries.filter((entry) =>
+    Number.isFinite(entry.droopRpm)
+  );
+  const targetRelative =
+    measured.length > 0 &&
+    measured.every((entry) => entry.governorCapability === "full");
+
+  return targetRelative
+    ? {
+        title: "Governor Droop Across Flights",
+        hint: "A rising line means the rotor falls further below its target over time — read it alongside output, voltage and load before blaming any one part.",
+        label: "Governor droop",
+        adviceUp:
+          "The rotor is falling further below target across flights. Aging pack, dirty pinion or a slipping gear are the usual suspects — confirm against the output and voltage picture before changing the tune."
+      }
+    : {
+        title: "Rotor-Speed Stability Across Flights",
+        hint: "A rising line means the rotor is holding less steadily across flights — worth investigating.",
+        label: "Rotor-speed deviation",
+        adviceUp:
+          "The rotor is holding less steadily across flights — worth checking mechanics, power and setup before it grows."
+      };
+}
+
 export function assessTrends(entries) {
   if (!entries || entries.length < 4) {
     return {
@@ -736,11 +777,10 @@ export function assessTrends(entries) {
         "Something mechanical is changing — check bearings, blade balance and links before it grows."
     }),
     assessMetric(entries, "droopRpm", {
-      label: "Governor droop",
+      label: rotorTrendWording(entries).label,
       lowerIsBetter: true,
       unit: " rpm",
-      adviceUp:
-        "The power system is losing headroom — aging pack, dirty pinion or slipping gear are the usual suspects."
+      adviceUp: rotorTrendWording(entries).adviceUp
     }),
     assessMetric(entries, "internalResistance", {
       label: "Pack internal resistance",
