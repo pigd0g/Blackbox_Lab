@@ -259,7 +259,7 @@ export function explainLoadEvent({
     return {
       cause: "headroom-limit",
       sentence:
-        "Output sat at maximum for a meaningful part of this event — the power system had nothing left to give here. Consider more headroom (lower headspeed, fresher pack, or gearing) before blaming the tune."
+        "Output sat at maximum for a meaningful part of this event — the power system had nothing left to give here. Consider more headroom (lower headspeed, a fresher pack, or gearing/Kv matched to your target headspeed) before blaming the tune."
     };
   }
 

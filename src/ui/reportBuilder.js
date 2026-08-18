@@ -95,7 +95,7 @@ function buildQualityHtml(quality) {
     .join("");
 
   return `
-  <h2>What This Report Is Based On</h2>
+  <h2>Log Quality — What This Report Is Based On</h2>
   <p class="summary">${escapeHtml(quality.summary ?? "")} A fully
   qualified report depends on all telemetry being logged — areas
   without their data are stated below rather than judged.</p>

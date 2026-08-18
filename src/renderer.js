@@ -108,7 +108,10 @@ import {
   governorEventWindow
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
-import { analyzeServoLimits } from "./analysis/servoLimitAnalysis.js";
+import {
+  analyzeServoLimits,
+  servoDisplayName
+} from "./analysis/servoLimitAnalysis.js";
 import { analyzeSignalLab } from "./analysis/signalLabAnalysis.js";
 import {
   analyzeBecLab,
@@ -907,6 +910,16 @@ document.querySelectorAll(".peek-advanced-link").forEach((link) => {
   link.addEventListener("click", () => {
     const screen = link.closest("[data-screen]");
     const peeking = screen.classList.toggle("peek-advanced");
+
+    // Revealing folded handles is only half the promise: the link
+    // says "show the advanced data", so every fold on this page
+    // opens with it — including the technical drilldown — and all
+    // of them fold shut again on the way back.
+    screen
+      .querySelectorAll("details.advanced-block, details.drilldown")
+      .forEach((fold) => {
+        fold.open = peeking;
+      });
 
     link.textContent = peeking
       ? "Hide the advanced data again"
@@ -1825,6 +1838,35 @@ if (sampleRate && hasSpectrumRuns) {
 })
   };
 
+  // Radio-link and receiver-power health, computed before the
+  // verdict so Home can carry their cards. The BEC lab reads the
+  // Signal lab's conclusion: a "brownout" on the voltage trace
+  // while the receiver demonstrably kept flying is a
+  // measurement-path story, not a power-loss story.
+  const servoColumnsForLabs = findColumns(headerLine, [
+    /^servo\[\d\]$/i
+  ]).map((name) => ({ name, values: columnValues(name) }));
+
+  const signalLab = analyzeSignalLab({
+    timeSeconds,
+    rssi: firstColumn([/^rssi$/i]),
+    failsafePhase: firstColumn([/^failsafePhase$/i]),
+    rxSignalReceived: firstColumn([/^rxSignalReceived$/i]),
+    rxFlightChannelsValid: firstColumn([/^rxFlightChannelsValid$/i]),
+    headspeed
+  });
+
+  const becLab = analyzeBecLab({
+    timeSeconds,
+    vbec: firstColumn([/^Vbec$/i]),
+    servos: servoColumnsForLabs,
+    headspeed,
+    receiverStayedAlive: signalLab
+      ? signalLab.counts.failsafe === 0 &&
+        signalLab.counts.linkLoss === 0
+      : null
+  });
+
   const verdict = buildFlightVerdict({
   spectra,
   headspeed,
@@ -1833,7 +1875,9 @@ if (sampleRate && hasSpectrumRuns) {
   pidAnalysis,
   labs,
   anchorHeadspeedRpm: governedHeadspeed,
-  filterAdvice
+  filterAdvice,
+  signalLab,
+  becLab
 });
 
   // Evidence that zooms to the moment: attach a focus
@@ -1880,7 +1924,12 @@ if (sampleRate && hasSpectrumRuns) {
       hasHeadspeed: columnCarriesData(headspeed),
       hasGovernorTarget: columnCarriesData(governorTarget),
       hasVbat: columnCarriesData(vbat),
-      hasAmperage: columnCarriesData(amperage)
+      hasAmperage: columnCarriesData(amperage),
+      // The labs already decided what their telemetry supports —
+      // the chips repeat that decision, never re-derive it.
+      hasRssi: signalLab?.capability === "full",
+      hasLinkFlags: Boolean(signalLab),
+      hasVbec: Boolean(becLab)
     },
     headerLine,
     timeSeconds,
@@ -1917,39 +1966,8 @@ if (sampleRate && hasSpectrumRuns) {
       yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
       yawGyro: firstColumn([/^gyroADC\[2\]$/i])
     }),
-    // Radio-link and receiver-power health. The BEC lab reads
-    // the Signal lab's conclusion: a "brownout" on the voltage
-    // trace while the receiver demonstrably kept flying is a
-    // measurement-path story, not a power-loss story.
-    ...(() => {
-      const servoColumns = findColumns(headerLine, [
-        /^servo\[\d\]$/i
-      ]).map((name) => ({ name, values: columnValues(name) }));
-
-      const signalLab = analyzeSignalLab({
-        timeSeconds,
-        rssi: firstColumn([/^rssi$/i]),
-        failsafePhase: firstColumn([/^failsafePhase$/i]),
-        rxSignalReceived: firstColumn([/^rxSignalReceived$/i]),
-        rxFlightChannelsValid: firstColumn([
-          /^rxFlightChannelsValid$/i
-        ]),
-        headspeed
-      });
-
-      const becLab = analyzeBecLab({
-        timeSeconds,
-        vbec: firstColumn([/^Vbec$/i]),
-        servos: servoColumns,
-        headspeed,
-        receiverStayedAlive: signalLab
-          ? signalLab.counts.failsafe === 0 &&
-            signalLab.counts.linkLoss === 0
-          : null
-      });
-
-      return { signalLab, becLab };
-    })(),
+    signalLab,
+    becLab,
     // Servo commands frozen at their own travel edge — the
     // second layer that confirms whether a saturation condition
     // reached the actual servo command.
@@ -2541,7 +2559,7 @@ function renderServoLimits(servoLimits) {
     .map(
       (event) => `
         <tr>
-          <td>${event.servo}</td>
+          <td>${servoDisplayName(event.servo)}</td>
           <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
           <td>${event.side === "max" ? "upper" : "lower"} edge</td>
           <td>${event.durationMs} ms</td>

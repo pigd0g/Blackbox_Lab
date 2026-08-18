@@ -489,7 +489,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
           : ""
       }.`,
       action: outputAtCeiling
-        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the moment."
+        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed — the ESC Lab shows the moment."
         : "Review the worst-droop event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
       evidence: "Headspeed vs Target chart, Governor Lab"
@@ -641,7 +641,7 @@ function powerVerdictFromLab(escLab) {
 
   const action =
     escLab.status === "attention"
-      ? "Lower the headspeed, take some pitch out, or step up the power system — the ESC Lab shows the exact moments."
+      ? "Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed — the ESC Lab shows the exact moments."
       : escLab.status === "watch"
         ? "Fine for now — worth remembering before asking the machine for more."
         : "Nothing to do.";
@@ -661,6 +661,65 @@ function powerVerdictFromLab(escLab) {
 // ------------------------------------------------------
 // buildFlightVerdict — the one call the renderer makes
 // ------------------------------------------------------
+// ------------------------------------------------------
+// Signal + receiver-power verdicts — from their labs.
+// Cards appear only when the log carried the telemetry: an
+// absent column is a quality-chip fact, not a Home warning.
+// ------------------------------------------------------
+function signalVerdict(signalLab) {
+  if (!signalLab) return null;
+
+  const status = signalLab.status;
+
+  return {
+    key: "signal",
+    title: "Signal",
+    status,
+    headline:
+      status === "attention"
+        ? signalLab.counts.failsafe > 0
+          ? "The control link was interrupted"
+          : "The link needs a look"
+        : status === "watch"
+          ? "Signal dipped — the link held"
+          : "Radio link solid the whole flight",
+    detail: signalLab.story,
+    action:
+      status === "good"
+        ? "Nothing to do."
+        : "Open the Signal Lab — the events name each moment.",
+    screen: "signal",
+    evidence: "Signal Lab events"
+  };
+}
+
+function becVerdict(becLab) {
+  if (!becLab) return null;
+
+  const status = becLab.status;
+
+  return {
+    key: "bec",
+    title: "Receiver Power",
+    status,
+    headline:
+      status === "attention"
+        ? "Receiver power needs attention"
+        : status === "watch"
+          ? becLab.implausibleBrownout
+            ? "Voltage reading worth checking"
+            : "Receiver voltage dipped"
+          : "Receiver power rock steady",
+    detail: becLab.story,
+    action:
+      status === "good"
+        ? "Nothing to do."
+        : "Open the BEC Lab — each dip carries its servo context.",
+    screen: "bec",
+    evidence: "BEC Lab events"
+  };
+}
+
 export function buildFlightVerdict({
   spectra,
   headspeed,
@@ -669,7 +728,9 @@ export function buildFlightVerdict({
   pidAnalysis,
   labs,
   anchorHeadspeedRpm,
-  filterAdvice = null
+  filterAdvice = null,
+  signalLab = null,
+  becLab = null
 }) {
   // Peak naming needs the rotor speed the machine flew at. The
   // caller passes the stable-flight mean when one exists; the
@@ -687,7 +748,9 @@ export function buildFlightVerdict({
   rotorSpeedVerdictFromLab(labs?.governor),
   tuningVerdict(pidAnalysis),
   powerVerdictFromLab(labs?.esc),
-  batteryVerdictFromLab(labs?.battery)
+  batteryVerdictFromLab(labs?.battery),
+  signalVerdict(signalLab),
+  becVerdict(becLab)
 ].filter(Boolean);
 
   const worst = cards.some((card) => card.status === "attention")

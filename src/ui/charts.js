@@ -89,10 +89,23 @@ export function friendlySeriesLabel(name) {
   const match = String(name).match(/^([A-Za-z]+)\[(\d)\]$/);
   if (!match) return name;
 
-  const axis = AXIS_NAMES[Number(match[2])];
-  if (!axis) return name;
-
   const base = match[1];
+  const index = Number(match[2]);
+
+  // Servos are wired by position, not by axis: cyclics on S1-S3,
+  // tail on S4 (Rotorflight convention).
+  if (/^servo$/i.test(base)) {
+    if (index <= 2) return `Cyclic servo ${index + 1}`;
+    if (index === 3) return "Tail servo";
+    return `Servo ${index + 1}`;
+  }
+
+  if (/^motor$/i.test(base)) {
+    return `Motor ${index + 1} output`;
+  }
+
+  const axis = AXIS_NAMES[index];
+  if (!axis) return name;
   if (/^gyroADC$/i.test(base)) return `${axis} gyro (filtered)`;
   if (/^(gyroRAW|gyroUnfilt)$/i.test(base)) return `${axis} gyro (raw)`;
   if (/^setpoint$/i.test(base)) return `${axis} target`;
@@ -118,9 +131,16 @@ const WHOLE_NAME_LABELS = {
   EscV: "ESC voltage",
   EscI: "ESC current",
   EscThr: "ESC throttle",
+  EscRPM: "Motor RPM (ESC)",
+  EscCap: "Consumed capacity (ESC)",
+  EscPwm: "ESC PWM",
   Tesc: "ESC temp",
   Tesc2: "ESC temp 2",
-  Tmcu: "MCU temp"
+  Tmcu: "MCU temp",
+  rssi: "Link strength (RSSI)",
+  Vbec: "BEC voltage",
+  BecV: "BEC voltage (ESC-reported)",
+  BecI: "BEC current"
 };
 
 export function friendlyLabel(name) {

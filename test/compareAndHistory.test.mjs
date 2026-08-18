@@ -161,7 +161,10 @@ test("quality gate praises a complete fast log", () => {
     hasHeadspeed: true,
     hasGovernorTarget: true,
     hasVbat: true,
-    hasAmperage: true
+    hasAmperage: true,
+    hasRssi: true,
+    hasLinkFlags: true,
+    hasVbec: true
   });
 
   assert.ok(quality.capabilities.every((c) => c.level === "full"));

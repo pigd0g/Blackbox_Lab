@@ -24,6 +24,20 @@ import {
   estimateSampleRate
 } from "./flightPhase.js";
 
+// Rotorflight wiring convention: cyclic servos on S1-S3, the tail
+// servo on S4 — and every real log seen so far agrees (the tail
+// channel is the one updating every few milliseconds). The raw
+// column name rides along so the label stays traceable to the log.
+export function servoDisplayName(name) {
+  const match = String(name).match(/^servo\[(\d)\]$/);
+  if (!match) return name;
+
+  const index = Number(match[1]);
+  if (index <= 2) return `Cyclic servo ${index + 1}`;
+  if (index === 3) return "Tail servo";
+  return `Servo ${index + 1}`;
+}
+
 export const SERVO_LIMIT_TUNING = {
   // A command frozen this long, at the edge, is a clipped
   // demand: an unclipped command reverses within a few tens
@@ -326,7 +340,7 @@ export function analyzeServoLimits({
       : `${affected
           .map(
             (servo) =>
-              `${servo.name} pinned at its ${servo.events[0].side === "max" ? "upper" : "lower"} edge ${servo.events.length}× (longest ${servo.longestMs} ms)`
+              `${servoDisplayName(servo.name)} pinned at its ${servo.events[0].side === "max" ? "upper" : "lower"} edge ${servo.events.length}× (longest ${servo.longestMs} ms)`
           )
           .join("; ")}. A command frozen at the edge of its own travel means the flight controller was asking for more than the setup allows — check servo travel/limit settings, or read it alongside the saturation findings as genuine control saturation.`;
 

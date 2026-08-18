@@ -35,7 +35,10 @@ export function assessLogQuality({
   hasHeadspeed,
   hasGovernorTarget,
   hasVbat,
-  hasAmperage
+  hasAmperage,
+  hasRssi = false,
+  hasLinkFlags = false,
+  hasVbec = false
 }) {
   const capabilities = [];
   const warnings = [];
@@ -117,6 +120,42 @@ export function assessLogQuality({
       name: "Battery & ESC",
       level: "missing",
       note: "No electrical telemetry in this log."
+    });
+  }
+
+  // ---- signal & link ----
+  if (hasRssi) {
+    capabilities.push({
+      name: "Signal & link",
+      level: "full",
+      note: "Signal strength and receiver flags present — link health fully measurable."
+    });
+  } else if (hasLinkFlags) {
+    capabilities.push({
+      name: "Signal & link",
+      level: "partial",
+      note: "Receiver flags only — failsafe and signal-valid state are visible, but no signal-strength trace was logged."
+    });
+  } else {
+    capabilities.push({
+      name: "Signal & link",
+      level: "missing",
+      note: "No link telemetry in this log — enable RSSI telemetry for signal analysis."
+    });
+  }
+
+  // ---- receiver power ----
+  if (hasVbec) {
+    capabilities.push({
+      name: "Receiver power (BEC)",
+      level: "full",
+      note: "BEC voltage present — receiver-power stability, dips and their servo context are measurable."
+    });
+  } else {
+    capabilities.push({
+      name: "Receiver power (BEC)",
+      level: "missing",
+      note: "No BEC voltage in this log — enable BEC voltage telemetry for receiver-power analysis."
     });
   }
 
