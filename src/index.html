@@ -639,9 +639,13 @@
               Where both raw and filtered traces are logged, the gap
               between them is your filters doing their job — and the
               Filter Advisor below measures exactly that, then
-              suggests what to change. Mechanical fixes come first:
-              filtering a shake away in software never removes it
-              from the airframe.</p>
+              suggests what to change. If the evidence points at a
+              real mechanical problem, correct that before adding
+              filtering — software never removes a shake from the
+              airframe. A known harmonic that the existing filters
+              control well, with nothing meaningful reaching the
+              control loop, is a managed state: worth monitoring,
+              not necessarily worth wrenching on.</p>
             <p>Four things are kept separate here: what was
               <em>detected</em> (an observation, not a diagnosis),
               what the <em>filters</em> do with it, whether anything
@@ -771,6 +775,22 @@
               judge, and the confidence note says so. Change one
               thing at a time, fly again, and let Compare Flights
               be the judge.</p>
+            <p>A few terms the findings may use.
+              <em>Overshoot</em>: the response went past the target
+              before coming back. <em>Bounce-back</em>: after
+              reaching the target it reversed away again.
+              <em>Oscillation</em> (ringing): the response swung back
+              and forth across the target repeatedly. <em>Still
+              approaching</em>: the response hadn't reached the
+              target before the next input — on deliberate moves,
+              that reads as a slow response. <em>Sustained PID-term
+              activity</em> (saturation): one controller term worked
+              near its maximum for an extended stretch — the
+              controller working unusually hard, not automatically a
+              fault. None of these justifies a change on its own:
+              they matter when they repeat across clean, comparable
+              commands, and the cards only name a knob when the
+              evidence carries it.</p>
           </details>
         </div>
 
@@ -889,13 +909,19 @@
             collective pumps, climbs, hard stops.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>The headline number is droop: how far the rotor dipped
+            <p>What this page can measure depends on what the log
+              carries. With a logged governor <em>target</em>, the
+              headline number is droop: how far the rotor dipped
               below its target under load, measured only during
-              stable flight so spool-ups don't distort it. The charts
-              show target versus actual headspeed, and the
-              worst-droop view lines that moment up with throttle,
-              collective, current and voltage — so you can see
-              whether the dip came from governor gains, a soft pack,
+              stable flight so spool-ups don't distort it, with the
+              charts showing target versus actual headspeed. Without
+              a target, the page evaluates headspeed stability
+              instead — short-term swings against the rotor's own
+              trend — and the verdict says "Partial" so nothing
+              reads as governor performance. Either way, the
+              worst-moment view lines that dip or swing up with
+              throttle, collective, current and voltage — so you can
+              see whether it came from governor gains, a soft pack,
               or simply a very big demand. If you fly more than one
               headspeed, each bank gets its own breakdown.</p>
             <p>True droop needs a logged governor <em>target</em>.
@@ -1244,7 +1270,7 @@ current demand; the steady downward slope is normal discharge.
 
         <section class="card" id="compareChartCard" hidden>
           <h3>Noise Spectrum — Before vs After</h3>
-          <p class="chart-hint">
+          <p class="chart-hint" id="compareChartHint">
             Two flights, one picture. Shrinking peaks = progress.
           </p>
           <div class="chart-container" id="chartCompareSpectrum"></div>

@@ -4357,6 +4357,17 @@ function renderComparison(comparisonDataset, comparisonName) {
 
   if (beforeSpectrum && afterSpectrum) {
     compareChartCard.hidden = false;
+
+    // The comparability ruling the result cards just made governs
+    // this caption too: once the page has said "two different
+    // machines", no corner of it may imply that a smaller peak on
+    // the other machine means progress.
+    const chartHint = el("compareChartHint");
+    if (chartHint) {
+      chartHint.textContent = result.sameAircraft
+        ? "Two flights, one picture. Shrinking peaks = progress."
+        : "Two machines, shown side by side for reference — their spectra are not directly comparable.";
+    }
     renderSpectrumChart(chartCompareSpectrum, [
       {
         label: `Before (${summaryFileName.textContent})`,
