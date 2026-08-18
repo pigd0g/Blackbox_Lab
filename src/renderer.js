@@ -2493,7 +2493,13 @@ function renderBecLab(dataset) {
         {
           patterns: [/^Vbec$/i],
           label: "BEC voltage (V)",
-          convert: (value) => value / scale
+          // renderScaledChart hands convert the whole VALUES ARRAY
+          // (see toVolts) — a per-value converter renders an empty
+          // chart with healthy-looking axes.
+          convert: (values) =>
+            values.map((value) =>
+              Number.isFinite(value) ? value / scale : null
+            )
         }
       ],
       "BEC voltage (V)"

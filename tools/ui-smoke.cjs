@@ -118,6 +118,61 @@ const { mkdirSync } = require("node:fs");
       badPresets.map((entry) => entry.id).join(", "));
   }
   console.log("preset grid ok: 9/9 charts scaled");
+  // ---- Signal + BEC labs: verdicts filled, charts carry DATA ----
+  // The v1.3 lesson repeated: a chart can render healthy-looking
+  // axes with zero series (a per-value convert handed an array) —
+  // assert scales, never just absence of errors.
+  await window.click('.nav-button[data-target="signal"]');
+  await window.waitForTimeout(400);
+  const signalState = await window.evaluate(() => ({
+    story: document.getElementById("signalStory")?.textContent ?? "",
+    metrics: document.querySelectorAll("#signalMetrics .metric").length
+  }));
+  if (signalState.story.length < 20) {
+    throw new Error(
+      "signal lab verdict empty: " + JSON.stringify(signalState)
+    );
+  }
+  console.log("signal lab ok:", signalState.story.slice(0, 70));
+
+  await window.click('.nav-button[data-target="bec"]');
+  await window.waitForTimeout(600);
+  const becState = await window.evaluate(() => {
+    const chart = document
+      .getElementById("chartBecVoltage")
+      ?.querySelector("canvas")
+      ? document.getElementById("chartBecVoltage").__blackboxLabChart
+      : null;
+    return {
+      story: document.getElementById("becStory")?.textContent ?? "",
+      chartScaled: Boolean(
+        chart &&
+          chart.scales.x.min != null &&
+          chart.scales.x.max > chart.scales.x.min
+      ),
+      chartHidden:
+        document.getElementById("becChartCard")?.hidden ?? null
+    };
+  });
+  if (becState.story.length < 20) {
+    throw new Error("bec lab verdict empty: " + JSON.stringify(becState));
+  }
+  if (becState.chartHidden === false && !becState.chartScaled) {
+    throw new Error(
+      "bec voltage chart rendered without scaled data: " +
+        JSON.stringify(becState)
+    );
+  }
+  console.log(
+    "bec lab ok:",
+    becState.story.slice(0, 70),
+    "| chart scaled:",
+    becState.chartScaled
+  );
+
+  await window.click('.nav-button[data-target="home"]');
+  await window.waitForTimeout(300);
+
 
   await window.click(".verdict-tile");
   await window.waitForTimeout(600);
