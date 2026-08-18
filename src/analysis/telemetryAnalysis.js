@@ -3,7 +3,7 @@ function clampScore(score) {
 }
 function analyzeTelemetry(keyHeaders) {
   const foundCount = keyHeaders.filter(
-    ([label, header]) => Boolean(header)
+    ([label, header, emptyNote]) => Boolean(header) && !emptyNote
   ).length;
 
   const totalCount = keyHeaders.length;

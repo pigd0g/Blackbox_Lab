@@ -2516,8 +2516,13 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       governorText = `The ${dipRpm} rpm dip is a power-system limit, not a tuning problem: the motor output was already at ${Math.round(dipOutput)}% when it happened, so no governor setting can add power that isn't there. Adjust the gearing/Kv to match your target headspeed, or lower the target.`;
     } else if (loadDriven) {
       governorText = `The ${dipRpm} rpm dip followed a real load demand with output headroom to spare — the governor answered a hard ask, which is a power system doing its job. Nothing to change; if the same maneuver keeps dipping deeper across flights, that trend is the signal.`;
-    } else {
+    } else if (governor.capability === "full") {
       governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand — that is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
+    } else {
+      // Headspeed-only log: without a governor target, stability is
+      // visible but tuning attribution is not — the wording must not
+      // outrun the capability the quality gate declared.
+      governorText = `The ${dipRpm} rpm short-term swing happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no obvious matching load demand. Without a logged governor target this log can judge stability, not governor tuning — repeat the same maneuver, and if the swing keeps returning, that pattern is the signal worth acting on.`;
     }
   } else if (governor) {
     governorText =

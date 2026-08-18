@@ -511,6 +511,22 @@ if (!governorTargetUsable) {
   governorTargetSamples.length = 0;
 }
 
+// A current column that never leaves zero is a header, not a
+// sensor: the battery lab already refuses to analyze it, so the
+// telemetry inventory must not count it either (same rule as the
+// quality gate's columnCarriesData).
+const currentHeader = findHeader(headers, ["current", "esci"]);
+const currentValues = getColumnValues(
+  lines,
+  telemetryHeaderIndex,
+  currentHeader
+);
+const currentUsable = currentValues.some(
+  (value) => Number.isFinite(value) && value !== 0
+);
+
+const headspeedUsable = hasUsableRotorSpeed(headspeedValues);
+
 const governorTargetByRow = new Map(
   governorTargetSamples.map((sample) => [
     sample.rowIndex,
@@ -665,7 +681,10 @@ const pidProfiles =
 
         [
           "Current",
-          findHeader(headers, ["current", "esci"])
+          currentHeader,
+          currentHeader && !currentUsable
+            ? "present, no usable data"
+            : null
         ],
 
         [
@@ -683,7 +702,10 @@ const pidProfiles =
 
         [
           "Headspeed",
-          headspeedHeader
+          headspeedHeader,
+          headspeedHeader && !headspeedUsable
+            ? "present, no usable data"
+            : null
         ],
 
         [
@@ -728,7 +750,7 @@ const pidProfiles =
   detectedTelemetry: {
     time: findHeader(headers, ["time"]),
     batteryVoltage: findHeader(headers, ["vbat", "escv"]),
-    current: findHeader(headers, ["current", "esci"]),
+    current: currentUsable ? currentHeader : null,
     escOutput: escOutputHeader,
     escRpm: escRpmHeader,
     headspeed: headspeedHeader,
@@ -805,7 +827,10 @@ const governorLabAnalysis = analyzeGovernorLab({
         "KEY TELEMETRY FOUND\n" +
         "-------------------\n" +
         keyHeaders
-          .map(([label, value]) => {
+          .map(([label, value, emptyNote]) => {
+            if (value && emptyNote) {
+              return `✗ ${label}: ${value} — ${emptyNote}`;
+            }
             return `${value ? "✓" : "✗"} ${label}: ${value || "Not found"}`;
           })
           .join("\n") +
