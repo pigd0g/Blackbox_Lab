@@ -35,36 +35,34 @@ import { estimateSampleRate } from "./flightPhase.js";
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
   SLOW_SETTLING_MS: 500,
-  // Slow-settle shares re-anchored 2026-08-17 on the
-  // events-integrity measurement (same sweep as the overshoot
-  // anchors; the per-axis split and its rationale are unchanged:
+  // Slow-settle shares re-anchored 2026-08-18 (same sweep as the
+  // overshoot anchors; per-axis split and rationale unchanged:
   // yaw settles slow as its nature, roll fast). Bars sit at each
-  // axis's fleet p90, yaw at p95: Roll p90 0.107, Pitch p90
-  // 0.125, Yaw p95 0.224.
+  // axis's fleet p90, yaw at p95: Roll p90 0.125, Pitch p90
+  // 0.118, Yaw p95 0.219.
   SLOW_SETTLE_SHARE_MINIMUM: {
-    Roll: 0.11,
-    Pitch: 0.13,
-    Yaw: 0.23
+    Roll: 0.13,
+    Pitch: 0.12,
+    Yaw: 0.22
   },
   HUNTING_MINIMUM_CROSSINGS: 3,
   // Governor excursions are fleet-rare by calibration (median
   // machine: zero), so three same-cause excursions in ONE flight
   // is already a strong pattern.
   GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3,
-  // Overshoot: re-calibrated 2026-08-17 on the events-integrity
-  // measurement (370 contributed flights, 743 axes with >=5 clean
-  // responses). The rework changed the distribution completely —
-  // overshoot is now the first persistent excursion beyond a
-  // stabilized target, so the old inflation-compensating bars
-  // (share 0.95 / median 115%) would never fire again. Same
-  // doctrine, new anchors: share of clean commands overshooting
-  // >=25% AND >=10 deg/s at fleet p90 (0.55), per-axis median
-  // overshoot at fleet p90 (40%), at least three events.
+  // Overshoot: re-calibrated 2026-08-18 after the reversal-
+  // termination refinement (370 contributed flights, 748 axes
+  // with >=5 clean responses — compound slurred-command events no
+  // longer inflate the tail). Same doctrine as always: bars at
+  // the fleet's p90, so a card names a machine, not the formula.
+  // Share of clean commands overshooting >=25% AND >=10 deg/s at
+  // fleet p90 (0.50), per-axis median overshoot at fleet p90
+  // (34%), at least three events.
   OVERSHOOT_REVIEW_PERCENT: 25,
   OVERSHOOT_MINIMUM_DEG_S: 10,
   OVERSHOOT_MINIMUM_EVENTS: 3,
-  OVERSHOOT_SHARE_MINIMUM: 0.55,
-  OVERSHOOT_MEDIAN_MINIMUM_PERCENT: 40,
+  OVERSHOOT_SHARE_MINIMUM: 0.5,
+  OVERSHOOT_MEDIAN_MINIMUM_PERCENT: 34,
   OVERSHOOT_CORRELATION_MINIMUM_EVENTS: 5,
   OVERSHOOT_CORRELATION_STRONG: 0.6,
   OVERSHOOT_CORRELATION_GAP: 0.25
