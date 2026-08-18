@@ -1169,6 +1169,11 @@ async function loadFromFile(file) {
   // Swap the welcome hero for the working Home layout.
   document.body.classList.add("log-loaded");
 
+  const startHereHeading = el("startHereHeading");
+  if (startHereHeading) {
+    startHereHeading.textContent = "Load Another Log";
+  }
+
   if (!loadProgress.hidden) {
     loadProgressText.textContent = `${file.name} analyzed — the verdict is ready on the overview.`;
   }
@@ -2398,13 +2403,34 @@ function recommendationFirstStep(rec) {
   return null;
 }
 
-function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
-  const events = dataset?.flightEvents?.summary ?? null;
+// One tone system: the panel's color IS the verdict's color —
+// attention, watch or clear, taken from the same verdict card the
+// pilot just read. "info" (accent) exists only for
+// enable-this-telemetry pointers, where there is no verdict.
+function statusTone(status) {
+  return status === "attention"
+    ? "attention"
+    : status === "watch"
+      ? "watch"
+      : "clear";
+}
 
-  // PID: earned advice, the gate reason — or an honest read of
-  // the event strip. The panel's tone must AGREE with the chips
-  // beside it: orange events with no earned advice reads amber
-  // ("normal range, nothing earned yet"), never green.
+function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
+  const cardStatus = (key) =>
+    dataset?.verdict?.cards?.find((card) => card.key === key)?.status ??
+    null;
+
+  const events = dataset?.flightEvents?.summary ?? null;
+  const entries = [];
+
+  const add = (stepId, screen, title, text, tone) => {
+    setFirstStep(stepId, text, tone);
+    if (text) {
+      entries.push({ screen, title, text, tone });
+    }
+  };
+
+  // ---- PID ----
   const pidRec = recommendationFirstStep(nextSteps?.pid?.[0]);
   const gentleDemand =
     pidAnalysis?.technicalSummary?.demand?.hoverLevel === true;
@@ -2428,30 +2454,32 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
         .join(", ")
     : "";
 
-  setFirstStep(
+  add(
     "pidFirstStep",
+    "pid",
+    "Tuning",
     pidRec?.text ??
       (nonCleanEvents > 0
         ? `Of ${events.total} commands, ${eventBits} — that rate is inside the fleet's normal range, so no tuning change is earned from this flight alone. What flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
         : gentleDemand
           ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps — clear inputs, held briefly — and read this page again."
           : "Nothing to change from this flight — every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
-    pidRec ? pidRec.tone : nonCleanEvents > 0 ? "watch" : "clear"
+    statusTone(cardStatus("tuning"))
   );
 
-  // Governor: ANSWER the dip from the data we already have —
-  // power limit, load response, or genuine tune territory — never
-  // point at a chart, least of all a hidden one.
+  // ---- Governor: answer the dip from the data ----
   const govRec = recommendationFirstStep(nextSteps?.governor?.[0]);
   const governor = dataset?.labs?.governor;
+  const governorTone = statusTone(cardStatus("rotor") ?? governor?.status);
 
   let governorText = null;
-  let governorTone = "clear";
 
   if (govRec) {
     governorText = govRec.text;
-    governorTone = govRec.tone;
-  } else if (governor?.status === "attention" || governor?.status === "watch") {
+  } else if (
+    governor?.status === "attention" ||
+    governor?.status === "watch"
+  ) {
     const dipRpm = Math.round(governor.droopRpm ?? 0);
     const dipOutput =
       governor.stableDipOutputPercent ??
@@ -2459,29 +2487,34 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       null;
 
     const loadDriven = (dataset?.governorEvents?.events ?? []).some(
-      (event) => event.cause === "load" || event.cause === "collective-drop"
+      (event) =>
+        event.cause === "load" || event.cause === "collective-drop"
     );
 
-    if (governor.stableDipAtPowerLimit || (Number.isFinite(dipOutput) && dipOutput >= 95)) {
+    if (
+      governor.stableDipAtPowerLimit ||
+      (Number.isFinite(dipOutput) && dipOutput >= 95)
+    ) {
       governorText = `The ${dipRpm} rpm dip is a power-system limit, not a tuning problem: the motor output was already at ${Math.round(dipOutput)}% when it happened, so no governor setting can add power that isn't there. Adjust the gearing/Kv to match your target headspeed, or lower the target.`;
-      governorTone = "action";
     } else if (loadDriven) {
       governorText = `The ${dipRpm} rpm dip followed a real load demand with output headroom to spare — the governor answered a hard ask, which is a power system doing its job. Nothing to change; if the same maneuver keeps dipping deeper across flights, that trend is the signal.`;
-      governorTone = "watch";
     } else {
       governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand — that is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
-      governorTone = "watch";
     }
   } else if (governor) {
     governorText =
       "Nothing to change — the governor is holding. Keep logging flights; the Health Record turns them into trends.";
-    governorTone = "clear";
   }
 
-  setFirstStep("governorFirstStep", governorText, governorTone);
+  add(
+    "governorFirstStep",
+    "governor",
+    "Rotor speed",
+    governorText,
+    governorTone
+  );
 
-  // Filter: ONE distilled sentence — the advisor below carries
-  // the frequencies and the teaching.
+  // ---- Filter: one distilled sentence ----
   const advisorRecs = dataset?.filterAdvice?.recommendations ?? [];
   const topAdvisor =
     advisorRecs.find((rec) => rec.priority === "first") ??
@@ -2489,33 +2522,36 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     null;
 
   let filterText = null;
-  let filterTone = "clear";
 
   if (topAdvisor?.priority === "first") {
     filterText =
       "Fix the mechanical source first — filtering can suppress what the gyro sees, but it never removes the shake from the airframe. The Filter Advisor below names the exact frequencies and where they point.";
-    filterTone = "action";
   } else if (topAdvisor?.priority === "filters") {
     filterText =
       "Let the RPM filter do this work: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
-    filterTone = "action";
   } else if (topAdvisor) {
     filterText =
       "Vibration is present but well managed — no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
-    filterTone = "watch";
   } else if (dataset?.spectra?.length) {
     filterText =
       "No filter change indicated — the noise picture is clean at this log's resolution.";
-    filterTone = "clear";
   }
 
-  setFirstStep("filterFirstStep", filterText, filterTone);
+  add(
+    "filterFirstStep",
+    "filter",
+    "Vibration",
+    filterText,
+    statusTone(cardStatus("vibration"))
+  );
 
-  // ESC: the headroom answer, in the right words.
+  // ---- ESC ----
   const escLab = dataset?.labs?.esc;
 
-  setFirstStep(
+  add(
     "escFirstStep",
+    "esc",
+    "Power & ESC",
     escLab
       ? escLab.status === "attention"
         ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed — the highest-load moments below name exactly when the system ran out."
@@ -2523,18 +2559,16 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           ? "Fine for now — remember this margin before asking the machine for more headspeed or pitch."
           : "Nothing to change — healthy headroom throughout the flight."
       : null,
-    escLab?.status === "attention"
-      ? "action"
-      : escLab?.status === "watch"
-        ? "watch"
-        : "clear"
+    statusTone(cardStatus("power") ?? escLab?.status)
   );
 
-  // Battery: condition checks before conclusions.
+  // ---- Battery ----
   const batteryLab = dataset?.labs?.battery;
 
-  setFirstStep(
+  add(
     "batteryFirstStep",
+    "battery",
+    "Battery",
     batteryLab
       ? batteryLab.status === "attention"
         ? "Review pack condition, connectors and load before another hard flight — the voltage and current charts below show the worst dip in context."
@@ -2542,12 +2576,121 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           ? "Compare the voltage dip with current demand below — and keep logging: the Health Record turns single dips into a trend you can trust."
           : "Nothing to change — the pack held up well."
       : null,
-    batteryLab?.status === "attention"
-      ? "action"
-      : batteryLab?.status === "watch"
-        ? "watch"
-        : "clear"
+    statusTone(cardStatus("battery") ?? batteryLab?.status)
   );
+
+  // ---- Signal ----
+  const signalLab = dataset?.signalLab;
+
+  if (signalLab) {
+    add(
+      "signalFirstStep",
+      "signal",
+      "Signal",
+      signalLab.status === "attention"
+        ? "Check receiver antenna placement, orientation and condition before the next flight — the events below name each moment the link struggled."
+        : signalLab.status === "watch"
+          ? "Glance at the dip moments below — repeated dips in the same flight orientation point at antenna placement or shading."
+          : "Nothing to change — the link held all flight.",
+      statusTone(cardStatus("signal") ?? signalLab.status)
+    );
+  } else {
+    setFirstStep(
+      "signalFirstStep",
+      "Enable RSSI telemetry on the receiver and re-log — then this page can watch the link for you.",
+      "info"
+    );
+  }
+
+  // ---- BEC ----
+  const becLab = dataset?.becLab;
+
+  if (becLab) {
+    add(
+      "becFirstStep",
+      "bec",
+      "Receiver power",
+      becLab.status === "attention"
+        ? "Work through the receiver power path — BEC setting and current capability, wiring, connectors — starting at the worst event below."
+        : becLab.status === "watch"
+          ? becLab.implausibleBrownout
+            ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement — not the power — is the suspect."
+            : "Keep an eye on the dip moments below — with power, repetition is what matters."
+          : "Nothing to change — receiver power is solid.",
+      statusTone(cardStatus("bec") ?? becLab.status)
+    );
+  } else {
+    setFirstStep(
+      "becFirstStep",
+      "Enable BEC voltage telemetry and re-log — then this page can watch your receiver power for you.",
+      "info"
+    );
+  }
+
+  renderHomeFirstSteps(entries);
+}
+
+// ---- Home: the aggregated to-do list, severity first ----
+//
+// The same seven answers, gathered where the journey starts.
+// Attention before watch, tuning-order within a severity
+// (mechanics → tune → power → link), clear items summarized as
+// one green line — a to-do list never pads itself with done.
+const FIRST_STEP_LAB_ORDER = [
+  "filter",
+  "pid",
+  "governor",
+  "esc",
+  "battery",
+  "signal",
+  "bec"
+];
+
+function renderHomeFirstSteps(entries) {
+  const card = el("firstStepsCard");
+  const list = el("firstStepsList");
+
+  if (!card || !list) return;
+
+  if (!entries.length) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
+
+  const rank = { attention: 0, watch: 1 };
+
+  const actionable = entries
+    .filter((entry) => entry.tone in rank)
+    .sort(
+      (a, b) =>
+        rank[a.tone] - rank[b.tone] ||
+        FIRST_STEP_LAB_ORDER.indexOf(a.screen) -
+          FIRST_STEP_LAB_ORDER.indexOf(b.screen)
+    );
+
+  list.innerHTML = "";
+
+  if (actionable.length === 0) {
+    const line = document.createElement("p");
+    line.className = "first-steps-clear";
+    line.textContent =
+      "Nothing needs your attention — this flight is healthy. The Labs carry the details.";
+    list.appendChild(line);
+    return;
+  }
+
+  for (const entry of actionable) {
+    const row = document.createElement("button");
+    row.className = "first-steps-row";
+    row.dataset.tone = entry.tone;
+    row.innerHTML = `<strong>${entry.title}</strong><span>${entry.text}</span>`;
+    row.addEventListener("click", () => {
+      navigation.showScreen(entry.screen);
+    });
+    list.appendChild(row);
+  }
 }
 
 // ---- signal + BEC labs ----
@@ -2580,29 +2723,10 @@ function renderSignalLab(dataset) {
     story.textContent =
       "This log carries no link telemetry (no signal strength and no receiver flags), so radio-link health cannot be assessed.";
     metricsElement.innerHTML = "";
-    setFirstStep(
-      "signalFirstStep",
-      "Enable RSSI telemetry on the receiver and re-log — then this page can watch the link for you.",
-      "action"
-    );
     if (eventsCard) eventsCard.hidden = true;
     if (chartCard) chartCard.hidden = true;
     return;
   }
-
-  setFirstStep(
-    "signalFirstStep",
-    lab.status === "attention"
-      ? "Check receiver antenna placement, orientation and condition before the next flight — the events below name each moment the link struggled."
-      : lab.status === "watch"
-        ? "Glance at the dip moments below — repeated dips in the same flight orientation point at antenna placement or shading."
-        : "Nothing to change — the link held all flight.",
-    lab.status === "good"
-      ? "clear"
-      : lab.status === "watch"
-        ? "watch"
-        : "action"
-  );
 
   const correlation = correlateSignalAndPower(
     lab,
@@ -2670,27 +2794,10 @@ function renderBecLab(dataset) {
     story.textContent =
       "This log carries no usable BEC voltage telemetry, so receiver power cannot be assessed.";
     metricsElement.innerHTML = "";
-    setFirstStep(
-      "becFirstStep",
-      "Enable BEC voltage telemetry and re-log — then this page can watch your receiver power for you.",
-      "action"
-    );
     if (eventsCard) eventsCard.hidden = true;
     if (chartCard) chartCard.hidden = true;
     return;
   }
-
-  setFirstStep(
-    "becFirstStep",
-    lab.status === "attention"
-      ? "Work through the receiver power path — BEC setting and current capability, wiring, connectors — starting at the worst event below."
-      : lab.status === "watch"
-        ? lab.implausibleBrownout
-          ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement — not the power — is the suspect."
-          : "Keep an eye on the dip moments below — with power, repetition is what matters."
-        : "Nothing to change — receiver power is solid.",
-    lab.status === "good" ? "clear" : "action"
-  );
 
   const correlation = correlateSignalAndPower(
     dataset?.signalLab ?? null,

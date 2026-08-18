@@ -1878,22 +1878,19 @@ section[data-screen="history"] .flight-picker .secondary-button {
   .first-step::before {
     content: "";
     position: absolute;
-    left: -9px;
+    left: -11px;
     top: 22px;
-    width: 14px;
-    height: 14px;
-    background: inherit;
-    border-left: 1px solid rgba(111, 178, 255, 0.35);
-    border-bottom: 1px solid rgba(111, 178, 255, 0.35);
-    transform: rotate(45deg);
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 11px solid var(--line);
   }
 }
 
 .first-step {
   position: relative;
-  border: 1px solid rgba(111, 178, 255, 0.35);
-  border-left: 3px solid var(--accent);
-  background: rgba(111, 178, 255, 0.07);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  background: var(--card-soft);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -1930,8 +1927,35 @@ section[data-screen="history"] .flight-picker .secondary-button {
 }
 
 .first-step[data-tone="clear"]::before {
-  border-left-color: rgba(62, 207, 142, 0.3);
-  border-bottom-color: rgba(62, 207, 142, 0.3);
+  border-left-color: rgba(62, 207, 142, 0.55);
+}
+
+.first-step[data-tone="attention"] {
+  border-color: rgba(255, 138, 107, 0.35);
+  border-left-color: var(--attention);
+  background: rgba(255, 138, 107, 0.07);
+}
+
+.first-step[data-tone="attention"] .first-step-label {
+  color: var(--attention);
+}
+
+.first-step[data-tone="attention"]::before {
+  border-left-color: rgba(255, 138, 107, 0.6);
+}
+
+.first-step[data-tone="info"] {
+  border-color: rgba(111, 178, 255, 0.35);
+  border-left-color: var(--accent);
+  background: rgba(111, 178, 255, 0.07);
+}
+
+.first-step[data-tone="info"] .first-step-label {
+  color: var(--accent);
+}
+
+.first-step[data-tone="info"]::before {
+  border-left-color: rgba(111, 178, 255, 0.6);
 }
 
 .first-step[data-tone="watch"] {
@@ -1945,6 +1969,74 @@ section[data-screen="history"] .flight-picker .secondary-button {
 }
 
 .first-step[data-tone="watch"]::before {
-  border-left-color: rgba(242, 193, 78, 0.32);
-  border-bottom-color: rgba(242, 193, 78, 0.32);
+  border-left-color: rgba(242, 193, 78, 0.55);
+}
+
+/* ---- loaded-log field on Start Here ----
+   Invisible before a log; once one is loaded it becomes a small
+   labeled box so "there is a log in the machine" is obvious. */
+body.log-loaded .loaded-log-field {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card-soft);
+}
+
+body.log-loaded .loaded-log-field::before {
+  content: "Loaded log";
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+body.log-loaded .loaded-log-field .file-status {
+  margin-top: 0;
+}
+
+/* ---- Home: What To Do First list ---- */
+.first-steps-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  margin: 6px 0;
+  background: var(--card-soft);
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.first-steps-row:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.first-steps-row strong {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.first-steps-row[data-tone="attention"] {
+  border-left-color: var(--attention);
+}
+
+.first-steps-row[data-tone="watch"] {
+  border-left-color: var(--watch);
+}
+
+.first-steps-clear {
+  color: var(--good);
+  font-size: 15px;
+  margin: 4px 0 0 0;
 }

@@ -183,6 +183,15 @@
           <div id="verdictCards"></div>
         </section>
 
+        <section class="card" id="firstStepsCard" hidden>
+          <h3>What To Do First</h3>
+          <p class="chart-hint">
+            Everything this flight asks of you, in the order to
+            attend to it — each line opens its lab.
+          </p>
+          <div id="firstStepsList"></div>
+        </section>
+
         <!-- The unlock nudge: shown while this craft has no CLI
              dump attached yet. One click opens the craft panel. -->
         <section class="card unlock-card" id="unlockDumpCard" hidden>
@@ -207,7 +216,7 @@
         </section>
 
         <section class="card loaded-only">
-          <h3>Start Here</h3>
+          <h3 id="startHereHeading">Start Here</h3>
           <p>
             Open a flight log from your helicopter — raw
             <strong>.bbl</strong> files straight off the flight
@@ -218,15 +227,16 @@
           <input type="file" id="logFileInput" accept=".csv,.bbl,.bfl,.txt,.log" hidden />
 
           <div class="button-row">
-            <button class="primary-button" id="chooseFileButton">
-              Open Blackbox Log
-            </button>
             <button class="secondary-button" id="trySampleButton">
               Try a Sample Flight
             </button>
+            <button class="primary-button" id="chooseFileButton">
+              Open Blackbox Log
+            </button>
           </div>
 
-          <div class="file-status" id="fileStatus">
+<div class="loaded-log-field" id="loadedLogField">
+                      <div class="file-status" id="fileStatus">
             No log loaded — new here? Read <strong>How to Use</strong> in the sidebar first.
           </div>
 
@@ -236,6 +246,7 @@
           </div>
 
           <div class="decode-info" id="decodeInfo"></div>
+          </div>
         </section>
 
         <section class="card loaded-only">
