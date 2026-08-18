@@ -481,6 +481,30 @@ export function compareFlights(baseline, comparison) {
   const comparedRows = better + worse;
   const aircraft = sameAircraft(baseline.craftName, comparison.craftName);
 
+  // ---- comparability gate for the causal headline ----
+  // "That's a keeper" and "consider reverting" recommend keeping or
+  // undoing a setup change — causal claims. The rows above only
+  // DESCRIBE differences; attributing them to the change needs the
+  // pair to be like-for-like: same machine, matched flight demand,
+  // and solid evidence on both sides. Below that bar the summary
+  // stays descriptive and asks for the confirming flight instead of
+  // recommending action.
+  const headlineEvidence = comparableEvidence(
+    baseline.pidConfidence,
+    comparison.pidConfidence
+  );
+  const evidenceKnown =
+    Boolean(baseline.pidConfidence) && Boolean(comparison.pidConfidence);
+  const likeForLike =
+    aircraft.same && evidenceKnown && headlineEvidence.comparable;
+  const unlikeReason = !aircraft.same
+    ? ""
+    : !evidenceKnown
+      ? "this pair does not carry enough evidence to verify the two flights were flown alike."
+      : headlineEvidence.comparable
+        ? ""
+        : headlineEvidence.reason;
+
   // Different helicopters: the numbers are shown for reference, but
   // "90% better" is a tuning judgment and there is no tune being
   // judged — every row becomes descriptive, not directional.
@@ -501,10 +525,16 @@ export function compareFlights(baseline, comparison) {
             ? "These two flights cannot be compared usefully — see the rows below for what was missing."
             : "No meaningful change between these two flights."
           : worse === 0 && better > 0
-            ? "Your change helped — nothing got worse. That's a keeper."
+            ? likeForLike
+              ? "Your change helped — nothing got worse. That's a keeper."
+              : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet — ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
             : better === 0 && worse > 0
-              ? "This change went the wrong way — consider reverting it."
-              : "Mixed result: some things improved, others got worse. Trade-off territory.";
+              ? likeForLike
+                ? "This change went the wrong way — consider reverting it."
+                : `The later flight measured worse in ${worse} area${worse === 1 ? "" : "s"} — but ${unlikeReason} Repeat the same maneuvers before reverting anything.`
+              : likeForLike
+                ? "Mixed result: some things improved, others got worse. Trade-off territory."
+                : `The measurements moved in both directions — and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
 
   return {
     rows,
@@ -512,6 +542,10 @@ export function compareFlights(baseline, comparison) {
     better,
     worse,
     uncomparable,
-    sameAircraft: aircraft.same
+    sameAircraft: aircraft.same,
+    // Whether the pair earned causal language, and if not, why —
+    // surfaced so the UI and tests can see the gate, not just its
+    // effect on the wording.
+    comparability: { likeForLike, reason: unlikeReason }
   };
 }

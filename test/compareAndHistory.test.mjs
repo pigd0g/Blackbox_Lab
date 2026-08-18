@@ -26,7 +26,7 @@ function fakeSpectrum(peakHz, magnitude) {
   return { frequencies, magnitudes };
 }
 
-function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag }) {
+function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag, confidence }) {
   return {
     spectra: [{ label: "gyro", spectrum: fakeSpectrum(peakHz, peakMagnitude) }],
     labs: {
@@ -34,13 +34,16 @@ function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag }) {
       battery: sag !== undefined ? { sagPercent: sag } : null
     },
     pidScore: pidScore ?? null,
+    pidConfidence: confidence ?? null,
     batterySagPercent: sag ?? null
   };
 }
 
+const solidConfidence = { level: "High", demand: "sport" };
+
 test("compareFlights reports improvements in plain language", () => {
-  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9 });
-  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8 });
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9, confidence: solidConfidence });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8, confidence: solidConfidence });
 
   const result = compareFlights(before, after);
 
@@ -49,18 +52,53 @@ test("compareFlights reports improvements in plain language", () => {
   assert.equal(result.rows[1].direction, "better"); // droop
   assert.equal(result.rows[2].direction, "better"); // tracking
   assert.equal(result.rows[3].direction, "same"); // sag ~2%
+  assert.equal(result.comparability.likeForLike, true);
   assert.match(result.summary, /helped/i);
 });
 
 test("compareFlights flags regressions", () => {
-  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10 });
-  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 11 });
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10, confidence: solidConfidence });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 11, confidence: solidConfidence });
 
   const result = compareFlights(before, after);
   const vibration = result.rows.find((row) => row.title === "Vibration");
 
   assert.equal(vibration.direction, "worse");
   assert.match(result.summary, /wrong way|Mixed/i);
+});
+
+test("keeper language requires verified like-for-like evidence", () => {
+  // Same improvement, but no confidence data on either side: the
+  // rows still describe the gain, the headline must not attribute it.
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9 });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8 });
+
+  const result = compareFlights(before, after);
+
+  assert.equal(result.comparability.likeForLike, false);
+  assert.doesNotMatch(result.summary, /That's a keeper/i);
+  assert.match(result.summary, /Repeat the same maneuvers/i);
+});
+
+test("mismatched flight demand blocks the causal headline", () => {
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9, confidence: { level: "High", demand: "gentle" } });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8, confidence: { level: "High", demand: "sport" } });
+
+  const result = compareFlights(before, after);
+
+  assert.equal(result.comparability.likeForLike, false);
+  assert.doesNotMatch(result.summary, /That's a keeper/i);
+  assert.match(result.summary, /flown/i);
+});
+
+test("regressions without comparability ask for a confirming flight, not a revert", () => {
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10 });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 80 });
+
+  const result = compareFlights(before, after);
+
+  assert.doesNotMatch(result.summary, /reverting it/i);
+  assert.match(result.summary, /before reverting anything/i);
 });
 
 function memoryStorage() {
