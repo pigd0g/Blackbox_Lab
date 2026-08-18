@@ -1326,6 +1326,37 @@ if (profileSpecificFilterAnalysis.length === 1) {
         );
     }
   }
+} else if (profileSpecificFilterAnalysis.length > 1) {
+  // The same placing rule, from the other side: with several
+  // profiles in the field, "Cleanest" is a title only ONE can hold —
+  // the one with the least remaining filtered vibration, the same
+  // measure the recommendation below crowns as its baseline. Every
+  // other below-threshold profile is Clean: a band it earned on its
+  // own reading, not a placing.
+  const cleanProfiles = profileSpecificFilterAnalysis.filter(
+    (profile) => profile.mechanicalFinding?.status === "Cleanest Profile"
+  );
+
+  if (cleanProfiles.length > 0) {
+    const winner = cleanProfiles.reduce((best, current) =>
+      (current.mechanicalFinding.averageFiltered ?? Infinity) <
+      (best.mechanicalFinding.averageFiltered ?? Infinity)
+        ? current
+        : best
+    );
+
+    for (const profile of cleanProfiles) {
+      if (profile === winner) continue;
+      profile.mechanicalFinding.status = "Clean";
+      if (typeof profile.mechanicalFinding.summary === "string") {
+        profile.mechanicalFinding.summary =
+          profile.mechanicalFinding.summary.replace(
+            "is rated Cleanest Profile",
+            "is rated Clean"
+          );
+      }
+    }
+  }
 }
   
 

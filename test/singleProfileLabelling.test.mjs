@@ -165,3 +165,34 @@ test("a profile that earns a warning keeps it regardless of count", () => {
     `unexpected status: ${finding.status}`
   );
 });
+
+test("with several profiles, only one holds the Cleanest title", () => {
+  const analysis = analyze([
+    { rpm: 1500, seconds: 40 },
+    { rpm: 1800, seconds: 40 }
+  ]);
+  const profiles =
+    analysis.filterAnalysis?.profileSpecificFilterAnalysis ?? [];
+  const cleanest = profiles.filter(
+    (profile) =>
+      profile.mechanicalFinding?.status === "Cleanest Profile"
+  );
+
+  assert.ok(profiles.length >= 2, "expected a multi-profile flight");
+  assert.ok(
+    cleanest.length <= 1,
+    `only one profile may be Cleanest, got ${cleanest.length}`
+  );
+
+  // And the title holder is the one the recommendation crowns: the
+  // profile with the least remaining filtered vibration.
+  if (cleanest.length === 1) {
+    const quietest = profiles.reduce((best, current) =>
+      (current.mechanicalFinding?.averageFiltered ?? Infinity) <
+      (best.mechanicalFinding?.averageFiltered ?? Infinity)
+        ? current
+        : best
+    );
+    assert.equal(cleanest[0], quietest);
+  }
+});
