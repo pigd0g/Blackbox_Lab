@@ -336,13 +336,13 @@ export function analyzeServoLimits({
 
   const summary =
     affected.length === 0
-      ? `No servo command sat frozen at its travel edge in flight — all ${perServo.length} active servos used their range freely.`
+      ? `No servo command sat frozen at its travel edge in flight: all ${perServo.length} active servos used their range freely.`
       : `${affected
           .map(
             (servo) =>
               `${servoDisplayName(servo.name)} pinned at its ${servo.events[0].side === "max" ? "upper" : "lower"} edge ${servo.events.length}× (longest ${servo.longestMs} ms)`
           )
-          .join("; ")}. A command frozen at the edge of its own travel means the flight controller was asking for more than the setup allows — check servo travel/limit settings, or read it alongside the saturation findings as genuine control saturation.`;
+          .join("; ")}. A command frozen at the edge of its own travel means the flight controller was asking for more than the setup allows. Check servo travel/limit settings, or read it alongside the saturation findings as genuine control saturation.`;
 
   return {
     servos: perServo,

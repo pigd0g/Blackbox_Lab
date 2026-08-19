@@ -68,13 +68,13 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     const ratio = peakHz / oneRev;
 
     if (Math.abs(ratio - 1) < 0.15) {
-      source = "the MAIN ROTOR turning once per revolution — usually blade balance or head damping";
+      source = "the MAIN ROTOR turning once per revolution, usually blade balance or head damping";
     } else if (Math.abs(ratio - 2) < 0.2) {
-      source = "twice-per-revolution of the main rotor — often blade tracking or head play";
+      source = "twice-per-revolution of the main rotor, often blade tracking or head play";
     } else if (ratio > 3.5 && ratio < 6.5) {
-      source = "the TAIL rotor region — check tail blades, belt/shaft and bearings";
+      source = "the TAIL rotor region: check tail blades, belt/shaft and bearings";
     } else if (ratio > 6.5) {
-      source = "a high-frequency source — motor, pinion or bearing territory";
+      source = "a high-frequency source: motor, pinion or bearing territory";
     }
   }
 
@@ -139,7 +139,7 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
 
   const headline =
     conclusion.level === "observed" && peakMagnitude > 3
-      ? `Vibration at ${hzLabel} Hz — managed by filtering`
+      ? `Vibration at ${hzLabel} Hz: managed by filtering`
       : peakMagnitude > 8
         ? `Strong vibration at ${hzLabel} Hz`
         : peakMagnitude > 3
@@ -149,7 +149,7 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
   const detail =
     peakMagnitude > 3
       ? `${conclusion.detected} ${conclusion.filtering} ${conclusion.impact}`
-      : `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz — a clean, well-balanced machine.`;
+      : `Largest peak only ${magnitudeLabel} at ${hzLabel} Hz: a clean, well-balanced machine.`;
 
   return {
     key: "vibration",
@@ -220,8 +220,8 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
       title: "Rotor Speed",
       status: "attention",
       headline: `Headspeed sags up to ${Math.round(maximumDroop)} rpm under load`,
-      detail: `That is ${droopPercent.toFixed(1)}% below target — the governor needs more gain or the power system more headroom.`,
-      action: "In Rotorflight Configurator, raise governor gain in small steps — or check the ESC Lab for missing power headroom.",
+      detail: `That is ${droopPercent.toFixed(1)}% below target. The governor needs more gain or the power system more headroom.`,
+      action: "In Rotorflight Configurator, raise governor gain in small steps, or check the ESC Lab for missing power headroom.",
       screen: "governor",
       evidence: "Headspeed vs Target chart, Governor Lab"
     };
@@ -245,8 +245,8 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
     title: "Rotor Speed",
     status: "good",
     headline: "Rock-solid headspeed",
-    detail: `Worst droop only ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%) — the governor is doing its job.`,
-    action: "Nothing to do — this is what good looks like.",
+    detail: `Worst droop only ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%): the governor is doing its job.`,
+    action: "Nothing to do. This is what good looks like.",
     screen: "governor",
     evidence: "Headspeed vs Target chart, Governor Lab"
   };
@@ -296,7 +296,7 @@ function tuningVerdict(pidAnalysis) {
       key: "tuning",
       title: "Tuning",
       status: "attention",
-      headline: `Tracking score ${score}/100 — room to improve`,
+      headline: `Tracking score ${score}/100: room to improve`,
       detail:
         "The helicopter lags or overshoots what the sticks ask for. The PID Lab lists the events behind this number.",
       action:
@@ -314,11 +314,11 @@ function tuningVerdict(pidAnalysis) {
       key: "tuning",
       title: "Tuning",
       status: "watch",
-      headline: `Tracking score ${score}/100 — with items to review${demandSuffix}`,
+      headline: `Tracking score ${score}/100: items to review${demandSuffix}`,
       detail:
         "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
       action:
-        "Open the PID Lab and read its review items — they say exactly where to look.",
+        "Open the PID Lab and read its review items: they say exactly where to look.",
       screen: "pid",
       evidence: "PID Lab findings"
     };
@@ -329,7 +329,7 @@ function tuningVerdict(pidAnalysis) {
       key: "tuning",
       title: "Tuning",
       status: "watch",
-      headline: `Tracking score ${score}/100 — decent, not crisp${demandSuffix}`,
+      headline: `Tracking score ${score}/100: decent, not crisp${demandSuffix}`,
       detail:
         "Response mostly follows the sticks; the PID Lab shows where it loosens.",
       action:
@@ -343,11 +343,11 @@ function tuningVerdict(pidAnalysis) {
     key: "tuning",
     title: "Tuning",
     status: "good",
-    headline: `Tracking score ${score}/100 — crisp response${demandSuffix}`,
+    headline: `Tracking score ${score}/100: crisp response${demandSuffix}`,
     detail: hoverDemand
-      ? "The machine follows the sticks faithfully — at the gentle demand this flight asked of it. A score from a harder flight is a different measurement."
+      ? "The machine follows the sticks faithfully, at the gentle demand this flight asked of it. A score from a harder flight is a different measurement."
       : "The machine follows the sticks faithfully.",
-    action: "Nothing to do — enjoy it.",
+    action: "Nothing to do. Enjoy it.",
     screen: "pid",
     evidence: "PID Lab findings"
   };
@@ -384,7 +384,7 @@ function batteryVerdict(vbat) {
       title: "Battery",
       status: "attention",
       headline: `Voltage fell ${sagPercent.toFixed(0)}% during the flight`,
-      detail: `${start.toFixed(1)} V → ${end.toFixed(1)} V — an aging pack or a flight flown long/hard.`,
+      detail: `${start.toFixed(1)} V → ${end.toFixed(1)} V: an aging pack or a flight flown long/hard.`,
       action: "Land earlier, or move this pack to gentler duty. The Battery Lab has the details.",
       screen: "viewer",
       evidence: "Motor & Power chart, Log Viewer"
@@ -423,7 +423,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
       // The stability RESULT may be favorable, but without a target
       // there is no governed contract to score — the label says
       // partial, never a scored-quality word.
-      statusLabel: "Partial — stability only",
+      statusLabel: "Partial: stability only",
       headline:
         governorLab.status === "good"
           ? `Headspeed held steady near ${governorLab.averageHeadspeed} rpm`
@@ -436,7 +436,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
       action:
         governorLab.status === "good"
           ? "Nothing to change from this result."
-          : "Worth a look at that moment in the Governor Lab chart — deliberate headspeed changes are not counted against this.",
+          : "Worth a look at that moment in the Governor Lab chart. Deliberate headspeed changes are not counted against this.",
       screen: "governor",
       evidence: "Headspeed Over Time chart, Governor Lab"
     };
@@ -506,7 +506,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
           : ""
       }.`,
       action: outputAtCeiling
-        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed — the ESC Lab shows the moment."
+        ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed. The ESC Lab shows the moment."
         : "Review the worst-droop event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
       evidence: "Headspeed vs Target chart, Governor Lab"
@@ -658,9 +658,9 @@ function powerVerdictFromLab(escLab) {
 
   const action =
     escLab.status === "attention"
-      ? "Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed — the ESC Lab shows the exact moments."
+      ? "Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed. The ESC Lab shows the exact moments."
       : escLab.status === "watch"
-        ? "Fine for now — worth remembering before asking the machine for more."
+        ? "Fine for now. Worth remembering before asking the machine for more."
         : "Nothing to do.";
 
   return {
@@ -698,13 +698,13 @@ function signalVerdict(signalLab) {
           ? "The control link was interrupted"
           : "The link needs a look"
         : status === "watch"
-          ? "Signal dipped — the link held"
+          ? "Signal dipped: the link held"
           : "Radio link solid the whole flight",
     detail: signalLab.story,
     action:
       status === "good"
         ? "Nothing to do."
-        : "Open the Signal Lab — the events name each moment.",
+        : "Open the Signal Lab: the events name each moment.",
     screen: "signal",
     evidence: "Signal Lab events"
   };
@@ -731,7 +731,7 @@ function becVerdict(becLab) {
     action:
       status === "good"
         ? "Nothing to do."
-        : "Open the BEC Lab — each dip carries its servo context.",
+        : "Open the BEC Lab: each dip carries its servo context.",
     screen: "bec",
     evidence: "BEC Lab events"
   };

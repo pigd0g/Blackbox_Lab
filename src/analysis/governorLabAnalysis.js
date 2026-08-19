@@ -476,7 +476,7 @@ export function analyzeGovernorLab({
   const stableDipAdvice = stableDipAtPowerLimit
     ? ` The motor output was at ${Math.round(
         stableDipOutputPercent
-      )}% during that dip — a power-system limit, not a governor-gain problem. See the ESC Lab.`
+      )}% during that dip: a power-system limit, not a governor-gain problem. See the ESC Lab.`
     : ` Review the matching event in Governor Lab before changing gain or power-system settings.`;
 
   // Banks worth reporting held for at least ~2 seconds of stable
@@ -527,7 +527,7 @@ export function analyzeGovernorLab({
       }.${
         Number.isFinite(flightDip.outputPercent) &&
         flightDip.outputPercent >= 95
-          ? " The output was already at its ceiling — that dip is a power-system limit, not a governor-gain problem. See the ESC Lab."
+          ? " The output was already at its ceiling: that dip is a power-system limit, not a governor-gain problem. See the ESC Lab."
           : " Review the worst-droop event before changing governor gain."
       }`
     : "";
@@ -766,7 +766,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
       hasRotorSpeedData: true,
       movedDuringRecording: null,
       story:
-        "This log states no governor target, and the rotor never held a level section long enough to judge — the recording is nearly all spool-up, spool-down or headspeed changes.",
+        "This log states no governor target, and the rotor never held a level section long enough to judge: the recording is nearly all spool-up, spool-down or headspeed changes.",
       droopRpm: null,
       droopPercent: null,
       droopTimeSeconds: null,
@@ -864,7 +864,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     metrics: [
       {
         label: "Analysis scope",
-        value: "Partial — headspeed stability only"
+        value: "Partial: headspeed stability only"
       },
       {
         label: "Average headspeed",

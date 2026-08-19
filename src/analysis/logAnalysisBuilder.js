@@ -327,7 +327,7 @@ export function describeGovernorSystemScore(governor) {
   }
 
   if (governor.capability === "partial") {
-    return "Partial — headspeed stability only (no governor target logged)";
+    return "Partial: headspeed stability only (no governor target logged)";
   }
 
   if (
@@ -336,10 +336,10 @@ export function describeGovernorSystemScore(governor) {
     governor.status !== "No Active Flight Data" &&
     governor.status !== "Target Unavailable"
   ) {
-    return `${governor.score}/100 — ${governor.status}`;
+    return `${governor.score}/100 (${governor.status})`;
   }
 
-  return `Not scored — ${
+  return `Not scored: ${
     governor.status === "insufficient"
       ? "insufficient telemetry"
       : governor.status
@@ -829,7 +829,7 @@ const governorLabAnalysis = analyzeGovernorLab({
         keyHeaders
           .map(([label, value, emptyNote]) => {
             if (value && emptyNote) {
-              return `✗ ${label}: ${value} — ${emptyNote}`;
+              return `✗ ${label}: ${value} (${emptyNote})`;
             }
             return `${value ? "✓" : "✗"} ${label}: ${value || "Not found"}`;
           })
@@ -912,21 +912,21 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       Aircraft Profile: ${
         flightAnalysis
-          ? `${flightAnalysis.profile.score}/100 — ${flightAnalysis.profile.status}`
+          ? `${flightAnalysis.profile.score}/100 (${flightAnalysis.profile.status})`
           : "N/A"
       }<br>
 
       ESC Operating Range: ${
   flightAnalysis
     ? flightAnalysis.esc.status === "Unavailable"
-      ? "N/A — Unavailable"
-      : `${flightAnalysis.esc.score}/100 — ${flightAnalysis.esc.status}`
+      ? "N/A (Unavailable)"
+      : `${flightAnalysis.esc.score}/100 (${flightAnalysis.esc.status})`
           : "N/A"
       }<br>
 
       Telemetry Quality: ${
         flightAnalysis
-          ? `${flightAnalysis.telemetry.score}/100 — ${flightAnalysis.telemetry.status}`
+          ? `${flightAnalysis.telemetry.score}/100 (${flightAnalysis.telemetry.status})`
           : "N/A"
       }<br>
 

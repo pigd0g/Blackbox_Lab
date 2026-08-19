@@ -280,7 +280,7 @@ export function explainLoadEvent({
     return {
       cause: "headroom-limit",
       sentence:
-        "Output sat at maximum for a meaningful part of this event — the power system had nothing left to give here. Consider more headroom (lower headspeed, a fresher pack, or gearing/Kv matched to your target headspeed) before blaming the tune."
+        "Output sat at maximum for a meaningful part of this event: the power system had nothing left to give here. Consider more headroom (lower headspeed, a fresher pack, or gearing/Kv matched to your target headspeed) before blaming the tune."
     };
   }
 
@@ -293,7 +293,7 @@ export function explainLoadEvent({
       cause: "collective-load",
       sentence: sagged
         ? "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver. The battery sag was a response to the load, not necessarily evidence of a weak pack."
-        : "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver — the power system followed the demand with voltage holding up well."
+        : "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver: the power system followed the demand with voltage holding up well."
     };
   }
 
@@ -301,14 +301,14 @@ export function explainLoadEvent({
     return {
       cause: "battery-sag",
       sentence:
-        "Pack voltage fell well below its level from just before this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it — the table shows the exact before → during voltages."
+        "Pack voltage fell well below its level from just before this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it: the table shows the exact before → during voltages."
     };
   }
 
   return {
     cause: "normal-load",
     sentence:
-      "High output with headroom to spare and steady voltage — this looks like a genuinely demanding moment handled as designed."
+      "High output with headroom to spare and steady voltage: this looks like a genuinely demanding moment handled as designed."
   };
 }
 

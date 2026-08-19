@@ -743,17 +743,17 @@ export function rotorTrendWording(entries = []) {
   return targetRelative
     ? {
         title: "Governor Droop Across Flights",
-        hint: "A rising line means the rotor falls further below its target over time — read it alongside output, voltage and load before blaming any one part.",
+        hint: "A rising line means the rotor falls further below its target over time. Read it alongside output, voltage and load before blaming any one part.",
         label: "Governor droop",
         adviceUp:
-          "The rotor is falling further below target across flights. Aging pack, dirty pinion or a slipping gear are the usual suspects — confirm against the output and voltage picture before changing the tune."
+          "The rotor is falling further below target across flights. Aging pack, dirty pinion or a slipping gear are the usual suspects. Confirm against the output and voltage picture before changing the tune."
       }
     : {
         title: "Rotor-Speed Stability Across Flights",
-        hint: "A rising line means the rotor is holding less steadily across flights — worth investigating.",
+        hint: "A rising line means the rotor is holding less steadily across flights, worth investigating.",
         label: "Rotor-speed deviation",
         adviceUp:
-          "The rotor is holding less steadily across flights — worth checking mechanics, power and setup before it grows."
+          "The rotor is holding less steadily across flights. Worth checking mechanics, power and setup before it grows."
       };
 }
 
@@ -763,7 +763,7 @@ export function assessTrends(entries) {
       findings: [],
       note:
         entries && entries.length > 0
-          ? `Keep flying — trends appear after 4 logged flights (${entries.length} so far).`
+          ? `Keep flying: trends appear after 4 logged flights (${entries.length} so far).`
           : "No flights recorded for this craft yet."
     };
   }
@@ -774,7 +774,7 @@ export function assessTrends(entries) {
       lowerIsBetter: true,
       unit: "",
       adviceUp:
-        "Something mechanical is changing — check bearings, blade balance and links before it grows."
+        "Something mechanical is changing: check bearings, blade balance and links before it grows."
     }),
     assessMetric(entries, "droopRpm", {
       label: rotorTrendWording(entries).label,
@@ -786,14 +786,14 @@ export function assessTrends(entries) {
       label: "Pack internal resistance",
       lowerIsBetter: true,
       unit: " mΩ",
-      adviceUp: "The battery is aging — expect softer punch and more sag."
+      adviceUp: "The battery is aging: expect softer punch and more sag."
     }),
     assessMetric(entries, "trackingScore", {
       label: "Tracking score",
       lowerIsBetter: false,
       unit: "",
       adviceUp:
-        "The tune is drifting — mechanics wearing in, or settings changed along the way."
+        "The tune is drifting: mechanics wearing in, or settings changed along the way."
     }),
     assessMetric(entries, "tailKickRatio", {
       label: "Tail kick on collective moves",
@@ -801,7 +801,7 @@ export function assessTrends(entries) {
       unit: "×",
       minimumRecent: 3,
       adviceUp:
-        "The collective-to-yaw anticipation no longer matches the torque — either the precomp drifted or the tail drive is wearing. The Governor Lab's Precomp Balance shows the current read."
+        "The collective-to-yaw anticipation no longer matches the torque: either the precomp drifted or the tail drive is wearing. The Governor Lab's Precomp Balance shows the current read."
     }),
     assessMetric(entries, "precompRiseDroopPercent", {
       label: "Droop on collective rises",
@@ -809,7 +809,7 @@ export function assessTrends(entries) {
       unit: "%",
       minimumRecent: 2.5,
       adviceUp:
-        "The governor's load anticipation is losing ground across flights — an aging pack shrinking headroom, or precomp no longer matching the machine."
+        "The governor's load anticipation is losing ground across flights: an aging pack shrinking headroom, or precomp no longer matching the machine."
     }),
     assessMetric(entries, "precompDropOvershootPercent", {
       label: "Overspeed on collective drops",
@@ -817,7 +817,7 @@ export function assessTrends(entries) {
       unit: "%",
       minimumRecent: 2.5,
       adviceUp:
-        "Collective drops overspeed the rotor more than they used to — worth re-reading the Precomp Balance before it becomes audible."
+        "Collective drops overspeed the rotor more than they used to. Worth re-reading the Precomp Balance before it becomes audible."
     })
   ].filter(Boolean);
 

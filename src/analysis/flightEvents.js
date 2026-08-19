@@ -241,8 +241,8 @@ export function buildFlightEvents({
 
   const sentence =
     events.length === 0
-      ? "No distinct stick commands found in the stable flight sections — smooth cruising, or not enough command activity to judge."
-      : `${events.length} clear stick command${events.length === 1 ? "" : "s"} analyzed — ` +
+      ? "No distinct stick commands found in the stable flight sections: smooth cruising, or not enough command activity to judge."
+      : `${events.length} clear stick command${events.length === 1 ? "" : "s"} analyzed: ` +
         `${counts.clean} tracked cleanly` +
         (counts.overshoot > 0 ? `, ${counts.overshoot} overshot` : "") +
         (counts.oscillation > 0

@@ -319,14 +319,14 @@ function buildPidRecommendations({
 
     if (vibrationConcern) {
       hypothesis = huntingMajority
-        ? "The response circles its setpoint before resting — but this flight also carries an open vibration finding, and gyro vibration can produce exactly this signature."
-        : "The response creeps to its target — but this flight also carries an open vibration finding, which has to be resolved first.";
+        ? "The response circles its setpoint before resting. But this flight also carries an open vibration finding, and gyro vibration can produce exactly this signature."
+        : "The response creeps to its target. But this flight also carries an open vibration finding, which has to be resolved first.";
       gatedReason =
         "Filters come before PIDs: resolve the vibration finding, fly again, and re-read this page.";
     } else if (confidence !== "High") {
       hypothesis = huntingMajority
-        ? "The slow settles hunt around the setpoint, which usually points at damping — but there are not enough clean commands in this log to call it."
-        : "The slow settles creep to target without hunting — but there are not enough clean commands in this log to call it.";
+        ? "The slow settles hunt around the setpoint, which usually points at damping. But there are not enough clean commands in this log to call it."
+        : "The slow settles creep to target without hunting. But there are not enough clean commands in this log to call it.";
       gatedReason = `Evidence confidence is ${confidence} (${cleanResponses.length} clean command${cleanResponses.length === 1 ? "" : "s"}). Fly a log with more distinct stick inputs and re-read this page.`;
     } else if (huntingMajority) {
       hypothesis =
@@ -340,7 +340,7 @@ function buildPidRecommendations({
       verifyMetric = `the ${axis} slow-settle count in Flight Events`;
     } else if (driveSide) {
       hypothesis =
-        "The axis creeps to its target while the I-term carries the command — in Rotorflight, feedforward is supposed to do that work.";
+        "The axis creeps to its target while the I-term carries the command. In Rotorflight, feedforward is supposed to do that work.";
       suggestion = {
         family: AXIS_SETTING_FAMILY[axis].drive,
         direction: "up",
@@ -352,7 +352,7 @@ function buildPidRecommendations({
       hypothesis =
         "The slow settles carry neither a clear hunting signature nor an I-dominance finding, so damping and drive cannot be told apart from this log alone.";
       gatedReason =
-        "Mixed signature — confirm the pattern with another log before changing values.";
+        "Mixed signature: confirm the pattern with another log before changing values.";
     }
 
     recommendations.push({
@@ -453,7 +453,7 @@ function buildOvershootRecommendation({
     return {
       ...base,
       hypothesis:
-        "Repeated overshoot with an open vibration finding is unreadable — gyro vibration can push a response past its target all by itself.",
+        "Repeated overshoot with an open vibration finding is unreadable: gyro vibration can push a response past its target all by itself.",
       gatedReason:
         "Filters come before PIDs: resolve the vibration finding, fly again, and re-read this page."
     };
@@ -480,7 +480,7 @@ function buildOvershootRecommendation({
       ...base,
       dampingSide: true,
       hypothesis:
-        "The overshoots ring: the axis blows past its target and oscillates before resting — the drive is winning against the damping.",
+        "The overshoots ring: the axis blows past its target and oscillates before resting. The drive is winning against the damping.",
       suggestion: {
         family: AXIS_SETTING_FAMILY[axis].damping,
         direction: "up",
@@ -541,13 +541,13 @@ function buildOvershootRecommendation({
     return {
       ...base,
       hypothesis:
-        "Overshoot grows with how FAST the command moved — the feedforward signature: it pushes in proportion to stick speed, and here it pushes past the target.",
+        "Overshoot grows with how FAST the command moved: the feedforward signature. It pushes in proportion to stick speed, and here it pushes past the target.",
       suggestion: {
         family: AXIS_SETTING_FAMILY[axis].drive,
         direction: "down",
         magnitudeClass: "small step"
       },
-      expectedResult: `${axis} overshoot shrinks on fast inputs first — exactly where it is worst now.`,
+      expectedResult: `${axis} overshoot shrinks on fast inputs first: exactly where it is worst now.`,
       verifyMetric: `the ${axis} overshoot count in Flight Events`
     };
   }
@@ -556,13 +556,13 @@ function buildOvershootRecommendation({
     return {
       ...base,
       hypothesis:
-        "Overshoot grows with how BIG the command was, not how fast — the proportional-drive signature.",
+        "Overshoot grows with how BIG the command was, not how fast: the proportional-drive signature.",
       suggestion: {
         family: AXIS_SETTING_FAMILY[axis].proportional,
         direction: "down",
         magnitudeClass: "small step"
       },
-      expectedResult: `${axis} overshoot shrinks on large inputs first — exactly where it is worst now.`,
+      expectedResult: `${axis} overshoot shrinks on large inputs first: exactly where it is worst now.`,
       verifyMetric: `the ${axis} overshoot count in Flight Events`
     };
   }
@@ -576,7 +576,7 @@ function buildOvershootRecommendation({
       direction: "down",
       magnitudeClass: "small step"
     },
-    expectedResult: `${axis} overshoot count drops. In Rotorflight, feedforward does most of the commanded work, so it is the likelier driver — step it first, and only touch ${AXIS_SETTING_FAMILY[axis].proportional} if the next log still overshoots.`,
+    expectedResult: `${axis} overshoot count drops. In Rotorflight, feedforward does most of the commanded work, so it is the likelier driver: step it first, and only touch ${AXIS_SETTING_FAMILY[axis].proportional} if the next log still overshoots.`,
     verifyMetric: `the ${axis} overshoot count in Flight Events`
   };
 }
@@ -627,7 +627,7 @@ function buildGovernorRecommendations({
       id: "governor:power-limit",
       lab: "governor",
       finding:
-        `${powerLimitEvents.length} excursion${powerLimitEvents.length === 1 ? "" : "s"} happened with the motor output at its ceiling — ` +
+        `${powerLimitEvents.length} excursion${powerLimitEvents.length === 1 ? "" : "s"} happened with the motor output at its ceiling: ` +
         "the power system had nothing left to give at those moments.",
       hypothesis:
         "A dip with no output headroom is a power-system limit, not a governor-tune problem: no gain or precomp value can add power that is not there.",
@@ -673,7 +673,7 @@ function buildGovernorRecommendations({
           : "") +
         ".",
       hypothesis:
-        "Overspeed that follows a collective drop is the governor's feedforward/precomp still pushing power the load no longer needs. Less collective precomp asks for less of that power; more governor damping absorbs it instead — the smaller change first.",
+        "Overspeed that follows a collective drop is the governor's feedforward/precomp still pushing power the load no longer needs. Less collective precomp asks for less of that power; more governor damping absorbs it instead. The smaller change first.",
       evidence: collectiveDropEvents.slice(0, 6).map((event) => ({
         kind: "governor-event",
         eventId: event.id,
@@ -771,7 +771,7 @@ function buildGovernorRecommendations({
         lab: "governor",
         finding: `Fast collective drops push the rotor a median ${governorBalance.dropOvershootPercent}% over target while rises stay clean (${sideCounts} measured).`,
         hypothesis:
-          "Overspeed that only appears when load LEAVES is anticipation overshooting: the precomp keeps feeding power the load no longer needs. Less collective precomp, or more governor damping, absorbs it — the smaller change first.",
+          "Overspeed that only appears when load LEAVES is anticipation overshooting: the precomp keeps feeding power the load no longer needs. Less collective precomp, or more governor damping, absorbs it. The smaller change first.",
         evidence: [
           {
             kind: "precomp-balance",
@@ -804,9 +804,9 @@ function buildGovernorRecommendations({
       recommendations.push({
         id: "governor:response-lag",
         lab: "governor",
-        finding: `The rotor misses its target both ways around collective moves — droop ${governorBalance.riseDroopPercent}% on rises AND overspeed ${governorBalance.dropOvershootPercent}% on drops (${sideCounts} measured).`,
+        finding: `The rotor misses its target both ways around collective moves: droop ${governorBalance.riseDroopPercent}% on rises AND overspeed ${governorBalance.dropOvershootPercent}% on drops (${sideCounts} measured).`,
         hypothesis:
-          "Missing in both directions is not a precomp balance problem — precomp trades one side against the other. A governor late both ways is a response-speed story, and that lives in its gain and the power system's headroom together.",
+          "Missing in both directions is not a precomp balance problem: precomp trades one side against the other. A governor late both ways is a response-speed story, and that lives in its gain and the power system's headroom together.",
         evidence: [
           {
             kind: "precomp-balance",
@@ -822,7 +822,7 @@ function buildGovernorRecommendations({
         expectedResult: null,
         verifyMetric: null,
         gatedReason:
-          "Two-sided lag needs the ESC Lab's headroom read next to it before any governor value moves — check that page first."
+          "Two-sided lag needs the ESC Lab's headroom read next to it before any governor value moves. Check that page first."
       });
     }
   }
@@ -836,7 +836,7 @@ function buildGovernorRecommendations({
       lab: "governor",
       finding: `Collective moves kick the tail ${tailBalance.kickRatio}× harder than its ordinary error (median ${tailBalance.transientError} deg/s across ${tailBalance.kickCount} moves, ${Math.round(tailBalance.consistency * 100)}% in a consistent direction).`,
       hypothesis:
-        "A tail that only misbehaves during collective transients is torque anticipation, not tail tuning: the collective feedforward into yaw is not matching the torque change. The knob is the collective-to-yaw precomp — but its direction depends on rotor rotation, which a log does not state.",
+        "A tail that only misbehaves during collective transients is torque anticipation, not tail tuning: the collective feedforward into yaw is not matching the torque change. The knob is the collective-to-yaw precomp. But its direction depends on rotor rotation, which a log does not state.",
       evidence: [
         {
           kind: "tail-coupling",

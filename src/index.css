@@ -472,6 +472,7 @@ pre {
 .lab-story {
   font-size: 17px;
   color: var(--ink);
+  white-space: pre-line;
 }
 
 .status-text-good { border-left: 2px solid var(--good); padding-left: 12px; }
@@ -495,6 +496,14 @@ pre {
 
 .metric-tile strong {
   font-size: 17px;
+}
+
+/* Sentence-length tile values: body type, not display type. */
+.metric-tile-prose strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
 /* ---------------- charts ---------------- */
@@ -1943,6 +1952,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   font-size: 14.5px;
   color: var(--ink-soft);
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .first-step[data-tone="clear"] {
@@ -2025,9 +2035,10 @@ body.log-loaded .loaded-log-field .file-status {
 
 /* ---- Home: What To Do First list ---- */
 .first-steps-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 10px 118px 1fr;
+  align-items: start;
+  column-gap: 12px;
   width: 100%;
   text-align: left;
   padding: 12px 14px;
@@ -2048,12 +2059,28 @@ body.log-loaded .loaded-log-field .file-status {
 }
 
 .first-steps-row .status-dot {
-  align-self: center;
+  align-self: start;
+  margin-top: 7px;
 }
 
 .first-steps-row strong {
   color: var(--ink);
-  white-space: nowrap;
+}
+
+.first-steps-row span:last-child {
+  white-space: pre-line;
+}
+
+/* The whole card carries its severity — same quiet wash as the
+   verdict tiles above it, dot kept for redundancy. */
+.first-steps-row[data-tone="attention"] {
+  background: linear-gradient(90deg, rgba(255, 138, 107, 0.10), var(--card-soft) 55%);
+  border-color: rgba(255, 138, 107, 0.35);
+}
+
+.first-steps-row[data-tone="watch"] {
+  background: linear-gradient(90deg, rgba(242, 193, 78, 0.10), var(--card-soft) 55%);
+  border-color: rgba(242, 193, 78, 0.32);
 }
 
 .first-steps-row[data-tone="attention"] .status-dot {

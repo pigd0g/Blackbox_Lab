@@ -2408,7 +2408,7 @@ const pidSummary = [
 
   canCompareProfiles
     ? bestProfileUnderSampled
-      ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error, but only ${bestTrackingProfile.sampleCount} samples were measured at that headspeed — collect more flight time there before comparing headspeeds.`
+      ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error, but only ${bestTrackingProfile.sampleCount} samples were measured at that headspeed. Collect more flight time there before comparing headspeeds.`
       : `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
     : onlyTrackingProfile
       ? Number.isFinite(onlyTrackingProfile.targetRpm)
@@ -2440,7 +2440,7 @@ const pidScore =
 const pidScoreExplanation = [
   `${TRACKING_SCORE_TUNING.REAL_WORLD_MARGIN} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
   Number.isFinite(meanRelativeTrackingError)
-    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error — on average the response missed its commanded rate by ${Math.round(
+    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error: on average the response missed its commanded rate by ${Math.round(
         meanRelativeTrackingError * 100
       )}% of the commanded magnitude.`
     : "Tracking error could not be measured against commanded motion.",
@@ -2540,7 +2540,7 @@ const pidScoreExplanation = [
     findings: [
       ...(hoverLevelDemand
         ? [
-            "Stick demand: gentle — the average commanded rate stayed below the scoring floor on every axis, so this score describes gentle flying and is not comparable to a score earned in hard maneuvers."
+            "Stick demand: gentle. The average commanded rate stayed below the scoring floor on every axis, so this score describes gentle flying and is not comparable to a score earned in hard maneuvers."
           ]
         : []),
       `Axis setpoint columns detected: ${axisSetpointColumns.length}`,
@@ -2722,7 +2722,7 @@ return [
   
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — command at: ${
+  ? `${axisResult.axis} highest overshoot event details: command at: ${
       eventMomentText(
         highestOvershootEvent.sampleIndex,
         highestOvershootEvent.sampleRowIndex
@@ -2879,7 +2879,7 @@ return [
   }`,
   `${axisResult.axis} bounce-back evidence: ${
     nothingToBounceFrom
-      ? `${cleanBounceResponseCount} clean responses without overshoot — no bounce-back events expected`
+      ? `${cleanBounceResponseCount} clean responses without overshoot, no bounce-back events expected`
       : `${validBounceBackEvents.length} valid event${
           validBounceBackEvents.length === 1 ? "" : "s"
         }`
@@ -2911,7 +2911,7 @@ return [
   }%`,
 
   highestBounceBackEvent
-    ? `${axisResult.axis} highest bounce-back event details — command at: ${
+    ? `${axisResult.axis} highest bounce-back event details: command at: ${
         eventMomentText(
           highestBounceBackEvent.sampleIndex,
           highestBounceBackEvent.sampleRowIndex
@@ -3065,7 +3065,7 @@ const trimmedMaximumSettlingDurationSamples =
     : "Unavailable"
 } samples`,
 highestSettlingDurationEvent
-  ? `${axisResult.axis} slowest settling event details — sample: ${highestSettlingDurationEvent.sampleIndex}, command end: ${highestSettlingDurationEvent.commandEndSampleIndex}, target: ${
+  ? `${axisResult.axis} slowest settling event details: sample: ${highestSettlingDurationEvent.sampleIndex}, command end: ${highestSettlingDurationEvent.commandEndSampleIndex}, target: ${
       Number.isFinite(highestSettlingDurationEvent.commandTarget)
         ? highestSettlingDurationEvent.commandTarget.toFixed(2)
         : "Unavailable"
@@ -3211,7 +3211,7 @@ const trimmedMaximumRingingCrossingCount =
     : "Unavailable"
 }`,
 highestRingingEvent
-  ? `${axisResult.axis} highest ringing event details — sample: ${highestRingingEvent.sampleIndex}, command end: ${highestRingingEvent.commandEndSampleIndex}, target: ${
+  ? `${axisResult.axis} highest ringing event details: sample: ${highestRingingEvent.sampleIndex}, command end: ${highestRingingEvent.commandEndSampleIndex}, target: ${
       Number.isFinite(highestRingingEvent.commandTarget)
         ? highestRingingEvent.commandTarget.toFixed(2)
         : "Unavailable"
@@ -3262,7 +3262,7 @@ highestTrackingErrorAxis
       bestProfileUnderSampled
         ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
             2
-          )} — from only ${bestTrackingProfile.sampleCount} samples (best-measured bank: ${largestProfileSampleCount}), a limited read rather than an established comparison.`
+          )}: from only ${bestTrackingProfile.sampleCount} samples (best-measured bank: ${largestProfileSampleCount}), a limited read rather than an established comparison.`
         : `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
             2
           )}.`,
@@ -3287,7 +3287,7 @@ highestTrackingErrorAxis
       axisResult.commandWindowCount
     } window${
       axisResult.commandWindowCount === 1 ? "" : "s"
-    } — P: ${
+    }: P: ${
       Number.isFinite(axisResult.pPercent)
         ? axisResult.pPercent.toFixed(2)
         : "Unavailable"
@@ -3325,7 +3325,7 @@ highestTrackingErrorAxis
 ),
   ...pidTermContributionPercentages.map(
   (axisResult) =>
-    `${axisResult.axis} PID-term contribution — P: ${
+    `${axisResult.axis} PID-term contribution: P: ${
       Number.isFinite(axisResult.pPercent)
         ? axisResult.pPercent.toFixed(2)
         : "Unavailable"
@@ -3612,7 +3612,7 @@ highestTrackingErrorAxis
       pidResult.summary.push(
         `${behaviorReviewCount} response-behavior check${
           behaviorReviewCount === 1 ? "" : "s"
-        } (bounce-back, settling or ringing) flagged for confirmation — nothing to change yet, but fly the same maneuvers again and see whether the pattern returns.`
+        } (bounce-back, settling or ringing) flagged for confirmation. Nothing to change yet, but fly the same maneuvers again and see whether the pattern returns.`
       );
     }
   }

@@ -139,7 +139,7 @@
           <h2 class="welcome-title">Your flight, <span>explained.</span></h2>
           <p class="welcome-sub">
             Drop in a log straight off your flight controller and get a
-            plain-language verdict — what's healthy, what to watch,
+            plain-language verdict: what's healthy, what to watch,
             what to fix first. No jargon walls, no chart archaeology.
           </p>
           <div class="welcome-actions">
@@ -157,7 +157,7 @@
             <div class="welcome-step">
               <span class="welcome-step-num">1</span>
               <strong>Open your log</strong>
-              <span>.bbl works directly — no conversion</span>
+              <span>.bbl works directly, no conversion</span>
             </div>
             <div class="welcome-step">
               <span class="welcome-step-num">2</span>
@@ -167,7 +167,7 @@
             <div class="welcome-step">
               <span class="welcome-step-num">3</span>
               <strong>Fix what matters</strong>
-              <span>one change per flight — then compare</span>
+              <span>one change per flight, then compare</span>
             </div>
           </div>
         </section>
@@ -187,7 +187,7 @@
           <h3>What To Do First</h3>
           <p class="chart-hint">
             Everything this flight asks of you, in the order to
-            attend to it — each line opens its lab.
+            attend to it. Each line opens its lab.
           </p>
           <div id="firstStepsList"></div>
         </section>
@@ -199,7 +199,7 @@
             <h3>Unlock setup-aware insights</h3>
             <p>
               Add this model's CLI settings (<code>dump all</code>)
-              once — the analysis learns your exact setup, and your
+              once: the analysis learns your exact setup, and your
               model card fills itself in.
             </p>
           </div>
@@ -218,7 +218,7 @@
         <section class="card loaded-only">
           <h3 id="startHereHeading">Start Here</h3>
           <p>
-            Open a flight log from your helicopter — raw
+            Open a flight log from your helicopter: raw
             <strong>.bbl</strong> files straight off the flight
             controller work directly, no conversion needed. No log
             at hand? Try a sample flight and explore everything.
@@ -237,7 +237,7 @@
 
 <div class="loaded-log-field" id="loadedLogField">
                       <div class="file-status" id="fileStatus">
-            No log loaded — new here? Read <strong>How to Use</strong> in the sidebar first.
+            No log loaded. New here? Read <strong>How to Use</strong> in the sidebar first.
           </div>
 
           <div class="flight-picker" id="flightPicker" hidden>
@@ -291,14 +291,14 @@
             Connect your flight controller, then in the Rotorflight
             Configurator open the <strong>Blackbox</strong> tab and
             click <strong>Save flight log to file</strong>. You get a
-            <strong>.bbl</strong> file — the raw recording — and
+            <strong>.bbl</strong> file, the raw recording, and
             Blackbox Lab reads it directly. (CSV exports work too.)
           </p>
           <p>
             Good to know: logging must be enabled on the Blackbox tab
             before the flight (a dataflash chip or SD card on the
             flight controller records it). One file can hold several
-            flights — Blackbox Lab lets you pick. When the flash
+            flights. Blackbox Lab lets you pick. When the flash
             fills up, download what you want to keep, then use
             <strong>Erase flash</strong> in the Configurator to make
             room for the next session.
@@ -306,12 +306,12 @@
         </section>
 
         <section class="card">
-          <h3>2 · Open it — read your Verdict</h3>
+          <h3>2 · Open it, read your Verdict</h3>
           <p>
             Click <strong>Open Blackbox Log</strong> on the Home
             screen. Blackbox Lab decodes the flight and gives you a
             plain-language <strong>Verdict</strong>: what looks
-            healthy, what's worth watching, what needs attention —
+            healthy, what's worth watching, what needs attention,
             each with a button that jumps straight to the evidence.
           </p>
         </section>
@@ -328,26 +328,26 @@
         </section>
 
         <section class="card">
-          <h3>4 · Read the findings — and What To Try Next</h3>
+          <h3>4 · Read the findings, and What To Try Next</h3>
           <p>
             The event strips (Flight Events on the PID page,
             Headspeed Events in the Governor Lab) are single moments
             with their numbers: a command that overshot or settled
             slowly, a rotor that ran under or over its target. One
-            odd event is not tuning feedback — wind or an aggressive
+            odd event is not tuning feedback: wind or an aggressive
             input can produce it. A <em>pattern</em> of them is, and
             that is what the <strong>What To Try Next</strong> cards
             read.
           </p>
           <p>
             When enough evidence agrees, a card names <strong>one
-            setting</strong>, a direction, and a small step — plus
+            setting</strong>, a direction, and a small step, plus
             the exact number that should improve on your next log.
             When the card says <strong>"Not calling it yet"</strong>,
             that is the app being honest, and it tells you what is
             missing: usually more distinct stick inputs to judge
             from, or an open vibration finding that has to be
-            resolved first — filters come before PIDs, and a power
+            resolved first. Filters come before PIDs, and a power
             limit outranks any governor value. No card at all simply
             means this flight showed nothing worth changing.
           </p>
@@ -357,7 +357,7 @@
           <h3>5 · Change ONE thing, fly again</h3>
           <p>
             Blackbox Lab <strong>never touches your helicopter's
-            settings</strong> — it recommends, you decide. Make one
+            settings</strong>: it recommends, you decide. Make one
             change at a time in the Rotorflight Configurator, fly,
             log, and open the new log here to see whether it helped.
             That loop is how tuning works.
@@ -365,7 +365,7 @@
         </section>
 
         <section class="card">
-          <h3>6 · Compare — the loop closes</h3>
+          <h3>6 · Compare: the loop closes</h3>
           <p>
             After the next flight, open <strong>Compare
             Flights</strong>: before vs after, and one sentence per
@@ -380,7 +380,7 @@
           <h3>7 · Share when you need help</h3>
           <p>
             The <strong>Reports</strong> screen builds a single
-            file with your verdict, findings and charts — ready to
+            file with your verdict, findings and charts, ready to
             post on a forum or send to a friend when you want a
             second pair of eyes.
           </p>
@@ -390,13 +390,13 @@
         <section class="card">
           <h3>Words you'll meet (no jargon left behind)</h3>
           <p class="glossary">
-            <strong>Gyro</strong> — how fast the helicopter actually
-            rotates, per axis. <strong>Setpoint</strong> — how fast
-            you <em>asked</em> it to rotate. <strong>1/rev</strong> —
+            <strong>Gyro</strong>: how fast the helicopter actually
+            rotates, per axis. <strong>Setpoint</strong>: how fast
+            you <em>asked</em> it to rotate. <strong>1/rev</strong>:
             a vibration that happens once per main-rotor turn
-            (usually balance). <strong>Headspeed</strong> — main
-            rotor rpm. <strong>Droop</strong> — headspeed dipping
-            under load. <strong>Saturation</strong> — the ESC at
+            (usually balance). <strong>Headspeed</strong>: main
+            rotor rpm. <strong>Droop</strong>: headspeed dipping
+            under load. <strong>Saturation</strong>: the ESC at
             100% with nothing left to give.
           </p>
         </section>
@@ -411,7 +411,7 @@
 
         <div class="screen-intro">
           <p>These charts are the raw recordings from your flight
-            controller, drawn along the flight's timeline — the same
+            controller, drawn along the flight's timeline: the same
             data every verdict and every Lab conclusion is built
             from.</p>
           <details>
@@ -419,7 +419,7 @@
             <p>Each chart is one group of recorded signals. The gyro
               charts show how fast the helicopter was actually
               rotating; setpoint traces show what your sticks asked
-              for — the closer they follow each other, the better the
+              for. The closer they follow each other, the better the
               tune. Headspeed is rotor rpm, throttle is what the ESC
               was told, and the battery chart shows pack voltage
               reacting to load. Drag across any chart to zoom in on a
@@ -439,10 +439,10 @@
         </section>
 
         <section class="card">
-          <h3>Tuning — Roll · Pitch · Yaw</h3>
+          <h3>Tuning: Roll · Pitch · Yaw</h3>
           <p class="chart-hint">
             What you asked for versus what you got, all three axes
-            side by side — the closer the lines hug, the better the
+            side by side. The closer the lines hug, the better the
             tune. The ⤢ button on any chart makes it full width.
           </p>
           <div class="matrix-row">
@@ -473,7 +473,7 @@
             <summary>Advanced: feedforward check</summary>
             <p class="chart-hint">
               If the gyro follows the target while the I-term stays
-              near zero, feedforward is carrying the maneuver —
+              near zero, feedforward is carrying the maneuver,
               exactly as Rotorflight intends.
             </p>
             <div class="matrix-row">
@@ -501,7 +501,7 @@
           <details class="advanced-block" open>
             <summary>Advanced: term balance</summary>
             <p class="chart-hint">
-              Which controller term is doing the work — watch for I
+              Which controller term is doing the work. Watch for I
               wind-up, D-term buzz, and whether term activity lines
               up with your commands.
             </p>
@@ -541,7 +541,7 @@
         <section class="card">
           <h3>Throttle</h3>
           <p class="chart-hint">
-            Motor output in percent — flat tops at 100% mean the
+            Motor output in percent. Flat tops at 100% mean the
             power system has nothing left to give.
           </p>
           <div class="chart-container" id="chartThrottle">
@@ -552,7 +552,7 @@
         <section class="card">
           <h3>Battery &amp; Current</h3>
           <p class="chart-hint">
-            Pack voltage (V) and current draw (A) — watch the
+            Pack voltage (V) and current draw (A). Watch the
             voltage dip exactly when the amps spike.
           </p>
           <div class="chart-container" id="chartPower">
@@ -565,7 +565,7 @@
       <section data-screen="replay">
         <section class="hero">
           <h2>Replay</h2>
-          <p>Fly the log again — your charts, your timeline.</p>
+          <p>Fly the log again: your charts, your timeline.</p>
         </section>
 
         <div class="screen-intro">
@@ -575,15 +575,15 @@
             show the pilot's hands.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>Add or remove graphs to build your own working view —
-              the layout is remembered for next time. All charts
+            <p>Add or remove graphs to build your own working view.
+              The layout is remembered for next time. All charts
               share one timeline: drag to zoom in any of them and
               the others follow, double-click to reset. The colored
               ticks on the timeline are the Flight Events; drag the
               playhead straight to one to watch the moment. Playback
-              speed is yours, and everything here — the graphs, the
-              sticks, the readouts — is exactly what a future video
-              export will render over your flight footage.</p>
+              speed is yours. Everything here is exactly what a
+              future video export will render over your flight
+              footage: the graphs, the sticks, the readouts.</p>
           </details>
         </div>
 
@@ -591,7 +591,7 @@
           <h3>Replay</h3>
           <p class="chart-hint">Fly the log again: the playhead runs
             through every chart on this page while the sticks show
-            the pilot's hands. Drag the timeline to seek — colored
+            the pilot's hands. Drag the timeline to seek. Colored
             ticks mark the Flight Events.</p>
           <div class="replay-row">
             <div class="stick-col">
@@ -644,17 +644,17 @@
           <details>
             <summary>What am I looking at?</summary>
             <p>The spectrum chart sorts the gyro signal by frequency
-              instead of time — a tall peak means something is
+              instead of time. A tall peak means something is
               vibrating at that frequency. Peaks are labelled by
               their likely source: a peak at the main rotor's
               once-per-revolution usually points at blade balance or
               tracking, higher multiples at the drivetrain or tail.
               Where both raw and filtered traces are logged, the gap
-              between them is your filters doing their job — and the
+              between them is your filters doing their job. The
               Filter Advisor below measures exactly that, then
               suggests what to change. If the evidence points at a
               real mechanical problem, correct that before adding
-              filtering — software never removes a shake from the
+              filtering: software never removes a shake from the
               airframe. A known harmonic that the existing filters
               control well, with nothing meaningful reaching the
               control loop, is a managed state: worth monitoring,
@@ -664,8 +664,8 @@
               what the <em>filters</em> do with it, whether anything
               meaningful <em>reaches the control loop</em>, and only
               then a recommendation. A source match names a frequency
-              territory — never proof that a specific part has
-              failed — and vibration that is present but well
+              territory, never proof that a specific part has
+              failed. Vibration that is present but well
               filtered is a normal, managed state. Without a separate
               raw gyro trace, filter effectiveness cannot be
               measured, and the page says so rather than guessing.</p>
@@ -688,7 +688,7 @@
         <section class="card">
           <h3>Noise Spectrum</h3>
           <p class="chart-hint">
-            Vibration sorted by frequency. Sharp peaks are mechanical —
+            Vibration sorted by frequency. Sharp peaks are mechanical:
             the labels name their likely source. Broad hills are
             electrical noise. This is what your filters are fighting.
           </p>
@@ -709,14 +709,14 @@
         <p class="peek-advanced-row">
           <button class="peek-advanced-link">Show the advanced data behind this page</button>
           <span class="peek-advanced-note" hidden>This is the
-            Advanced view — the sidebar switch makes it
+            Advanced view: the sidebar switch makes it
             permanent.</span>
         </p>
 
         <section class="card advanced-only" id="filterProfileCard" hidden>
           <h3>Noise By Headspeed Profile</h3>
           <p class="chart-hint">
-            Rotor harmonics move with rpm — a filter setup that is
+            Rotor harmonics move with rpm: a filter setup that is
             clean in one bank can sit right on a peak in another.
             Each bank below gets its own spectrum from its own
             stable flight time, and its own advice.
@@ -726,7 +726,7 @@
 
         <section class="card" id="filterLabSection">
           <details class="drilldown">
-          <summary>Technical filter analysis — for when you want the numbers</summary>
+          <summary>Technical filter analysis: for when you want the numbers</summary>
 
           <div class="summary-grid">
             <div>
@@ -771,24 +771,24 @@
             the gyro actually recorded.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>For each axis — roll, pitch, yaw — the charts overlay
+            <p>For each axis, roll, pitch and yaw, the charts overlay
               the target line (your command) with the gyro's answer.
               A good tune keeps them close during moves and calm in
               between. The score summarizes the whole flight; the
               findings point at the axis with the most room to
               improve. In Rotorflight, feedforward is meant to do
               most of the work, so a busy feedforward trace is
-              healthy — what deserves attention is the I-term
+              healthy. What deserves attention is the I-term
               carrying commands it shouldn't have to. When the
               evidence is strong enough, the What To Try Next card
               below names the setting to start with; when it is not,
-              the card says exactly what is missing — a finding
+              the card says exactly what is missing. A finding
               without a named knob means the log could not carry the
               conclusion, never that there is nothing to find.</p>
             <p>Flight Events below are single stick commands with
               their overshoot and settling measured; click one to see
               the exact moment behind its numbers. One unusual event
-              is not tuning feedback — wind or an aggressive input
+              is not tuning feedback: wind or an aggressive input
               can produce it; patterns across comparable commands are
               what matter. Gentle cruising gives this page little to
               judge, and the confidence note says so. Change one
@@ -801,10 +801,10 @@
               <em>Oscillation</em> (ringing): the response swung back
               and forth across the target repeatedly. <em>Still
               approaching</em>: the response hadn't reached the
-              target before the next input — on deliberate moves,
+              target before the next input. On deliberate moves,
               that reads as a slow response. <em>Sustained PID-term
               activity</em> (saturation): one controller term worked
-              near its maximum for an extended stretch — the
+              near its maximum for an extended stretch: the
               controller working unusually hard, not automatically a
               fault. None of these justifies a change on its own:
               they matter when they repeat across clean, comparable
@@ -829,7 +829,7 @@
         <p class="peek-advanced-row">
           <button class="peek-advanced-link">Show the advanced data behind this page</button>
           <span class="peek-advanced-note" hidden>This is the
-            Advanced view — the sidebar switch makes it
+            Advanced view: the sidebar switch makes it
             permanent.</span>
         </p>
 
@@ -857,8 +857,8 @@
               <canvas id="pidEventSticks" width="320" height="170"></canvas>
               <button class="stick-replay-btn" data-stick-replay="pidEventSticks" title="Watch this event again at true speed.">▶&nbsp;Replay</button>
               </div>
-              <p class="stick-inset-caption">Your hands during this event
-                — replayed once, then parked at the command. Hover the
+              <p class="stick-inset-caption">Your hands during this event,
+                replayed once, then parked at the command. Hover the
                 chart to scrub.</p>
             </div>
             <div class="chart-container" id="pidEventChart"></div>
@@ -869,7 +869,7 @@
           <h3>What To Try Next</h3>
           <p class="chart-hint">
             Read from the findings on this page. One change at a
-            time, then fly the same moves again — Compare Flights
+            time, then fly the same moves again. Compare Flights
             is the judge, never the promise.
           </p>
           <div id="pidNextList"></div>
@@ -883,11 +883,11 @@
 
         <section class="card" id="pidLabSection">
           <details class="drilldown">
-          <summary>Technical PID analysis — for when you want the numbers</summary>
+          <summary>Technical PID analysis: for when you want the numbers</summary>
           <p class="chart-hint">
             These are the raw per-axis checks the engine reads.
             When their patterns are strong enough, the What To Try
-            Next card above turns them into a named setting — the
+            Next card above turns them into a named setting. The
             two always describe the same flight.
           </p>
 
@@ -930,7 +930,7 @@
 
         <div class="screen-intro">
           <p>This page watches rotor speed: how steadily the governor
-            held your headspeed when the flight actually loaded it —
+            held your headspeed when the flight actually loaded it:
             collective pumps, climbs, hard stops.</p>
           <details>
             <summary>What am I looking at?</summary>
@@ -941,21 +941,21 @@
               stable flight so spool-ups don't distort it, with the
               charts showing target versus actual headspeed. Without
               a target, the page evaluates headspeed stability
-              instead — short-term swings against the rotor's own
-              trend — and the verdict says "Partial" so nothing
+              instead: short-term swings against the rotor's own
+              trend. The verdict says "Partial" so nothing
               reads as governor performance. Either way, the
               worst-moment view lines that dip or swing up with
-              throttle, collective, current and voltage — so you can
+              throttle, collective, current and voltage, so you can
               see whether it came from governor gains, a soft pack,
               or simply a very big demand. If you fly more than one
               headspeed, each bank gets its own breakdown.</p>
             <p>True droop needs a logged governor <em>target</em>.
               A log with headspeed only (ESC or external governor)
               still gets a steadiness read against the rotor's own
-              trend — worded as "swing", never scored as governor
+              trend, worded as "swing", never scored as governor
               performance. A missing target is a telemetry fact, not
               a governor fault. And a deep dip with the motor output
-              already at its ceiling is a power-system limit — see
+              already at its ceiling is a power-system limit: see
               the ESC Lab before touching governor gain.</p>
           </details>
         </div>
@@ -973,7 +973,7 @@
           <div class="metric-grid" id="governorMetrics"></div>
 
           <details class="advanced-block" id="governorTechnicalCard" hidden>
-            <summary>Technical Governor Analysis — for when you want the numbers</summary>
+            <summary>Technical Governor Analysis: for when you want the numbers</summary>
             <p class="chart-hint">
               How this page reached its conclusions: what the log
               offered, what was accepted, and how much evidence sits
@@ -986,7 +986,7 @@
         <p class="peek-advanced-row">
           <button class="peek-advanced-link">Show the advanced data behind this page</button>
           <span class="peek-advanced-note" hidden>This is the
-            Advanced view — the sidebar switch makes it
+            Advanced view: the sidebar switch makes it
             permanent.</span>
         </p>
 
@@ -1002,7 +1002,7 @@
                 <button class="stick-replay-btn" data-stick-replay="governorEventSticks" title="Play the seconds around this excursion.">▶&nbsp;Replay</button>
               </div>
               <p class="stick-inset-caption">Pilot input around this
-                excursion — the collective usually tells the story.
+                excursion: the collective usually tells the story.
                 Hover any chart to scrub.</p>
             </div>
             <div class="chart-container" id="governorEventChartRpm"></div>
@@ -1014,7 +1014,7 @@
           <h3>What To Try Next</h3>
           <p class="chart-hint">
             Read from the events above. One change at a time, then
-            fly the same moves again — Compare Flights is the judge,
+            fly the same moves again. Compare Flights is the judge,
             never the promise.
           </p>
           <div id="governorNextList"></div>
@@ -1023,7 +1023,7 @@
         <section class="card">
           <h3 id="governorChartTitle">Headspeed vs Target</h3>
           <p class="chart-hint" id="governorChartHint">
-            Zoom into collective inputs — dips below the target line
+            Zoom into collective inputs: dips below the target line
             are droop.
           </p>
           <div class="chart-container" id="chartGovernor">
@@ -1035,7 +1035,7 @@
           <h3 id="droopContextTitle">The Worst Droop, In Context</h3>
           <p class="chart-hint" id="droopContextHint">
             The seconds around the biggest dip, lined up on one
-            clock — zoom any chart and the others follow. Read top
+            clock. Zoom any chart and the others follow. Read top
             to bottom: what the rotor did, what the pilot and
             governor asked for, and what the power system delivered.
           </p>
@@ -1045,7 +1045,7 @@
               <button class="stick-replay-btn" data-stick-replay="droopSticks" title="Play the seconds around the marked moment.">▶&nbsp;Replay</button>
               </div>
             <p class="stick-inset-caption" id="droopSticksCaption">Pilot
-              input at the marked moment — hover any chart to scrub.</p>
+              input at the marked moment. Hover any chart to scrub.</p>
           </div>
           <div class="chart-container" id="chartDroopRpm">
           </div>
@@ -1056,7 +1056,7 @@
           <div id="droopGovBlock" hidden>
             <p class="chart-hint">
               The governor's own P, I and F terms as recorded in the
-              log — shown only when the log genuinely contains them,
+              log, shown only when the log genuinely contains them,
               never estimated from throttle.
             </p>
             <div class="chart-container" id="chartDroopGov">
@@ -1080,7 +1080,7 @@
         <section class="card advanced-only" id="governorSettingsCard" hidden>
           <h3>Governor &amp; Precomp Settings</h3>
           <p class="chart-hint">
-            From this craft's saved configuration — the values the
+            From this craft's saved configuration: the values the
             events above were flown with. Numbers only, exactly as
             your flight controller reported them.
           </p>
@@ -1109,10 +1109,10 @@
               cause: a demanding collective move, a sagging pack, or
               the ESC genuinely running out of headroom. Output
               sitting at or near 100% for stretches means there is
-              nothing left in reserve — worth knowing before asking
+              nothing left in reserve, worth knowing before asking
               the machine for more.</p>
             <p>Which checks can run depends on which fields your ESC
-              actually reports — anything missing is named as
+              actually reports. Anything missing is named as
               missing, never counted against the aircraft. A dip
               that answers a hard collective input is a response to
               load, not necessarily a weak pack; repeated
@@ -1137,7 +1137,7 @@
         <p class="peek-advanced-row">
           <button class="peek-advanced-link">Show the advanced data behind this page</button>
           <span class="peek-advanced-note" hidden>This is the
-            Advanced view — the sidebar switch makes it
+            Advanced view: the sidebar switch makes it
             permanent.</span>
         </p>
 
@@ -1160,8 +1160,8 @@
             simply a demanding maneuver handled as designed.
           </p>
           <p class="chart-empty" id="escEventsEmpty" hidden>
-            No qualifying high-load flight moments in this log —
-            startup, spool-up and ground time are excluded, and the
+            No qualifying high-load flight moments in this log.
+            Startup, spool-up and ground time are excluded, and the
             airborne portion never worked the power system hard
             enough to single a moment out.
           </p>
@@ -1170,7 +1170,7 @@
           </div>
           <div id="escEventsStories"></div>
           <p class="chart-hint" style="margin-top:14px;">
-            The biggest event on one clock — zoom any chart and the
+            The biggest event on one clock. Zoom any chart and the
             others follow.
           </p>
           <div class="stick-inset" id="escSticksWrap" hidden>
@@ -1178,7 +1178,7 @@
               <canvas id="escSticks" width="320" height="170"></canvas>
               <button class="stick-replay-btn" data-stick-replay="escSticks" title="Play the seconds around peak load.">▶&nbsp;Replay</button>
               </div>
-            <p class="stick-inset-caption">Pilot input at peak load —
+            <p class="stick-inset-caption">Pilot input at peak load:
               the collective tells the story. Hover any chart to
               scrub.</p>
           </div>
@@ -1197,7 +1197,7 @@
         <section class="card advanced-only" id="escProfileCard" hidden>
           <h3>By Headspeed Profile</h3>
           <p class="chart-hint">
-            Stable-flight averages per governor bank — how much
+            Stable-flight averages per governor bank: how much
             harder each headspeed works the power system.
           </p>
           <div class="table-scroll">
@@ -1216,17 +1216,17 @@
         <div class="screen-intro">
           <p>This page is about the pack: how much the voltage sagged
             under load, what the flight consumed, and an estimate of
-            internal resistance — the number that quietly grows as a
+            internal resistance: the number that quietly grows as a
             battery ages.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>Sag is the voltage dip when current flows — some is
+            <p>Sag is the voltage dip when current flows. Some is
               physics, but a pack that sags noticeably more than it
               used to is telling you something. The internal
               resistance estimate comes from how voltage and current
               moved together across the flight; tracked over time in
               the Health Record, it is one of the earliest signs of
-              an aging pack. Consumption needs a current sensor — if
+              an aging pack. Consumption needs a current sensor. If
               the card says so, that telemetry simply wasn't in the
               log. Judge packs across flights, not from one hard
               flight on a cold day.</p>
@@ -1245,8 +1245,8 @@
           </div>
           <div class="metric-grid" id="batteryMetrics"></div>
           <p class="chart-hint">
-            Electrical values are estimated from logged raw data —
-            treat them as a story, not a lab instrument.
+            Electrical values are estimated from logged raw data.
+            Treat them as a story, not a lab instrument.
           </p>
         </section>
 
@@ -1273,12 +1273,12 @@ current demand; the steady downward slope is normal discharge.
           <p>This page reads the control link the way the flight
             controller saw it: signal strength when the receiver
             reports it, and the firmware's own failsafe and
-            signal-valid flags — the authoritative account of
+            signal-valid flags: the authoritative account of
             whether control was ever at risk.</p>
           <details>
             <summary>What am I looking at?</summary>
             <p>Signal strength is compared against this flight's own
-              typical level — different receivers and protocols
+              typical level. Different receivers and protocols
               scale these numbers differently, so no absolute
               threshold is ever applied. Brief dips during
               orientation changes are normal; what matters is
@@ -1311,7 +1311,7 @@ current demand; the steady downward slope is normal discharge.
         <section class="card" id="signalChartCard" hidden>
           <h3>Signal Over the Flight</h3>
           <p class="chart-hint">
-            As logged by the receiver — judged against this
+            As logged by the receiver, judged against this
             flight's own typical level, not an absolute scale.
           </p>
           <div class="chart-container" id="chartSignal">
@@ -1334,7 +1334,7 @@ current demand; the steady downward slope is normal discharge.
             near genuine brownout territory.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>The reference is this flight's own typical voltage —
+            <p>The reference is this flight's own typical voltage:
               a system deliberately running 6.0 V is never judged
               against one running 8.4 V. Dips are judged by depth,
               duration and repetition together, never by a single
@@ -1343,7 +1343,7 @@ current demand; the steady downward slope is normal discharge.
               a power system answering load; voltage sagging with
               the servos quiet points at wiring, connectors or the
               BEC itself. Brownout language appears only near the
-              absolute floor where receivers genuinely let go — and
+              absolute floor where receivers genuinely let go, and
               only when the receiver's own behavior agrees.</p>
           </details>
         </div>
@@ -1369,13 +1369,13 @@ current demand; the steady downward slope is normal discharge.
           <h3>BEC Voltage Over the Flight</h3>
           <p class="chart-hint">
             The whole log is plotted, but the verdict's range and dip
-            analysis reads only the in-flight window — readings during
+            analysis reads only the in-flight window. Readings during
             startup and after shutdown are visible here without being
             scored.
           </p>
           <p class="chart-hint">
-            Receiver-power voltage with servo activity beneath it —
-            dips that line up with servo work are load; dips without
+            Receiver-power voltage with servo activity beneath it.
+            Dips that line up with servo work are load; dips without
             it deserve a look at the wiring.
           </p>
           <div class="chart-container" id="chartBecVoltage">
@@ -1394,20 +1394,20 @@ current demand; the steady downward slope is normal discharge.
 
         <div class="screen-intro">
           <p>This page answers one question: did your change help?
-            Two flights side by side — the one you have open as
-            "before", one more as "after" — compared topic by
+            Two flights side by side, the one you have open as
+            "before" and one more as "after", compared topic by
             topic.</p>
           <details>
             <summary>What am I looking at?</summary>
-            <p>Each row is one measurable thing — vibration,
-              headspeed hold, tracking, sag — with the verdict in a
+            <p>Each row is one measurable thing: vibration,
+              headspeed hold, tracking, sag. The verdict is in a
               sentence: improved, got worse, or unchanged. Small
               differences within normal flight-to-flight variation
               are called unchanged on purpose. The overlaid noise
               spectrum shows both flights in one picture; shrinking
               peaks are progress. Comparisons mean the most between
               flights of the same craft, flown similarly, one change
-              apart — and if a file holds several flights, you pick
+              apart. If a file holds several flights, you pick
               which one counts as the "after".</p>
           </details>
         </div>
@@ -1417,11 +1417,11 @@ current demand; the steady downward slope is normal discharge.
           <h3>Set Up the Comparison</h3>
           <p>
             <strong>Before</strong> is whatever log you have open.
-            Then load the <strong>after</strong> flight — the one you
+            Then load the <strong>after</strong> flight: the one you
             flew once you changed something.
           </p>
           <div class="decode-info" id="compareBaselineInfo">
-            No baseline yet — open a log first (Home screen).
+            No baseline yet. Open a log first (Home screen).
           </div>
 
           <input type="file" id="compareFileInput" accept=".csv,.bbl,.bfl,.txt,.log" hidden />
@@ -1455,7 +1455,7 @@ current demand; the steady downward slope is normal discharge.
         </section>
 
         <section class="card" id="compareChartCard" hidden>
-          <h3>Noise Spectrum — Before vs After</h3>
+          <h3>Noise Spectrum: Before vs After</h3>
           <p class="chart-hint" id="compareChartHint">
             Two flights, one picture. Shrinking peaks = progress.
           </p>
@@ -1467,14 +1467,14 @@ current demand; the steady downward slope is normal discharge.
       <section data-screen="history">
         <section class="hero">
           <h2>Health Record</h2>
-          <p>Your helicopter over time — trends no single flight can show.</p>
+          <p>Your helicopter over time: trends no single flight can show.</p>
         </section>
 
         <div class="screen-intro">
           <p>This page is your helicopter's history: every analyzed
             flight is filed under its craft automatically, so slow
-            changes — a bearing wearing in, a pack aging, a tune
-            drifting — become visible before they bite.</p>
+            changes become visible before they bite: a bearing
+            wearing in, a pack aging, a tune drifting.</p>
           <details>
             <summary>What am I looking at?</summary>
             <p>Trends need at least four logged flights, then the
@@ -1483,7 +1483,7 @@ current demand; the steady downward slope is normal discharge.
               droop at a power system losing headroom, climbing
               internal resistance at an aging pack. Everything on
               this page stays on this computer. A flight that
-              shouldn't count — a crash, a bench run — can be removed
+              shouldn't count, like a crash or a bench run, can be removed
               from the table without affecting anything else.</p>
             <p>One physical flight is one row: re-analyzing the same
               log after an update refreshes its row, it never adds a
@@ -1515,7 +1515,7 @@ current demand; the steady downward slope is normal discharge.
           <p class="chart-hint">A rising line means something mechanical is changing.</p>
           <div class="chart-container" id="chartTrendVibration"></div>
           <h3 style="margin-top:22px;" id="trendDroopTitle">Rotor-Speed Stability Across Flights</h3>
-          <p class="chart-hint" id="trendDroopHint">A rising line means the rotor is holding less steadily across flights — worth investigating.</p>
+          <p class="chart-hint" id="trendDroopHint">A rising line means the rotor is holding less steadily across flights, worth investigating.</p>
           <div class="chart-container" id="chartTrendDroop"></div>
         </section>
 
@@ -1541,7 +1541,7 @@ current demand; the steady downward slope is normal discharge.
 
         <div class="screen-intro">
           <p>This page bundles the open flight's verdict, findings
-            and charts into a single HTML file — one thing to save
+            and charts into a single HTML file: one thing to save
             with the flight, or to hand to someone helping you
             troubleshoot.</p>
           <details>
@@ -1549,7 +1549,7 @@ current demand; the steady downward slope is normal discharge.
             <p>The report is self-contained: it opens in any browser,
               needs no internet and nothing installed, and prints
               cleanly. It carries whatever the Labs found for this
-              flight — so a report generated after a good analysis is
+              flight. So a report generated after a good analysis is
               the easiest way to ask a club mate or a forum "what
               would you change?" without sending the raw log.</p>
           </details>
@@ -1559,8 +1559,8 @@ current demand; the steady downward slope is normal discharge.
         <section class="card">
           <h3>One-Click Flight Report</h3>
           <p>
-            Builds a single HTML file — verdict, lab findings and
-            charts included — that opens in any browser. Perfect for
+            Builds a single HTML file that opens in any browser:
+            verdict, lab findings and charts included. Perfect for
             forums, chat groups, or asking for help.
           </p>
           <div class="button-row">
@@ -1583,7 +1583,7 @@ current demand; the steady downward slope is normal discharge.
           <h3>Transmitter</h3>
           <label class="toggle-row">
             <span>
-              <strong>Stick mode</strong> — how the pilot-input
+              <strong>Stick mode</strong>: how the pilot-input
               display arranges the gimbals. Mode 2 (collective on
               the left) is the common default.
             </span>
@@ -1601,7 +1601,7 @@ current demand; the steady downward slope is normal discharge.
           <label class="toggle-row">
             <input type="checkbox" id="advancedModeToggle" />
             <span>
-              <strong>Advanced mode</strong> — show raw telemetry
+              <strong>Advanced mode</strong>: show raw telemetry
               blocks and technical detail everywhere. Off = beginner
               mode: verdicts, charts and plain language only.
             </span>
@@ -1614,11 +1614,11 @@ current demand; the steady downward slope is normal discharge.
             Sharing an anonymized copy of the logs you open helps
             improve the suggestions this tool gives everyone. Never
             included: your name, dates, locations, or anything that
-            identifies you — and you choose what is shared:
+            identifies you. And you choose what is shared:
           </p>
           <label class="toggle-row">
             <input type="checkbox" id="contributeToggle" />
-            <span><strong>Share anonymized flight data</strong> —
+            <span><strong>Share anonymized flight data</strong>:
               gyro, control and motor channels that power the
               analysis, plus what the app measured from them
               (tracking and headspeed events, precomp reads) so the
@@ -1627,25 +1627,25 @@ current demand; the steady downward slope is normal discharge.
           <div class="contribute-cats">
             <label class="toggle-row">
               <input type="checkbox" id="contributePower" />
-              <span>Battery &amp; ESC data — voltage, current,
+              <span>Battery &amp; ESC data: voltage, current,
                 ESC telemetry.</span>
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="contributeGps" />
-              <span>GPS as relative track &amp; speed — the flight's
+              <span>GPS as relative track &amp; speed: the flight's
                 shape and speeds, <strong>never your
                 location</strong> (coordinates are reduced to
                 offsets from the first fix).</span>
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="contributeSetup" />
-              <span>Setup &amp; tuning info — tuning values and board
+              <span>Setup &amp; tuning info: tuning values and board
                 type, so logs can be grouped by setup. Your model's
                 name never leaves this computer.</span>
             </label>
             <label class="toggle-row">
               <input type="checkbox" id="contributeDump" />
-              <span>CLI settings (<code>dump</code>) — scrubbed of
+              <span>CLI settings (<code>dump</code>): scrubbed of
                 anything identifying; your settings help us improve
                 recommendations for your specific model.</span>
             </label>
@@ -1657,14 +1657,14 @@ current demand; the steady downward slope is normal discharge.
         <section class="card">
           <h3>About this project</h3>
           <p>
-            Blackbox Lab is a free, open-source community project —
+            Blackbox Lab is a free, open-source community project:
             built by hobbyists, for hobbyists, and provided free of
             charge under the MIT license.
           </p>
           <p>
             <strong>Use at your own risk.</strong> The tool and its
             analyses are provided as-is, with no warranty of any
-            kind. Suggestions are informational — you remain the
+            kind. Suggestions are informational: you remain the
             pilot in command, and any change you make to your
             helicopter is your own decision and responsibility. The
             authors accept no liability for damage to equipment,
@@ -1704,7 +1704,7 @@ current demand; the steady downward slope is normal discharge.
         title="Close">✕</button>
       <h3 id="craftCardTitle">About your model</h3>
       <p>
-        A few facts about this model make its flights comparable —
+        A few facts about this model make its flights comparable:
         in your Health Record, and (only if you share logs) for
         everyone's recommendations. Confirm once; edit any time
         from the Health Record screen.
@@ -1753,7 +1753,7 @@ current demand; the steady downward slope is normal discharge.
       <div class="craft-card-dump">
         <p>
           <strong>Go further:</strong> add this model's CLI settings
-          (<code>dump all</code>) — it fills the model card in
+          (<code>dump all</code>): it fills the model card in
           automatically and unlocks recommendations tuned to your
           exact setup. Names, serials and anything identifying are
           removed on the spot.
@@ -1777,7 +1777,7 @@ current demand; the steady downward slope is normal discharge.
         <div class="craft-dump-result" id="craftDumpStatus" hidden></div>
         <label class="toggle-row" id="dumpConsentRow" hidden>
           <input type="checkbox" id="dumpConsentInline" checked />
-          <span>Share these scrubbed settings with my flights —
+          <span>Share these scrubbed settings with my flights:
             your settings help us improve recommendations for
             your specific model.</span>
         </label>
@@ -1788,7 +1788,7 @@ current demand; the steady downward slope is normal discharge.
         <button class="overlay-primary" id="craftCardSave">Save model</button>
       </div>
       <p class="overlay-footnote">
-        Pre-filled from your log where possible — please correct
+        Pre-filled from your log where possible. Please correct
         anything that's off.
       </p>
     </div>
@@ -1799,7 +1799,7 @@ current demand; the steady downward slope is normal discharge.
       <h3>Help improve Blackbox Lab?</h3>
       <p>
         Share an anonymized copy of the logs you open. This directly
-        improves the suggestions the tool gives everyone — more real
+        improves the suggestions the tool gives everyone: more real
         flights means smarter advice.
       </p>
       <p class="overlay-privacy">
@@ -1812,17 +1812,17 @@ current demand; the steady downward slope is normal discharge.
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askGps" />
-        <span>GPS as relative track &amp; speed —
+        <span>GPS as relative track &amp; speed:
           <strong>never your location</strong></span>
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askSetup" checked />
-        <span>Setup &amp; tuning info — never your model's name</span>
+        <span>Setup &amp; tuning info: never your model's name</span>
       </label>
       <label class="toggle-row">
         <input type="checkbox" id="askDump" checked />
         <span>Your CLI settings (<code>dump</code>), scrubbed of
-          anything identifying — your settings help us improve
+          anything identifying: your settings help us improve
           recommendations for your specific model</span>
       </label>
       <div class="overlay-actions">
@@ -1855,7 +1855,7 @@ current demand; the steady downward slope is normal discharge.
       </div>
       <p class="overlay-footnote">
         The report contains the app version, the error details and
-        technical facts about the file — never your flight data.
+        technical facts about the file. Never your flight data.
       </p>
     </div>
   </div>

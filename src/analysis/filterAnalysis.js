@@ -84,7 +84,7 @@ export function assessUnresolvedFindings({
     // The vibration itself is still charged below.
     findings.push({
       reason:
-        "Low overall reduction alongside a peak below the ~20 Hz filter band — that vibration is structural, and filters are right not to touch it. The fix is at the bench, not in filter settings.",
+        "Low overall reduction alongside a peak below the ~20 Hz filter band: that vibration is structural, and filters are right not to touch it. The fix is at the bench, not in filter settings.",
       cost: 0
     });
   }
@@ -1934,7 +1934,7 @@ let severity = "warning";
 
 if (!hasSufficientFilterEvidence) {
   status =
-    "Filter Analysis Limited — Insufficient Evidence";
+    "Filter Analysis Limited: Insufficient Evidence";
   severity = "warning";
 } else if (detectedGroupCount === 5) {
   if (score >= 95) {
@@ -1942,11 +1942,11 @@ if (!hasSufficientFilterEvidence) {
     severity = "info";
   } else if (score >= 80) {
     status =
-      "Filter Analysis Complete — Monitor";
+      "Filter Analysis Complete: Monitor";
     severity = "warning";
   } else {
     status =
-      "Filter Analysis Complete — Needs Review";
+      "Filter Analysis Complete: Needs Review";
     severity = "warning";
   }
 } else if (detectedGroupCount >= 3) {
@@ -2024,8 +2024,8 @@ if (Number.isFinite(averageReduction)) {
         profile.mechanicalFinding?.controlMotionConcern === "moderate"
     );
     filterReductionAssessment = controlSuffering
-      ? " The high average reduction deserves a closer check for possible over-filtering — the control-motion evidence shows tracking being affected."
-      : " The high average reduction reflects how much vibration the filters had to remove; with no control-motion impact in evidence, this is informational — not a call to action.";
+      ? " The high average reduction deserves a closer check for possible over-filtering: the control-motion evidence shows tracking being affected."
+      : " The high average reduction reflects how much vibration the filters had to remove. With no control-motion impact in evidence, this is informational, not a call to action.";
   }
 }
 
@@ -2051,7 +2051,7 @@ recommendations.push(
   }` +
   `${
     Number.isFinite(averageReduction)
-      ? ` — average gyro reduction ${averageReduction.toFixed(1)}%`
+      ? `: average gyro reduction ${averageReduction.toFixed(1)}%`
       : ""
   }.` +
   filterReductionAssessment +

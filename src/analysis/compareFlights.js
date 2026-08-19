@@ -111,8 +111,8 @@ export function comparableEvidence(beforeConfidence, afterConfidence) {
       comparable: false,
       reason:
         beforeDemand === "gentle"
-          ? "the earlier flight was flown gently while the later one was flown much harder — the two scores measure different demands, not the change."
-          : "the later flight was flown gently while the earlier one was flown much harder — the two scores measure different demands, not the change."
+          ? "the earlier flight was flown gently while the later one was flown much harder. The two scores measure different demands, not the change."
+          : "the later flight was flown gently while the earlier one was flown much harder. The two scores measure different demands, not the change."
     };
   }
 
@@ -511,7 +511,7 @@ export function compareFlights(baseline, comparison) {
   if (!aircraft.same) {
     for (const row of rows) {
       row.direction = "unknown";
-      row.sentence = `${row.title}: ${row.before} vs ${row.after} — two different machines, shown side by side for reference only.`;
+      row.sentence = `${row.title}: ${row.before} vs ${row.after}. Two different machines, shown side by side for reference only.`;
     }
   }
 
@@ -522,19 +522,19 @@ export function compareFlights(baseline, comparison) {
         ? `These flights are different helicopters (${aircraft.before} and ${aircraft.after}), so the figures below describe two machines rather than a change to one.`
         : comparedRows === 0
           ? uncomparable > 0
-            ? "These two flights cannot be compared usefully — see the rows below for what was missing."
+            ? "These two flights cannot be compared usefully: see the rows below for what was missing."
             : "No meaningful change between these two flights."
           : worse === 0 && better > 0
             ? likeForLike
-              ? "Your change helped — nothing got worse. That's a keeper."
-              : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet — ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
+              ? "Your change helped: nothing got worse. That's a keeper."
+              : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet: ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
             : better === 0 && worse > 0
               ? likeForLike
-                ? "This change went the wrong way — consider reverting it."
-                : `The later flight measured worse in ${worse} area${worse === 1 ? "" : "s"} — but ${unlikeReason} Repeat the same maneuvers before reverting anything.`
+                ? "This change went the wrong way. Consider reverting it."
+                : `The later flight measured worse in ${worse} area${worse === 1 ? "" : "s"}, but ${unlikeReason} Repeat the same maneuvers before reverting anything.`
               : likeForLike
                 ? "Mixed result: some things improved, others got worse. Trade-off territory."
-                : `The measurements moved in both directions — and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
+                : `The measurements moved in both directions, and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
 
   return {
     rows,

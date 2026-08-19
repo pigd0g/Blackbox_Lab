@@ -235,7 +235,7 @@ export function analyzePrecomp({
         riseCount: rises.length,
         dropCount: drops.length,
         story:
-          "Not enough fast collective moves in both directions to read the governor's precomp balance — it needs a few honest pumps each way."
+          "Not enough fast collective moves in both directions to read the governor's precomp balance: it needs a few honest pumps each way."
       };
     }
 
@@ -309,12 +309,12 @@ export function analyzePrecomp({
 
     const story =
       balance === "low"
-        ? `Collective rises pull the rotor ${riseDroopPercent.toFixed(1)}% under target while drops stay clean — the governor's anticipation of load is running behind. More collective precomp asks for the power before the load arrives.`
+        ? `Collective rises pull the rotor ${riseDroopPercent.toFixed(1)}% under target while drops stay clean: the governor's anticipation of load is running behind. More collective precomp asks for the power before the load arrives.`
         : balance === "high"
-          ? `Collective drops push the rotor ${dropOvershootPercent.toFixed(1)}% over target while rises stay clean — the governor keeps feeding power the load no longer needs. Less collective precomp, or more governor damping, absorbs it.`
+          ? `Collective drops push the rotor ${dropOvershootPercent.toFixed(1)}% over target while rises stay clean: the governor keeps feeding power the load no longer needs. Less collective precomp, or more governor damping, absorbs it.`
           : balance === "lagging"
-            ? `The rotor misses its target both ways around collective moves (droop ${riseDroopPercent.toFixed(1)}% on rises, overspeed ${dropOvershootPercent.toFixed(1)}% on drops) — the governor is late in both directions, which reads as a response-speed story before a precomp one.`
-            : "Fast collective moves barely disturb the headspeed in either direction — the governor's precomp is doing its job.";
+            ? `The rotor misses its target both ways around collective moves (droop ${riseDroopPercent.toFixed(1)}% on rises, overspeed ${dropOvershootPercent.toFixed(1)}% on drops): the governor is late in both directions, which reads as a response-speed story before a precomp one.`
+            : "Fast collective moves barely disturb the headspeed in either direction: the governor's precomp is doing its job.";
 
     return {
       balance,
@@ -437,8 +437,8 @@ export function analyzePrecomp({
       consistency >= tuning.TAIL_CONSISTENCY;
 
     const story = coupled
-      ? `Collective moves kick the tail ${kickRatio.toFixed(1)}× harder than its ordinary error (median ${Math.round(transientError)} deg/s, ${Math.round(consistency * 100)}% in a consistent direction) — a torque-anticipation story: the collective feedforward into yaw is not matching the torque change. Which way to move it depends on your rotation direction — step once, and if the kick grows, go the other way.`
-      : "The tail holds its own during collective moves — no precomp coupling worth chasing.";
+      ? `Collective moves kick the tail ${kickRatio.toFixed(1)}× harder than its ordinary error (median ${Math.round(transientError)} deg/s, ${Math.round(consistency * 100)}% in a consistent direction). A torque-anticipation story: the collective feedforward into yaw is not matching the torque change.\n\nWhich way to move it depends on your rotation direction: step once, and if the kick grows, go the other way.`
+      : "The tail holds its own during collective moves: no precomp coupling worth chasing.";
 
     return {
       balance: coupled ? "coupled" : "balanced",

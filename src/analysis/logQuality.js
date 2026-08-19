@@ -56,7 +56,7 @@ export function assessLogQuality({
     capabilities.push({
       name: "Vibration & filters",
       level: "partial",
-      note: `Logging rate ~${Math.round(sampleRateHz || 0)} Hz is too slow for tail-frequency vibration — raise the Blackbox rate for the full picture.`
+      note: `Logging rate ~${Math.round(sampleRateHz || 0)} Hz is too slow for tail-frequency vibration. Raise the Blackbox rate for the full picture.`
     });
   } else if (sampleRateHz < 1000) {
     capabilities.push({
@@ -68,7 +68,7 @@ export function assessLogQuality({
     capabilities.push({
       name: "Vibration & filters",
       level: "partial",
-      note: "Only filtered gyro is logged — noise is visible after filtering, so real vibration is underestimated and filter effectiveness can't be measured. Enable unfiltered gyro logging (gyro_raw) for the full picture."
+      note: "Only filtered gyro is logged: noise is visible after filtering, so real vibration is underestimated and filter effectiveness can't be measured. Enable unfiltered gyro logging (gyro_raw) for the full picture."
     });
   } else {
     capabilities.push({
@@ -76,7 +76,7 @@ export function assessLogQuality({
       level: "full",
       note:
         hasFilteredGyro
-          ? "Unfiltered + filtered gyro at a healthy rate — full noise and filter-effectiveness analysis."
+          ? "Unfiltered + filtered gyro at a healthy rate: full noise and filter-effectiveness analysis."
           : "Unfiltered gyro at a healthy rate. Also logging the filtered gyro would let the Filter Advisor measure your filters' real effect."
     });
   }
@@ -86,19 +86,19 @@ export function assessLogQuality({
     capabilities.push({
       name: "Governor",
       level: "full",
-      note: "Headspeed and target present — droop and tracking fully measurable."
+      note: "Headspeed and target present: droop and tracking fully measurable."
     });
   } else if (hasHeadspeed) {
     capabilities.push({
       name: "Governor",
       level: "partial",
-      note: "Headspeed is logged but no governor target — stability is visible, droop-vs-target is not."
+      note: "Headspeed is logged but no governor target: stability is visible, droop-vs-target is not."
     });
   } else {
     capabilities.push({
       name: "Governor",
       level: "missing",
-      note: "No headspeed in this log — enable RPM telemetry to unlock governor analysis."
+      note: "No headspeed in this log. Enable RPM telemetry to unlock governor analysis."
     });
   }
 
@@ -107,13 +107,13 @@ export function assessLogQuality({
     capabilities.push({
       name: "Battery & ESC",
       level: "full",
-      note: "Voltage and current present — sag, consumption and resistance estimates available."
+      note: "Voltage and current present: sag, consumption and resistance estimates available."
     });
   } else if (hasVbat) {
     capabilities.push({
       name: "Battery & ESC",
       level: "partial",
-      note: "Voltage only — sag is visible; consumption and internal resistance need a current sensor."
+      note: "Voltage only: sag is visible; consumption and internal resistance need a current sensor."
     });
   } else {
     capabilities.push({
@@ -128,19 +128,19 @@ export function assessLogQuality({
     capabilities.push({
       name: "Signal & link",
       level: "full",
-      note: "Signal strength and receiver flags present — link health fully measurable."
+      note: "Signal strength and receiver flags present: link health fully measurable."
     });
   } else if (hasLinkFlags) {
     capabilities.push({
       name: "Signal & link",
       level: "partial",
-      note: "Receiver flags only — failsafe and signal-valid state are visible, but no signal-strength trace was logged."
+      note: "Receiver flags only: failsafe and signal-valid state are visible, but no signal-strength trace was logged."
     });
   } else {
     capabilities.push({
       name: "Signal & link",
       level: "missing",
-      note: "No link telemetry in this log — enable RSSI telemetry for signal analysis."
+      note: "No link telemetry in this log. Enable RSSI telemetry for signal analysis."
     });
   }
 
@@ -149,26 +149,26 @@ export function assessLogQuality({
     capabilities.push({
       name: "Receiver power (BEC)",
       level: "full",
-      note: "BEC voltage present — receiver-power stability, dips and their servo context are measurable."
+      note: "BEC voltage present: receiver-power stability, dips and their servo context are measurable."
     });
   } else {
     capabilities.push({
       name: "Receiver power (BEC)",
       level: "missing",
-      note: "No BEC voltage in this log — enable BEC voltage telemetry for receiver-power analysis."
+      note: "No BEC voltage in this log. Enable BEC voltage telemetry for receiver-power analysis."
     });
   }
 
   // ---- general warnings ----
   if (durationSeconds && durationSeconds < 20) {
     warnings.push(
-      `Short flight (${durationSeconds.toFixed(0)} s) — trends and averages are less reliable; treat scores as indicative.`
+      `Short flight (${durationSeconds.toFixed(0)} s): trends and averages are less reliable; treat scores as indicative.`
     );
   }
 
   if (totalFrames > 0 && corruptFrames / totalFrames > 0.02) {
     warnings.push(
-      `${((corruptFrames / totalFrames) * 100).toFixed(1)}% of frames were corrupt and skipped — consider a faster/better flash or SD card.`
+      `${((corruptFrames / totalFrames) * 100).toFixed(1)}% of frames were corrupt and skipped. Consider a faster/better flash or SD card.`
     );
   }
 
@@ -179,10 +179,10 @@ export function assessLogQuality({
   // analyses rate their own confidence from what they measure.
   const summary =
     missing === 0 && partial === 0 && warnings.length === 0
-      ? "This log is excellent — every analysis has the data it needs."
+      ? "This log is excellent: every analysis has the data it needs."
       : missing === 0
-        ? "Good log — a few analyses run with reduced confidence (details below)."
-        : "This log limits some analyses — the notes below say what to enable for the full picture.";
+        ? "Good log: a few analyses run with reduced confidence (details below)."
+        : "This log limits some analyses: the notes below say what to enable for the full picture.";
 
   return { capabilities, warnings, summary };
 }

@@ -160,7 +160,7 @@ export function analyzeSignalLab({
         startSeconds: timeSeconds[run.startIndex],
         endSeconds: timeSeconds[run.endIndex],
         durationMs: Math.round(seconds(run.startIndex, run.endIndex) * 1000),
-        detail: "Firmware entered failsafe — the control link was lost long enough for the failsafe stage to engage."
+        detail: "Firmware entered failsafe: the control link was lost long enough for the failsafe stage to engage."
       });
     }
   }
@@ -266,7 +266,7 @@ export function analyzeSignalLab({
           durationMs: Math.round(
             seconds(run.startIndex, run.endIndex) * 1000
           ),
-          detail: `Signal fell to ${Math.round(lowest)} (typical for this flight: ${Math.round(typicalRssi)})${deep ? " — a deep dip" : ""}, then recovered.`
+          detail: `Signal fell to ${Math.round(lowest)} (typical for this flight: ${Math.round(typicalRssi)})${deep ? ", a deep dip" : ""}, then recovered.`
         });
       }
     } else {
@@ -301,7 +301,7 @@ export function analyzeSignalLab({
   } else {
     metrics.push({
       label: "Link strength",
-      value: "Not logged — link state read from receiver flags only"
+      value: "Not logged. Link state read from receiver flags only"
     });
   }
 
@@ -331,20 +331,20 @@ export function analyzeSignalLab({
   // ---- the story ----
   const story =
     failsafeEventCount > 0
-      ? `The firmware entered failsafe ${failsafeEventCount === 1 ? "once" : `${failsafeEventCount} times`} in flight — the control link was genuinely interrupted. Review the event times below and check receiver antenna placement, orientation and condition before the next flight.`
+      ? `The firmware entered failsafe ${failsafeEventCount === 1 ? "once" : `${failsafeEventCount} times`} in flight: the control link was genuinely interrupted. Review the event times below and check receiver antenna placement, orientation and condition before the next flight.`
       : linkLossEventCount > 0
-        ? `The receiver reported ${linkLossEventCount === 1 ? "a moment" : `${linkLossEventCount} moments`} of lost or invalid signal. The flight continued, but this is the firmware's own account of the link — worth reviewing antennas, wiring and receiver placement.`
+        ? `The receiver reported ${linkLossEventCount === 1 ? "a moment" : `${linkLossEventCount} moments`} of lost or invalid signal. The flight continued, but this is the firmware's own account of the link: worth reviewing antennas, wiring and receiver placement.`
         : deepEventCount > 0
           ? `The link held, but it dipped deeply ${deepEventCount === 1 ? "once" : `${deepEventCount} times`} relative to this flight's typical level. One deep dip can be orientation shading; repeated dips point at antenna placement or damage.`
           : degradedEventCount > 0
-            ? `Signal strength dipped briefly ${degradedEventCount === 1 ? "once" : `${degradedEventCount} times`} but stayed clear of trouble and the receiver never reported a problem — normal for orientation changes at range.`
+            ? `Signal strength dipped briefly ${degradedEventCount === 1 ? "once" : `${degradedEventCount} times`} but stayed clear of trouble and the receiver never reported a problem: normal for orientation changes at range.`
             : capability === "flags-only"
               ? "No signal-strength telemetry was logged, but the receiver's own flags stayed healthy the whole flight: no failsafe, no invalid-signal moments."
-              : "The link stayed strong and steady the whole flight — no failsafe, no loss indications, no meaningful dips below this flight's own typical level.";
+              : "The link stayed strong and steady the whole flight: no failsafe, no loss indications, no meaningful dips below this flight's own typical level.";
 
   if (typicalRssi !== null) {
     findings.push(
-      "Signal readings are compared against this flight's own typical level, never against absolute thresholds — different receivers and protocols scale these numbers differently."
+      "Signal readings are compared against this flight's own typical level, never against absolute thresholds: different receivers and protocols scale these numbers differently."
     );
   }
   findings.push(

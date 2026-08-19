@@ -466,7 +466,7 @@ function renderReplayStack(dataset) {
   if (!dataset) {
     if (controls) controls.hidden = true;
     stack.innerHTML =
-      '<p class="chart-empty">Open a log first — then stack the charts you want to replay here.</p>';
+      '<p class="chart-empty">Open a log first. Then stack the charts you want to replay here.</p>';
     return;
   }
 
@@ -474,7 +474,7 @@ function renderReplayStack(dataset) {
 
   if (layout.length === 0) {
     stack.innerHTML =
-      '<p class="chart-empty">Sticks-only view — no graphs stacked. The playhead, sticks and readouts still run above; add a graph anytime.</p>';
+      '<p class="chart-empty">Sticks-only view: no graphs stacked. The playhead, sticks and readouts still run above; add a graph anytime.</p>';
   }
 
   for (const key of layout) {
@@ -641,7 +641,7 @@ function setupReplay(dataset, pilotInput, flightEvents) {
       const tick = document.createElement("span");
       tick.className = `replay-tick tick-${event.verdict}`;
       tick.style.left = `${(event.t / replay.duration) * 100}%`;
-      tick.title = `${event.axis} — ${event.t.toFixed(1)} s`;
+      tick.title = `${event.axis}: ${event.t.toFixed(1)} s`;
       ui.ticks.appendChild(tick);
     }
 
@@ -654,7 +654,7 @@ function setupReplay(dataset, pilotInput, flightEvents) {
         event.cause === "power-limit" ? "tick-overshoot" : "tick-slow"
       }`;
       tick.style.left = `${(event.t / replay.duration) * 100}%`;
-      tick.title = `Headspeed ${event.kind} — ${event.t.toFixed(1)} s`;
+      tick.title = `Headspeed ${event.kind}: ${event.t.toFixed(1)} s`;
       ui.ticks.appendChild(tick);
     }
   }
@@ -995,7 +995,7 @@ openLogLock.addEventListener("click", (event) => {
   openLogArmed = true;
   openLogLock.textContent = "🔓";
   openLogButton.classList.add("armed");
-  openLogButton.title = "Unlocked — click to open another log";
+  openLogButton.title = "Unlocked: click to open another log";
   openLogArmTimer = setTimeout(disarmOpenLog, 4000);
 });
 
@@ -1117,7 +1117,7 @@ async function routeSettingsDump(file) {
   // attach them to, and no way to know which helicopter they belong to.
   if (!currentCraftName) {
     setLoadStatus(
-      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home — the settings are filed against that helicopter.`
+      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home. The settings are filed against that helicopter.`
     );
     finishLoadProgress(false);
     return true;
@@ -1130,7 +1130,7 @@ async function routeSettingsDump(file) {
   navigation.showScreen("home");
 
   setLoadStatus(
-    `${file.name} read into your ${currentCraftName} model card — the flight stays open.`
+    `${file.name} read into your ${currentCraftName} model card. The flight stays open.`
   );
   finishLoadProgress(true);
   return true;
@@ -1196,7 +1196,7 @@ async function loadFromFile(file) {
   }
 
   if (!loadProgress.hidden) {
-    loadProgressText.textContent = `${file.name} analyzed — the verdict is ready on the overview.`;
+    loadProgressText.textContent = `${file.name} analyzed: the verdict is ready on the overview.`;
   }
   finishLoadProgress(true);
 }
@@ -1246,7 +1246,7 @@ trySampleButton.addEventListener("click", async () => {
   await loadFromFile(file);
 
   fileStatus.textContent =
-    "Loaded: sample flight (a helicopter with a mechanical problem — can you find it?)";
+    "Loaded: sample flight (a helicopter with a mechanical problem. Can you find it?)";
 });
 
 flightSelect.addEventListener("change", () => {
@@ -2431,7 +2431,7 @@ function recommendationFirstStep(rec) {
 
   if (rec.suggestion) {
     return {
-      text: `Try one ${rec.suggestion.magnitudeClass} step ${rec.suggestion.direction === "up" ? "up" : "down"} on ${rec.suggestion.family}. Change only this, fly the same moves again, and watch ${rec.verifyMetric ?? "the same finding"} — Compare Flights is the judge.`,
+      text: `Try one ${rec.suggestion.magnitudeClass} step ${rec.suggestion.direction === "up" ? "up" : "down"} on ${rec.suggestion.family}. Change only this, fly the same moves again, and watch ${rec.verifyMetric ?? "the same finding"}. Compare Flights is the judge.`,
       tone: "action"
     };
   }
@@ -2500,10 +2500,10 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "Tuning",
     pidRec?.text ??
       (nonCleanEvents > 0
-        ? `Of ${events.total} commands, ${eventBits} — that rate is inside the fleet's normal range, so no tuning change is earned from this flight alone. What flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
+        ? `Of ${events.total} commands, ${eventBits}. That rate is inside the fleet's normal range, so no tuning change is earned from this flight alone.\n\nWhat flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
         : gentleDemand
-          ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps — clear inputs, held briefly — and read this page again."
-          : "Nothing to change from this flight — every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
+          ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps: clear inputs, held briefly. Then read this page again."
+          : "Nothing to change from this flight: every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
     statusTone(cardStatus("tuning"))
   );
 
@@ -2537,18 +2537,18 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     ) {
       governorText = `The ${dipRpm} rpm dip is a power-system limit, not a tuning problem: the motor output was already at ${Math.round(dipOutput)}% when it happened, so no governor setting can add power that isn't there. Adjust the gearing/Kv to match your target headspeed, or lower the target.`;
     } else if (loadDriven) {
-      governorText = `The ${dipRpm} rpm dip followed a real load demand with output headroom to spare — the governor answered a hard ask, which is a power system doing its job. Nothing to change; if the same maneuver keeps dipping deeper across flights, that trend is the signal.`;
+      governorText = `The ${dipRpm} rpm dip followed a real load demand with output headroom to spare: the governor answered a hard ask, which is a power system doing its job. Nothing to change; if the same maneuver keeps dipping deeper across flights, that trend is the signal.`;
     } else if (governor.capability === "full") {
-      governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand — that is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
+      governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand. That is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
     } else {
       // Headspeed-only log: without a governor target, stability is
       // visible but tuning attribution is not — the wording must not
       // outrun the capability the quality gate declared.
-      governorText = `The ${dipRpm} rpm short-term swing happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no obvious matching load demand. Without a logged governor target this log can judge stability, not governor tuning — repeat the same maneuver, and if the swing keeps returning, that pattern is the signal worth acting on.`;
+      governorText = `The ${dipRpm} rpm short-term swing happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no obvious matching load demand. Without a logged governor target this log can judge stability, not governor tuning.\n\nRepeat the same maneuver, and if the swing keeps returning, that pattern is the signal worth acting on.`;
     }
   } else if (governor) {
     governorText =
-      "Nothing to change — the governor is holding. Keep logging flights; the Health Record turns them into trends.";
+      "Nothing to change: the governor is holding. Keep logging flights; the Health Record turns them into trends.";
   }
 
   add(
@@ -2574,18 +2574,18 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   let filterText = null;
 
   if (vibrationCard?.status === "attention" && peak) {
-    filterText = `Address the mechanical source first: the ${peak.hz} Hz peak points at ${peak.identified ? peak.source : "a physical source"}. Filters can only hide it from the gyro — they never remove the shake from the airframe. The Filter Advisor below carries the exact frequencies.`;
+    filterText = `Address the mechanical source first: the ${peak.hz} Hz peak points at ${peak.identified ? peak.source : "a physical source"}. Filters can only hide it from the gyro: they never remove the shake from the airframe.\n\nThe Filter Advisor below carries the exact frequencies.`;
   } else if (peak?.managed && peak.magnitude > 3) {
-    filterText = `Filtering is containing the ${peak.hz} Hz shake${Number.isFinite(peak.reductionPercent) ? ` (${peak.reductionPercent}% suppressed, nothing meaningful reaching the control loop)` : ""} — but the vibration itself is mechanical: ${peak.identified ? peak.source : "a physical source worth locating"}. A bench check when convenient is the real fix; across flights, a growing raw peak is the signal to act.`;
+    filterText = `Filtering is containing the ${peak.hz} Hz shake${Number.isFinite(peak.reductionPercent) ? ` (${peak.reductionPercent}% suppressed, nothing meaningful reaching the control loop)` : ""}. But the vibration itself is mechanical: ${peak.identified ? peak.source : "a physical source worth locating"}.\n\nA bench check when convenient is the real fix; across flights, a growing raw peak is the signal to act.`;
   } else if (topAdvisor?.priority === "filters") {
     filterText =
       "Turn the RPM filter loose on this: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
   } else if (topAdvisor) {
     filterText =
-      "Vibration is present but well managed — no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
+      "Vibration is present but well managed: no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
   } else if (dataset?.spectra?.length) {
     filterText =
-      "No filter change indicated — the noise picture is clean at this log's resolution.";
+      "No filter change indicated: the noise picture is clean at this log's resolution.";
   }
 
   add(
@@ -2605,10 +2605,10 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "Power & ESC",
     escLab
       ? escLab.status === "attention"
-        ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed — the highest-load moments below name exactly when the system ran out."
+        ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed. The highest-load moments below name exactly when the system ran out."
         : escLab.status === "watch"
-          ? "Fine for now — remember this margin before asking the machine for more headspeed or pitch."
-          : "Nothing to change — healthy headroom throughout the flight."
+          ? "Fine for now: remember this margin before asking the machine for more headspeed or pitch."
+          : "Nothing to change: healthy headroom throughout the flight."
       : null,
     statusTone(cardStatus("power") ?? escLab?.status)
   );
@@ -2622,10 +2622,10 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "Battery",
     batteryLab
       ? batteryLab.status === "attention"
-        ? "Review pack condition, connectors and load before another hard flight — the voltage and current charts below show the worst dip in context."
+        ? "Review pack condition, connectors and load before another hard flight. The voltage and current charts below show the worst dip in context."
         : batteryLab.status === "watch"
-          ? "Compare the voltage dip with current demand below — and keep logging: the Health Record turns single dips into a trend you can trust."
-          : "Nothing to change — the pack held up well."
+          ? "Compare the voltage dip with current demand below, and keep logging: the Health Record turns single dips into a trend you can trust."
+          : "Nothing to change: the pack held up well."
       : null,
     statusTone(cardStatus("battery") ?? batteryLab?.status)
   );
@@ -2639,16 +2639,16 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       "signal",
       "Signal",
       signalLab.status === "attention"
-        ? "Check receiver antenna placement, orientation and condition before the next flight — the events below name each moment the link struggled."
+        ? "Check receiver antenna placement, orientation and condition before the next flight. The events below name each moment the link struggled."
         : signalLab.status === "watch"
-          ? "Glance at the dip moments below — repeated dips in the same flight orientation point at antenna placement or shading."
-          : "Nothing to change — the link held all flight.",
+          ? "Glance at the dip moments below: repeated dips in the same flight orientation point at antenna placement or shading."
+          : "Nothing to change: the link held all flight.",
       statusTone(cardStatus("signal") ?? signalLab.status)
     );
   } else {
     setFirstStep(
       "signalFirstStep",
-      "Enable RSSI telemetry on the receiver and re-log — then this page can watch the link for you.",
+      "Enable RSSI telemetry on the receiver and re-log. Then this page can watch the link for you.",
       "info"
     );
   }
@@ -2662,18 +2662,18 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       "bec",
       "Receiver power",
       becLab.status === "attention"
-        ? "Work through the receiver power path — BEC setting and current capability, wiring, connectors — starting at the worst event below."
+        ? "Work through the receiver power path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
         : becLab.status === "watch"
           ? becLab.implausibleBrownout
-            ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement — not the power — is the suspect."
-            : "Keep an eye on the dip moments below — with power, repetition is what matters."
-          : "Nothing to change — receiver power is solid.",
+            ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement, not the power, is the suspect."
+            : "Keep an eye on the dip moments below: with power, repetition is what matters."
+          : "Nothing to change: receiver power is solid.",
       statusTone(cardStatus("bec") ?? becLab.status)
     );
   } else {
     setFirstStep(
       "becFirstStep",
-      "Enable BEC voltage telemetry and re-log — then this page can watch your receiver power for you.",
+      "Enable BEC voltage telemetry and re-log. Then this page can watch your receiver power for you.",
       "info"
     );
   }
@@ -2727,7 +2727,7 @@ function renderHomeFirstSteps(entries) {
     const line = document.createElement("p");
     line.className = "first-steps-clear";
     line.textContent =
-      "Nothing needs your attention — this flight is healthy. The Labs carry the details.";
+      "Nothing needs your attention: this flight is healthy. The Labs carry the details.";
     list.appendChild(line);
     return;
   }
@@ -2878,9 +2878,9 @@ function renderBecLab(dataset) {
             <td>${event.durationMs} ms${event.sustained ? " (sustained)" : ""}</td>
             <td>${
               event.demandContext === "high-demand"
-                ? "high servo demand — consistent with load"
+                ? "high servo demand, consistent with load"
                 : event.demandContext === "quiet"
-                  ? "servos quiet — look at wiring/BEC"
+                  ? "servos quiet: look at wiring/BEC"
                   : "—"
             }</td>
           </tr>`
@@ -2996,7 +2996,7 @@ function renderNextSteps(cardId, listId, recommendations) {
   list.innerHTML = recommendations
     .map((rec) => {
       const action = rec.suggestion
-        ? `<p><strong>Try:</strong> one ${escapeHtml(rec.suggestion.magnitudeClass)} ${rec.suggestion.direction === "up" ? "up" : "down"} on <code>${escapeHtml(rec.suggestion.family)}</code>. Change only this, fly the same moves again, and watch ${escapeHtml(rec.verifyMetric ?? "the same finding")} — expected: ${escapeHtml(rec.expectedResult ?? "")}</p>`
+        ? `<p><strong>Try:</strong> one ${escapeHtml(rec.suggestion.magnitudeClass)} ${rec.suggestion.direction === "up" ? "up" : "down"} on <code>${escapeHtml(rec.suggestion.family)}</code>. Change only this, fly the same moves again, and watch ${escapeHtml(rec.verifyMetric ?? "the same finding")}. Expected: ${escapeHtml(rec.expectedResult ?? "")}</p>`
         : `<p><strong>Not calling it yet:</strong> ${escapeHtml(rec.gatedReason ?? "more evidence needed.")}</p>`;
 
       return `
@@ -3166,14 +3166,14 @@ function showEventDetail(event) {
   const asked = `At ${event.t.toFixed(1)} s the ${event.axis.toLowerCase()} setpoint ${event.direction === -1 ? "stepped down" : "stepped up"} by ${event.magnitude ?? "?"}°/s.`;
   explain.textContent =
     event.verdict === "overshoot"
-      ? `${asked} The response went ${event.overshoot_ds ?? "?"}°/s PAST the target (${event.overshoot_percent}% of the step) before coming back — visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
+      ? `${asked} The response went ${event.overshoot_ds ?? "?"}°/s PAST the target (${event.overshoot_percent}% of the step) before coming back: visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
       : event.verdict === "oscillation"
-        ? `${asked} After the input the response swung back and forth across the target, up to ±${event.oscillation_ds}°/s — an oscillation, not a single overshoot. If this repeats on hard inputs, it is classic gain feedback: watch the gyro line below.`
+        ? `${asked} After the input the response swung back and forth across the target, up to ±${event.oscillation_ds}°/s: an oscillation, not a single overshoot. If this repeats on hard inputs, it is classic gain feedback: watch the gyro line below.`
         : event.verdict === "slow"
-          ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle — watch the gyro line hunting around the setpoint below.`
+          ? `${asked} The response reached the target but took ${event.settling_ms} ms to settle. Watch the gyro line hunting around the setpoint below.`
           : event.verdict === "lagging"
             ? `${asked} The response was still approaching the target when its measurement window closed, so it is not scored as overshoot or settling. If this repeats on deliberate inputs, it reads as a slow response.`
-            : `${asked} The gyro followed the setpoint cleanly — this is what good tracking looks like.`;
+            : `${asked} The gyro followed the setpoint cleanly: this is what good tracking looks like.`;
 
   // The evidence, right here: the same setpoint-vs-gyro chart the
   // Tuning matrix draws, windowed to THIS event's own extent —
@@ -3261,7 +3261,7 @@ function renderVerdict(dataset) {
 
   verdictCard.hidden = false;
   verdictSummary.textContent = currentFlightSummary
-    ? `${currentFlightSummary} — ${verdict.summary}`
+    ? `${currentFlightSummary}: ${verdict.summary}`
     : verdict.summary;
   verdictCards.innerHTML = "";
 
@@ -3314,7 +3314,10 @@ function renderMetricGrid(element, metrics) {
 
   for (const metric of metrics) {
     const tile = document.createElement("div");
-    tile.className = "metric-tile";
+    // Big bold type is for figures. A sentence-length value reads
+    // as body text, set accordingly.
+    const prose = String(metric.value ?? "").length > 28;
+    tile.className = prose ? "metric-tile metric-tile-prose" : "metric-tile";
     tile.innerHTML = `<span class="label">${metric.label}</span><strong>${metric.value}</strong>`;
     element.appendChild(tile);
   }
@@ -3579,8 +3582,8 @@ function renderGovernorTechnical(dataset) {
     label: "Analysis capability",
     value:
       gov.capability === "full"
-        ? "Full — a logged governor target was accepted; droop is target-relative"
-        : "Partial — headspeed stability only; swings are measured against the rotor's own trend"
+        ? "Full: a logged governor target was accepted; droop is target-relative"
+        : "Partial: headspeed stability only; swings are measured against the rotor's own trend"
   });
 
   const targetColumns = dataset.findColumnsIn([
@@ -3593,8 +3596,8 @@ function renderGovernorTechnical(dataset) {
       targetColumns.length === 0
         ? "no governor-target column in this log"
         : gov.capability === "full"
-          ? `${targetColumns[0]} — accepted as a rotor-speed target`
-          : `${targetColumns[0]} — present but rejected: it does not behave like a rotor-speed target (constant or passthrough, e.g. DIRECT mode)`
+          ? `${targetColumns[0]}: accepted as a rotor-speed target`
+          : `${targetColumns[0]}, present but rejected: it does not behave like a rotor-speed target (constant or passthrough, e.g. DIRECT mode)`
   });
 
   for (const bank of gov.perBank ?? []) {
@@ -3610,7 +3613,7 @@ function renderGovernorTechnical(dataset) {
           : "") +
         (Number.isFinite(bank.sampleCount)
           ? ` · ${bank.sampleCount.toLocaleString()} samples${
-              bank.sampleCount < 2000 ? " — limited evidence" : ""
+              bank.sampleCount < 2000 ? ", limited evidence" : ""
             }`
           : "")
     });
@@ -3627,7 +3630,7 @@ function renderGovernorTechnical(dataset) {
         (Number.isFinite(gov.droopTimeSeconds)
           ? ` at ${gov.droopTimeSeconds} s`
           : "") +
-        " — against the rotor's own trend, not a target"
+        ": against the rotor's own trend, not a target"
     });
   }
 
@@ -3640,10 +3643,10 @@ function renderGovernorTechnical(dataset) {
     label: "Evidence confidence",
     value:
       stableSamples >= 5000
-        ? "High — a long stable-flight window backs these numbers"
+        ? "High: a long stable-flight window backs these numbers"
         : stableSamples >= 1500
-          ? "Moderate — a usable but not generous stable window"
-          : "Low — short stable window; treat conclusions as provisional"
+          ? "Moderate: a usable but not generous stable window"
+          : "Low: short stable window; treat conclusions as provisional"
   });
 
   const excursions = dataset.governorEvents?.summary;
@@ -3661,8 +3664,8 @@ function renderGovernorTechnical(dataset) {
     label: "ESC output telemetry",
     value:
       dataset.findColumnsIn([/^escThr/i, /throttle/i]).length > 0
-        ? "available — significant dips carry output/headroom context"
-        : "not logged — output/headroom context unavailable for events"
+        ? "available: significant dips carry output/headroom context"
+        : "not logged: output/headroom context unavailable for events"
   });
 
   const governorTerms = ["govP", "govI", "govD", "govF"].filter(
@@ -3681,7 +3684,7 @@ function renderGovernorTechnical(dataset) {
       value:
         `${precompGovernor.riseCount ?? 0} rise / ${precompGovernor.dropCount ?? 0} drop transients` +
         (Number.isFinite(precompGovernor.riseDroopPercent)
-          ? ` — rise droop ${precompGovernor.riseDroopPercent}%`
+          ? `: rise droop ${precompGovernor.riseDroopPercent}%`
           : "") +
         (Number.isFinite(precompGovernor.dropOvershootPercent)
           ? `, drop overspeed ${precompGovernor.dropOvershootPercent}%`
@@ -3738,8 +3741,8 @@ function renderGovernorEvidence(dataset) {
 
   if (droopContextHint) {
     droopContextHint.textContent = hasTarget
-      ? "The seconds around the biggest dip, lined up on one clock — zoom any chart and the others follow. Read top to bottom: what the rotor did, what the pilot and governor asked for, and what the power system delivered."
-      : "The seconds around the largest short-term headspeed swing, lined up on one clock — zoom any chart and the others follow. No governor target is logged, so this shows steadiness, not droop against a target.";
+      ? "The seconds around the biggest dip, lined up on one clock. Zoom any chart and the others follow. Read top to bottom: what the rotor did, what the pilot and governor asked for, and what the power system delivered."
+      : "The seconds around the largest short-term headspeed swing, lined up on one clock. Zoom any chart and the others follow. No governor target is logged, so this shows steadiness, not droop against a target.";
   }
 
   const markerLabel = hasTarget ? "worst droop" : "largest swing";
@@ -4414,7 +4417,7 @@ function renderAllCharts(dataset) {
 
     if (governorChartHint) {
       governorChartHint.textContent = hasTarget
-        ? "Zoom into collective inputs — dips below the target line are droop."
+        ? "Zoom into collective inputs: dips below the target line are droop."
         : "View rotor-speed stability throughout the flight. Governor target telemetry was not available, so tracking error and droop cannot be measured.";
     }
 
@@ -4475,7 +4478,7 @@ function renderAllCharts(dataset) {
   } else {
     chartSpectrum.innerHTML = `<p class="chart-empty">${
       dataset.spectraUnavailableReason === "no-stable-run"
-        ? "No uninterrupted stable-flight stretch long enough for a spectrum window — the flight's stable phase was too fragmented. Gyro data itself is present; the verdict's peak numbers come from the filter analysis, which reads shorter windows."
+        ? "No uninterrupted stable-flight stretch long enough for a spectrum window: the flight's stable phase was too fragmented. Gyro data itself is present; the verdict's peak numbers come from the filter analysis, which reads shorter windows."
         : dataset.spectraUnavailableReason === "no-rate"
           ? "The logging rate could not be determined, so the spectrum's frequency axis cannot be computed."
           : "No gyro data in this log for a spectrum."
@@ -4697,7 +4700,7 @@ function renderFilterProfileBreakdown(dataset) {
       const note = document.createElement("p");
       note.className = "chart-hint";
       note.textContent =
-        "Not enough continuous stable time at this headspeed for a spectrum — fly a longer steady stretch in this bank to analyze it.";
+        "Not enough continuous stable time at this headspeed for a spectrum. Fly a longer steady stretch in this bank to analyze it.";
       filterProfileBlocks.appendChild(note);
       continue;
     }
@@ -4784,7 +4787,7 @@ function analyzeFlight(flightIndex) {
       : "";
 
   decodeInfo.textContent = flight.decodeInfo
-    ? `Binary .bbl decoded natively — ${flight.decodeInfo}`
+    ? `Binary .bbl decoded natively: ${flight.decodeInfo}`
     : fileType;
 
   const {
@@ -4905,7 +4908,7 @@ function analyzeFlight(flightIndex) {
 
   buildReportButton.disabled = !currentDataset;
   reportStatus.textContent = currentDataset
-    ? "Ready — the report includes whatever the Labs found."
+    ? "Ready: the report includes whatever the Labs found."
     : "Open a log first.";
 
   // ---- file this flight in the craft's health record ----
@@ -5026,7 +5029,7 @@ function pidLabForReport(analysis) {
         value:
           `${analysis.confidence.level}` +
           (analysis.confidence.demand === "gentle"
-            ? " — gentle flight demand"
+            ? ": gentle flight demand"
             : "")
       },
       { label: "Overall status", value: analysis.overallStatus ?? "—" },
@@ -5124,7 +5127,7 @@ buildReportButton.addEventListener("click", () => {
 
   downloadReport(html, `blackbox-lab-report-${baseName}.html`);
   reportStatus.textContent =
-    "Report saved — check your downloads folder.";
+    "Report saved: check your downloads folder.";
 });
 
 
@@ -5171,7 +5174,7 @@ function datasetForComparisonFlight(flightIndex) {
 
     const name =
       logData.flights.length > 1
-        ? `${logData.file.name} — ${flight.label}`
+        ? `${logData.file.name}, ${flight.label}`
         : logData.file.name;
 
     datasets.set(flightIndex, {
@@ -5222,7 +5225,7 @@ function refreshCompareButtons() {
 
   compareBaselineInfo.textContent = ready
     ? `Before: ${summaryFileName.textContent}`
-    : 'No baseline yet — open a log first (Home screen).';
+    : 'No baseline yet: open a log first (Home screen).';
 }
 
 function renderComparison(comparisonDataset, comparisonName) {
@@ -5234,7 +5237,7 @@ function renderComparison(comparisonDataset, comparisonName) {
 
   const beforeIdentity =
     summaryFileName.textContent +
-    (currentFlightSummary ? ` — ${currentFlightSummary}` : "");
+    (currentFlightSummary ? `, ${currentFlightSummary}` : "");
 
   compareResultCard.hidden = false;
   if (comparePairInfo) {
@@ -5282,7 +5285,7 @@ function renderComparison(comparisonDataset, comparisonName) {
     if (chartHint) {
       chartHint.textContent = result.sameAircraft
         ? "Two flights, one picture. Shrinking peaks = progress."
-        : "Two machines, shown side by side for reference — their spectra are not directly comparable.";
+        : "Two machines, shown side by side for reference: their spectra are not directly comparable.";
     }
     renderSpectrumChart(chartCompareSpectrum, [
       {
@@ -5377,7 +5380,7 @@ function refreshHistoryScreen(selectedCraft) {
 
   if (craftNames.length === 0) {
     historyNote.textContent =
-      "No flights recorded yet — every log you open is filed here automatically.";
+      "No flights recorded yet: every log you open is filed here automatically.";
     historyFindings.innerHTML = "";
     historyTrendCard.hidden = true;
     historyTableCard.hidden = true;
@@ -5659,7 +5662,7 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
     if (hasContributed(localStorage, contribution.contentHash)) {
       if (contributeStatus) {
         contributeStatus.textContent =
-          "This flight was already shared earlier — not sent again.";
+          "This flight was already shared earlier: not sent again.";
       }
       return;
     }
@@ -5684,13 +5687,13 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
 
     if (contributeStatus) {
       contributeStatus.textContent = result.ok
-        ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
-        : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+        ? "Last log shared anonymously. Thank you for helping the tool learn. ✓"
+        : `Sharing failed (server said ${result.status}). The tool keeps working normally.`;
     }
   } catch {
     if (contributeStatus) {
       contributeStatus.textContent =
-        "Sharing failed (no connection) — the tool keeps working normally.";
+        "Sharing failed (no connection). The tool keeps working normally.";
     }
   }
 }
@@ -5813,7 +5816,7 @@ function openCraftCardPanel(craftName, prefill) {
     showDumpResult(
       null,
       "This model already has its settings on file.",
-      `${existingDump.stats.kept} settings kept — read a dump again only to replace them.`
+      `${existingDump.stats.kept} settings kept. Read a dump again only to replace them.`
     );
   } else {
     craftDumpStatus.hidden = true;
@@ -5904,19 +5907,19 @@ function stageCraftDump(text) {
     (filled.length > 0
       ? ` Filled in: ${filled.join(" + ")}.`
       : "") +
-    " Now check the values above and add what's missing — Save model closes the card.";
+    " Now check the values above and add what's missing. Save model closes the card.";
 
   if (who && !matches) {
     showDumpResult(
       "warn",
-      `✓ Configuration read — but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
+      `✓ Configuration read, but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
       detail
     );
   } else {
     showDumpResult(
       "good",
       who
-        ? `✓ Configuration read: ${who} — that's this model.`
+        ? `✓ Configuration read: ${who}. That's this model.`
         : "✓ Configuration read.",
       detail
     );
@@ -6160,7 +6163,7 @@ checkForUpdate(APP_VERSION).then((update) => {
   if (localStorage.getItem(UPDATE_DISMISS_KEY) === update.version) return;
 
   el("updateBannerText").textContent =
-    `A new version of Blackbox Lab is out (${update.version} — you have v${APP_VERSION}).`;
+    `A new version of Blackbox Lab is out (${update.version}, you have v${APP_VERSION}).`;
   updateBanner.hidden = false;
 
   el("updateBannerButton").addEventListener("click", () => {
@@ -6234,7 +6237,7 @@ function showErrorReport(error) {
   errorReportSend.hidden = !canSend;
   errorReportSend.disabled = sentBefore;
   errorReportSend.textContent = sentBefore
-    ? "Report already sent — thank you!"
+    ? "Report already sent. Thank you!"
     : "Send report";
 
   errorReportOverlay.hidden = false;
@@ -6285,10 +6288,10 @@ if (errorReportSend) {
         localStorage,
         bundleFingerprint(currentErrorBundle)
       );
-      errorReportSend.textContent = "Sent — thank you!";
+      errorReportSend.textContent = "Sent. Thank you!";
     } else {
       errorReportSend.disabled = false;
-      errorReportSend.textContent = "Send failed — use Copy details";
+      errorReportSend.textContent = "Send failed: use Copy details";
     }
   });
 }

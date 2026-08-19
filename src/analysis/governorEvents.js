@@ -248,17 +248,17 @@ function eventStory(event) {
 
   const cause =
     event.cause === "power-limit"
-      ? " The motor output was at its ceiling — the power system had nothing left to give here, whatever the governor asked. See the ESC Lab."
+      ? " The motor output was at its ceiling: the power system had nothing left to give here, whatever the governor asked. See the ESC Lab."
       : event.cause === "load"
-        ? " It followed a collective increase — the load arrived faster than the drive could answer."
+        ? " It followed a collective increase: the load arrived faster than the drive could answer."
         : event.cause === "collective-drop"
-          ? " It followed a sharp collective drop — the drive kept pushing power the load no longer needed, which is where governor feedforward/precomp does its work."
+          ? " It followed a sharp collective drop: the drive kept pushing power the load no longer needed, which is where governor feedforward/precomp does its work."
           : event.kind === "under"
             ? " No collective move or output ceiling explains it from this log alone."
             : " No preceding collective drop explains it from this log alone.";
 
   const hunting = event.hunting
-    ? " Afterwards the headspeed circled its target instead of returning to it — watch the error trace hunting around zero."
+    ? " Afterwards the headspeed circled its target instead of returning to it. Watch the error trace hunting around zero."
     : "";
 
   return core + cause + hunting;
@@ -625,8 +625,8 @@ export function detectGovernorEvents({
 
   const sentence =
     events.length === 0
-      ? "No sustained over- or under-target excursions found in flight — the rotor stayed inside the event band the whole time."
-      : `${qualified.length} headspeed excursion${qualified.length === 1 ? "" : "s"} found — ` +
+      ? "No sustained over- or under-target excursions found in flight: the rotor stayed inside the event band the whole time."
+      : `${qualified.length} headspeed excursion${qualified.length === 1 ? "" : "s"} found: ` +
         `${counts.under} below target` +
         (counts.over > 0 ? `, ${counts.over} above target` : "") +
         (counts.powerLimit > 0

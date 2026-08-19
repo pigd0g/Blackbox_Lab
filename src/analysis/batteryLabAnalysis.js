@@ -148,7 +148,7 @@ export function chooseVoltageSource(escVoltage, vbat) {
     if (disagreement !== null && disagreement > 0.08) {
       return {
         selected: vbat,
-        note: `The ESC's voltage telemetry (reading ~${scaledAverageVolts(escVoltage)?.toFixed(1)} V) disagrees with the flight controller's pack measurement (~${scaledAverageVolts(vbat)?.toFixed(1)} V) — this assessment uses the flight controller's. If the FC's voltage calibration is off, correcting it there fixes both readings at once.`
+        note: `The ESC's voltage telemetry (reading ~${scaledAverageVolts(escVoltage)?.toFixed(1)} V) disagrees with the flight controller's pack measurement (~${scaledAverageVolts(vbat)?.toFixed(1)} V). This assessment uses the flight controller's. If the FC's voltage calibration is off, correcting it there fixes both readings at once.`
       };
     }
 
@@ -455,7 +455,7 @@ export function analyzeBatteryLab({
     internalResistanceNote = "needs a current sensor";
   } else if (voltageSourceNote !== null) {
     internalResistanceNote =
-      "not estimated — voltage and current came from different sensors";
+      "not estimated: voltage and current came from different sensors";
   }
 
   if (
