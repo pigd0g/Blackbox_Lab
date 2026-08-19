@@ -1929,17 +1929,21 @@ section[data-screen="history"] .flight-picker .secondary-button {
 }
 
 /* The recommendation card is HELP, whatever the severity of the
-   finding it answers: it always wears the guidance accent, never
-   the problem's colors. Severity lives on the verdict and the
-   Home list. */
+   finding it answers: it wears a light, guidance-tinted surface
+   that stands out from the dark page, never the problem's
+   colors. Severity lives on the verdict and the Home list. */
 .first-step {
   position: relative;
-  border-color: rgba(111, 178, 255, 0.32);
-  background: linear-gradient(180deg, rgba(111, 178, 255, 0.07), var(--card) 60%);
+  border-color: rgba(111, 178, 255, 0.55);
+  background: linear-gradient(180deg, #eef5ff, #dbe8fb);
+}
+
+.first-step .first-step-text {
+  color: #223350;
 }
 
 .first-step-label {
-  color: var(--accent);
+  color: #2565b0;
 }
 
 .first-step-text {
