@@ -88,7 +88,7 @@ export function windowStats(values, startIndex, endIndex) {
 // log has it, output percent otherwise.
 export function findHighestLoadEvents(
   { timeSeconds, load },
-  { windowSeconds = 2, count = 3 } = {}
+  { windowSeconds = 2, count = 3, qualifiedMask = null } = {}
 ) {
   if (
     !Array.isArray(timeSeconds) ||
@@ -103,6 +103,14 @@ export function findHighestLoadEvents(
     timeSeconds[timeSeconds.length - 1] - timeSeconds[0];
 
   if (!(duration > windowSeconds)) {
+    return [];
+  }
+
+  // A load series that never leaves zero (a fitted-but-dead current
+  // sensor) has no highest moment: every window ties at 0 and the
+  // "winners" would just be the earliest windows — spool-up. No
+  // usable signal, no events.
+  if (!load.some((value) => Number.isFinite(value) && value > 0)) {
     return [];
   }
 
@@ -138,6 +146,19 @@ export function findHighestLoadEvents(
 
     if (validCount < windowSamples / 2) {
       continue;
+    }
+
+    // Startup, spool-up and shutdown are not flight load: when the
+    // caller supplies an in-flight mask, a window must be flown
+    // almost entirely airborne to compete.
+    if (qualifiedMask) {
+      let airborne = 0;
+      for (let i = start; i < end; i += 1) {
+        if (qualifiedMask[i]) airborne += 1;
+      }
+      if (airborne < windowSamples * 0.8) {
+        continue;
+      }
     }
 
     candidates.push({

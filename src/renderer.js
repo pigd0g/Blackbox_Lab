@@ -51,7 +51,8 @@ import {
 } from "./analysis/dsp/fft.js";
 import {
   isUsableGovernorTarget,
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  detectInFlightSamples
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
@@ -3914,15 +3915,62 @@ function renderEscEvidence(dataset) {
     );
   });
 
+  // Load = current when the sensor actually reported any, ESC
+  // output otherwise — an all-zero current column must not zero
+  // out the ranking (that made spool-up windows "win"). Windows
+  // must also be flown: startup/spool-up/shutdown are excluded by
+  // the in-flight mask.
+  const currentCarriesData = currentAmps.some(
+    (value) => Number.isFinite(value) && value !== 0
+  );
+  const loadSeries = currentCarriesData ? currentAmps : outputPercent;
+
+  const airborneIndexes =
+    detectInFlightSamples({
+      timeSeconds: dataset.timeSeconds,
+      headspeed: dataset.headspeed
+    }) ?? null;
+  const airborneMask = airborneIndexes
+    ? (() => {
+        const mask = new Uint8Array(dataset.timeSeconds.length);
+        for (const index of airborneIndexes) mask[index] = 1;
+        return mask;
+      })()
+    : null;
+
   const events = findHighestLoadEvents(
-    { timeSeconds: dataset.timeSeconds, load: currentAmps },
-    { windowSeconds: 2, count: 3 }
+    { timeSeconds: dataset.timeSeconds, load: loadSeries },
+    { windowSeconds: 2, count: 3, qualifiedMask: airborneMask }
   );
 
+  // No qualifying windows is an answer, not an absence: the card
+  // stays and says so, instead of silently vanishing (or worse,
+  // padding itself with spool-up windows).
+  const escEventsEmpty = el("escEventsEmpty");
+  const escEventsTableWrap = el("escEventsTableWrap");
+
   if (events.length === 0) {
-    loadEventsCard.hidden = true;
+    loadEventsCard.hidden = false;
+    if (escEventsEmpty) escEventsEmpty.hidden = false;
+    if (escEventsTableWrap) escEventsTableWrap.hidden = true;
+    const stories = el("escEventsStories");
+    if (stories) stories.innerHTML = "";
+    const sticksWrap = el("escSticksWrap");
+    if (sticksWrap) sticksWrap.hidden = true;
+    for (const chartId of [
+      "chartLoadOutput",
+      "chartLoadCollective",
+      "chartLoadPower",
+      "chartLoadWatts",
+      "chartLoadTemp"
+    ]) {
+      const chart = el(chartId);
+      if (chart) chart.innerHTML = "";
+    }
   } else {
     loadEventsCard.hidden = false;
+    if (escEventsEmpty) escEventsEmpty.hidden = true;
+    if (escEventsTableWrap) escEventsTableWrap.hidden = false;
 
     // Voltage baseline: the pack's level JUST BEFORE each event.
     // A whole-flight baseline conflates ordinary discharge with

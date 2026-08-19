@@ -1159,7 +1159,13 @@
             output was high: a real limit, a sagging battery, or
             simply a demanding maneuver handled as designed.
           </p>
-          <div class="table-scroll">
+          <p class="chart-empty" id="escEventsEmpty" hidden>
+            No qualifying high-load flight moments in this log —
+            startup, spool-up and ground time are excluded, and the
+            airborne portion never worked the power system hard
+            enough to single a moment out.
+          </p>
+          <div class="table-scroll" id="escEventsTableWrap">
             <table class="history-table" id="escEventsTable"></table>
           </div>
           <div id="escEventsStories"></div>
