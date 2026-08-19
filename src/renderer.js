@@ -1185,7 +1185,13 @@ async function loadFromFile(file) {
   );
   await new Promise((resolve) => setTimeout(resolve, 30));
 
-  analyzeFlight(0);
+  // Multi-flight files open on the LONGEST flight — the same
+  // default Compare Flights uses. A "Save All Logs" file often
+  // starts with a short hover that cannot support half the labs;
+  // analyzing it by position number reads as a broken app.
+  const initialFlight = longestFlightIndex(logData.flights);
+  flightSelect.value = String(initialFlight);
+  analyzeFlight(initialFlight);
 
   // Swap the welcome hero for the working Home layout.
   document.body.classList.add("log-loaded");
@@ -2599,6 +2605,9 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   } else if (dataset?.spectra?.length) {
     filterText =
       "No filter change indicated: the noise picture is clean at this log's resolution.";
+  } else {
+    filterText =
+      "This flight never held steady long enough for a noise reading, so no filter advice can be earned from it. A longer stretch of steady flight gives the spectrum its window; on a multi-flight log, try a longer flight from the picker.";
   }
 
   add(
@@ -3258,6 +3267,15 @@ function renderLabVerdictStories(verdict) {
       element.textContent = `${card.headline}. ${card.detail}`;
       // Same status treatment as every other lab verdict.
       element.className = `lab-story status-text-${card.status}`;
+    } else {
+      // A loaded flight with no verdict for this lab must say so —
+      // leaving the open-a-log placeholder on screen reads as a
+      // broken page, not a capability limit.
+      element.textContent =
+        key === "vibration"
+          ? "This flight offered no usable noise window (too little steady flight), so vibration and filtering cannot be judged from it."
+          : "This flight could not support this analysis.";
+      element.className = "lab-story status-text-insufficient";
     }
   }
 }
