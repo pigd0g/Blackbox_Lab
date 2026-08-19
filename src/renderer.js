@@ -55,7 +55,12 @@ import {
   detectInFlightSamples
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
-import { compareFlights } from "./analysis/compareFlights.js";
+import {
+  compareFlights,
+  extractComparableSetup,
+  diffSetups,
+  chronologicalOrder
+} from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
 import {
   assessLogQuality,
@@ -5207,7 +5212,8 @@ function datasetForComparisonFlight(flightIndex) {
 
     datasets.set(flightIndex, {
       dataset: buildDataset(lines, pidAnalysis),
-      name
+      name,
+      setup: extractComparableSetup(lines)
     });
   }
 
@@ -5256,24 +5262,62 @@ function refreshCompareButtons() {
     : 'No baseline yet: open a log first (Home screen).';
 }
 
-function renderComparison(comparisonDataset, comparisonName) {
+// Which side plays "Before" is decided by the logs' own clocks
+// when both are trustworthy: an unsynced FC logs year-2000 stamps,
+// and those never decide anything. The pilot can overrule with the
+// swap control; a fresh comparison re-derives the automatic choice.
+let compareSwapped = false;
+let lastComparison = null;
+
+function renderComparison(comparisonDataset, comparisonName, opts = {}) {
   if (!currentDataset || !comparisonDataset) {
     return;
   }
 
-  const result = compareFlights(currentDataset, comparisonDataset);
+  const comparisonSetup = opts.setup ?? lastComparison?.setup ?? null;
+  const currentSetup = extractComparableSetup(currentFlightLines);
+  lastComparison = {
+    dataset: comparisonDataset,
+    name: comparisonName,
+    setup: comparisonSetup
+  };
 
-  const beforeIdentity =
+  if (opts.autoOrder !== false) {
+    // "keep": the open log started earlier, so it stays Before.
+    // "swap": the open log started later, so it becomes After.
+    const order = chronologicalOrder(
+      currentSetup?.startIso,
+      comparisonSetup?.startIso
+    );
+    compareSwapped = order === "swap";
+  }
+
+  const openIdentity =
     summaryFileName.textContent +
     (currentFlightSummary ? `, ${currentFlightSummary}` : "");
 
+  const beforeSide = compareSwapped
+    ? { dataset: comparisonDataset, name: comparisonName, setup: comparisonSetup }
+    : { dataset: currentDataset, name: openIdentity, setup: currentSetup };
+  const afterSide = compareSwapped
+    ? { dataset: currentDataset, name: openIdentity, setup: currentSetup }
+    : { dataset: comparisonDataset, name: comparisonName, setup: comparisonSetup };
+
+  const result = compareFlights(beforeSide.dataset, afterSide.dataset, {
+    setupDiff: diffSetups(beforeSide.setup, afterSide.setup)
+  });
+
   compareResultCard.hidden = false;
+  const pairText =
+    `Before: ${beforeSide.name} · After: ${afterSide.name}` +
+    (compareSwapped ? " (ordered by the logs' own start times)" : "");
   if (comparePairInfo) {
-    comparePairInfo.textContent =
-      `Before: ${beforeIdentity} · After: ${comparisonName}`;
+    comparePairInfo.textContent = pairText;
   }
-  compareBaselineInfo.textContent =
-    `Before: ${beforeIdentity} · After: ${comparisonName}`;
+  compareBaselineInfo.textContent = pairText;
+  if (compareSwapButton) {
+    compareSwapButton.hidden = false;
+  }
   compareSummary.textContent = result.summary;
   compareRows.innerHTML = "";
 
@@ -5330,6 +5374,19 @@ function renderComparison(comparisonDataset, comparisonName) {
   }
 }
 
+const compareSwapButton = el("compareSwapButton");
+
+if (compareSwapButton) {
+  compareSwapButton.addEventListener("click", () => {
+    if (!lastComparison) return;
+    compareSwapped = !compareSwapped;
+    renderComparison(lastComparison.dataset, lastComparison.name, {
+      autoOrder: false,
+      setup: lastComparison.setup
+    });
+  });
+}
+
 compareOpenButton.addEventListener("click", () => {
   compareFileInput.click();
 });
@@ -5345,7 +5402,7 @@ compareFileInput.addEventListener("change", async () => {
     const result = await loadComparisonFile(file);
 
     if (result && result.dataset) {
-      renderComparison(result.dataset, result.name);
+      renderComparison(result.dataset, result.name, { setup: result.setup });
     } else {
       compareBaselineInfo.textContent =
         "Could not read flight data from the comparison log.";
@@ -5368,7 +5425,7 @@ compareFlightSelect.addEventListener("change", () => {
   const result = datasetForComparisonFlight(
     Number(compareFlightSelect.value)
   );
-  renderComparison(result.dataset, result.name);
+  renderComparison(result.dataset, result.name, { setup: result.setup });
 });
 
 compareSampleButton.addEventListener("click", async () => {
@@ -5388,7 +5445,7 @@ compareSampleButton.addEventListener("click", async () => {
   const result = await loadComparisonFile(file);
 
   if (result && result.dataset) {
-    renderComparison(result.dataset, result.name);
+    renderComparison(result.dataset, result.name, { setup: result.setup });
   }
 });
 

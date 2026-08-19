@@ -165,7 +165,93 @@ export function sameAircraft(beforeCraft, afterCraft) {
   return { known: true, same: before === after, before, after };
 }
 
-export function compareFlights(baseline, comparison) {
+
+// ------------------------------------------------------
+// Setup comparison — what actually CHANGED between the
+// two flights, read from the logged FC settings.
+// ------------------------------------------------------
+//
+// "Your change helped" presumes there was one change. The BBL
+// header logs the full tuning state, so the pair can be told
+// apart honestly: no change logged, one named change, or several
+// changes that no single verdict may take credit for.
+
+const COMPARABLE_SETUP_KEYS = [
+  "rollPID", "pitchPID", "yawPID", "levelPID", "govPID",
+  "rates_type", "rc_rates", "rates",
+  "yaw_stop_gain", "yaw_precomp", "yaw_inertia_precomp",
+  "hsi_gain", "hsi_limit",
+  "gyro_lpf1_type", "gyro_lpf1_static_hz", "gyro_lpf1_dyn_hz",
+  "gyro_lpf2_type", "gyro_lpf2_static_hz",
+  "gyro_notch_hz", "gyro_notch_cutoff",
+  "gyro_rpm_notch_preset", "gyro_rpm_notch_min_hz",
+  "dterm_lpf1_type", "dterm_lpf1_static_hz",
+  "dterm_lpf2_type", "dterm_lpf2_static_hz"
+];
+
+export function extractComparableSetup(lines) {
+  if (!Array.isArray(lines)) {
+    return null;
+  }
+
+  const settings = {};
+  let startIso = null;
+  let found = 0;
+
+  for (const line of lines) {
+    if (typeof line !== "string" || line[0] !== '"') continue;
+    const match = line.match(/^"([^"]+)","(.*)"$/);
+    if (!match) continue;
+    if (match[1] === "Log start datetime") {
+      startIso = match[2];
+    } else if (COMPARABLE_SETUP_KEYS.includes(match[1])) {
+      settings[match[1]] = match[2];
+      found += 1;
+    }
+  }
+
+  return { settings, startIso, found };
+}
+
+export function diffSetups(before, after) {
+  if (!before || !after || before.found === 0 || after.found === 0) {
+    return null;
+  }
+
+  const changedKeys = [];
+  for (const key of COMPARABLE_SETUP_KEYS) {
+    const a = before.settings[key];
+    const b = after.settings[key];
+    if (a !== undefined && b !== undefined && a !== b) {
+      changedKeys.push(key);
+    }
+  }
+
+  return { changedKeys, changedCount: changedKeys.length };
+}
+
+// A start timestamp is only trustworthy when the FC clock was
+// actually set: unsynced RTCs log epoch-adjacent years. Equal or
+// unusable stamps mean: preserve the user's order, never guess.
+export function chronologicalOrder(startIsoA, startIsoB) {
+  const parse = (iso) => {
+    const ms = Date.parse(iso ?? "");
+    if (!Number.isFinite(ms)) return null;
+    const year = new Date(ms).getUTCFullYear();
+    return year >= 2010 ? ms : null;
+  };
+
+  const a = parse(startIsoA);
+  const b = parse(startIsoB);
+
+  if (a === null || b === null || a === b) {
+    return null;
+  }
+
+  return a <= b ? "keep" : "swap";
+}
+
+export function compareFlights(baseline, comparison, options = {}) {
   const rows = [];
 
   // ---- vibration ----
@@ -489,6 +575,8 @@ export function compareFlights(baseline, comparison) {
   // and solid evidence on both sides. Below that bar the summary
   // stays descriptive and asks for the confirming flight instead of
   // recommending action.
+  const setupDiff = options.setupDiff ?? null;
+
   const headlineEvidence = comparableEvidence(
     baseline.pidConfidence,
     comparison.pidConfidence
@@ -526,7 +614,13 @@ export function compareFlights(baseline, comparison) {
             : "No meaningful change between these two flights."
           : worse === 0 && better > 0
             ? likeForLike
-              ? "Your change helped: nothing got worse. That's a keeper."
+              ? setupDiff && setupDiff.changedCount === 0
+                ? "The later flight measured better with NO logged setup change between the two: the difference reflects conditions or flying, not a tune. Nothing to keep or revert."
+                : setupDiff && setupDiff.changedCount === 1
+                  ? `Your change helped: nothing got worse, and the logs show exactly one setup change (${setupDiff.changedKeys[0]}). That's a keeper.`
+                  : setupDiff && setupDiff.changedCount > 1
+                    ? `The later flight measured better and nothing got worse, but ${setupDiff.changedCount} settings changed between these flights (${setupDiff.changedKeys.slice(0, 3).join(", ")}${setupDiff.changedCount > 3 ? ", …" : ""}). No single change can take the credit: repeat with one change at a time to know which one earned it.`
+                    : "Your change helped: nothing got worse. That's a keeper."
               : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet: ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
             : better === 0 && worse > 0
               ? likeForLike
@@ -546,6 +640,7 @@ export function compareFlights(baseline, comparison) {
     // Whether the pair earned causal language, and if not, why —
     // surfaced so the UI and tests can see the gate, not just its
     // effect on the wording.
-    comparability: { likeForLike, reason: unlikeReason }
+    comparability: { likeForLike, reason: unlikeReason },
+    setupDiff
   };
 }
