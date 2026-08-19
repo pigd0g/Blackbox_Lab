@@ -1936,20 +1936,20 @@ section[data-screen="history"] .flight-picker .secondary-button {
   position: relative;
   border-color: rgba(111, 178, 255, 0.55);
   background: linear-gradient(180deg, #eef5ff, #dbe8fb);
-  /* The severity of the finding this card answers, carried over
-     from Home as the same vertical bar the verdict text wears:
-     the card stays help, the bar keeps the thread. */
-  border-left: 4px solid var(--accent-strong);
 }
 
-.first-step[data-tone="attention"] { border-left-color: var(--attention); }
-.first-step[data-tone="watch"] { border-left-color: var(--watch); }
-.first-step[data-tone="clear"] { border-left-color: var(--good); }
-
+/* The severity of the finding this card answers, carried over
+   from Home as the same slim text-indent bar the verdict story
+   wears: the card stays help, the bar keeps the thread. */
 .first-step .first-step-text {
   color: #223350;
-  font-weight: 600;
+  border-left: 2px solid var(--accent-strong);
+  padding-left: 12px;
 }
+
+.first-step[data-tone="attention"] .first-step-text { border-left-color: var(--attention); }
+.first-step[data-tone="watch"] .first-step-text { border-left-color: var(--watch); }
+.first-step[data-tone="clear"] .first-step-text { border-left-color: var(--good); }
 
 .first-step-label {
   color: #2565b0;
