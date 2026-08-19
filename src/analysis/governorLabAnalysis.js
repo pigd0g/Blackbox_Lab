@@ -476,8 +476,8 @@ export function analyzeGovernorLab({
   const stableDipAdvice = stableDipAtPowerLimit
     ? ` The motor output was at ${Math.round(
         stableDipOutputPercent
-      )}% during that dip: a power-system limit, not a governor-gain problem. See the ESC Lab.`
-    : ` Review the matching event in Governor Lab before changing gain or power-system settings.`;
+      )}% during that dip: a power-system limit, not a governor-gain problem. The ESC Lab carries the full power picture.`
+    : ` The matching event below shows the demand and output of that moment: what was asked, and what the system had left.`;
 
   // Banks worth reporting held for at least ~2 seconds of stable
   // flight; smaller clusters are ramp residue, not a commanded
@@ -527,8 +527,8 @@ export function analyzeGovernorLab({
       }.${
         Number.isFinite(flightDip.outputPercent) &&
         flightDip.outputPercent >= 95
-          ? " The output was already at its ceiling: that dip is a power-system limit, not a governor-gain problem. See the ESC Lab."
-          : " Review the worst-droop event before changing governor gain."
+          ? " The output was already at its ceiling: that dip is a power-system limit, not a governor-gain problem. The ESC Lab carries the full power picture."
+          : " The worst-droop event below shows whether load or gain was the driver."
       }`
     : "";
 
@@ -842,7 +842,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
           Number.isFinite(worstTime)
             ? ` at ${worstTime.toFixed(1)} s`
             : ""
-        }. Worth a look at that moment on the chart.`;
+        }. The chart marks that moment.`;
 
   return {
     score: null,

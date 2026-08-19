@@ -354,11 +354,11 @@ export function analyzeBecLab({
   const story = brownoutTerritory
     ? implausibleBrownout
       ? `The voltage reading dropped into brownout territory (below ${tuning.BROWNOUT_TERRITORY_VOLTS.toFixed(1)} V). Yet the receiver kept reporting a healthy link the whole time, and a real supply collapse trips failsafe.\n\nThat points at the measurement path (the voltage sensor, its wiring or connector) rather than an actual receiver power loss. Worth a physical inspection of that path; do not replace the BEC on this evidence alone.`
-      : `Receiver power entered genuine brownout territory (below ${tuning.BROWNOUT_TERRITORY_VOLTS.toFixed(1)} V): that is where receivers and servos actually let go.\n\nReview the whole receiver power path before the next flight: BEC setting and capability, wiring, connectors, and whether servo load or binding drove the demand.`
+      : `Receiver power entered genuine brownout territory (below ${tuning.BROWNOUT_TERRITORY_VOLTS.toFixed(1)} V): that is where receivers and servos actually let go.\n\nThe usual sources: a BEC set or sized below the servo load, a weak connector or a wiring drop under current, or servo binding driving demand far above normal.`
     : sustainedCount > 0
       ? `Receiver voltage stayed low for an extended stretch ${sustainedCount === 1 ? "once" : `${sustainedCount} times`}: longer than a load transient should last. ${quietDips > 0 ? "At least one dip happened with the servos comparatively quiet, which points at wiring, connectors or the BEC rather than load. " : "The dips line up with servo demand, so start with servo load and mechanical binding. "}The events below name each moment.`
       : dipCount >= tuning.REPEATED_EVENTS
-        ? `Receiver voltage dipped ${dipCount} times this flight. Each recovered, but repetition is the pattern that matters with power: review the events below and check connectors, wiring and servo load before it grows.`
+        ? `Receiver voltage dipped ${dipCount} times this flight. Each recovered, but repetition is the pattern that matters with power. The events below name each moment; dips that return under similar load usually trace to connectors, wiring or servo load.`
         : dipCount > 0
           ? `${dipCount === 1 ? "One brief" : `${dipCount} brief`} voltage dip${dipCount === 1 ? "" : "s"}, recovered normally: ${quietDips === 0 ? "in step with servo demand, which is a power system doing its job under load." : "worth a glance at the event context below."} Nothing here suggests an unstable supply.`
           : `Receiver power held steady across the analyzed in-flight window: ${referenceVolts.toFixed(2)} V typical, never below ${minimumVolts.toFixed(2)} V, total variation ${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V. This is what a healthy BEC looks like. (Startup and shutdown samples sit outside this window: the chart may show lower readings there.)`;
@@ -467,7 +467,7 @@ export function correlateSignalAndPower(signalResult, becResult) {
 
   return {
     overlaps,
-    signalSentence: ` A receiver-power event occurred at the same time (${at}). Review the BEC Lab for the other half of this story.`,
-    becSentence: ` A link event occurred at the same time (${at}). Review the Signal Lab for the other half of this story.`
+    signalSentence: ` A receiver-power event occurred at the same time (${at}). The BEC Lab carries the other half of this story.`,
+    becSentence: ` A link event occurred at the same time (${at}). The Signal Lab carries the other half of this story.`
   };
 }

@@ -331,9 +331,9 @@ export function analyzeSignalLab({
   // ---- the story ----
   const story =
     failsafeEventCount > 0
-      ? `The firmware entered failsafe ${failsafeEventCount === 1 ? "once" : `${failsafeEventCount} times`} in flight: the control link was genuinely interrupted. Review the event times below and check receiver antenna placement, orientation and condition before the next flight.`
+      ? `The firmware entered failsafe ${failsafeEventCount === 1 ? "once" : `${failsafeEventCount} times`} in flight: the control link was genuinely interrupted. The event times below mark each interruption; on the hardware side, antenna placement, orientation and condition are the usual sources.`
       : linkLossEventCount > 0
-        ? `The receiver reported ${linkLossEventCount === 1 ? "a moment" : `${linkLossEventCount} moments`} of lost or invalid signal. The flight continued, but this is the firmware's own account of the link: worth reviewing antennas, wiring and receiver placement.`
+        ? `The receiver reported ${linkLossEventCount === 1 ? "a moment" : `${linkLossEventCount} moments`} of lost or invalid signal. The flight continued, but this is the firmware's own account of the link; antennas, wiring and receiver placement are the usual sources.`
         : deepEventCount > 0
           ? `The link held, but it dipped deeply ${deepEventCount === 1 ? "once" : `${deepEventCount} times`} relative to this flight's typical level. One deep dip can be orientation shading; repeated dips point at antenna placement or damage.`
           : degradedEventCount > 0

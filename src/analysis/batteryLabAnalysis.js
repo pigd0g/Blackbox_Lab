@@ -536,12 +536,12 @@ export function analyzeBatteryLab({
             1
           )} V (${minimumPerCell.toFixed(
             2
-          )} V per cell). Review the matching current and throttle event, but this dip alone does not prove the pack is tired.`
+          )} V per cell). A single dip to this level usually reflects the load of that moment rather than a tired pack: the matching current and throttle event below shows what was being asked of it.`
         : `In-flight voltage reached ${flightMinVolts.toFixed(
             1
           )} V (${minimumPerCell.toFixed(
             2
-          )} V per cell). Review pack condition, connectors and load before another hard flight.`;
+          )} V per cell). That is deep enough to matter: sustained lows at this level usually trace to an aging pack or a soft cell, a connector or wiring drop under current, or more load than the pack's capacity comfortably delivers.`;
 
   const metrics = [
     {

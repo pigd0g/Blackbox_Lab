@@ -383,10 +383,10 @@ export function analyzeEscLab({
             1
           )}%, leaving ${headroomPercent.toFixed(
             1
-          )}% average reserve. Review the highest-load events before changing gearing or headspeed.`
+          )}% average reserve. The highest-load events below show where that reserve went and what was asked in those moments.`
         : `ESC-reported throttle sat at or above 97% for ${flightSaturationPercent.toFixed(
             1
-          )}% of the flight. During those moments the governor had no remaining output authority. Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed.`;
+          )}% of the flight. During those moments the governor had no remaining output authority: the system was giving everything it had, and the flight asked for more than the gearing and headspeed can deliver.`;
 
   const metrics = [
     {
