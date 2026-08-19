@@ -5,6 +5,18 @@
    ====================================================== */
 
 :root {
+  /* ---- type scale (readable-large doctrine) ----
+     Reading text never drops below --font-body; micro sizes are
+     for letterspaced labels and chrome only. Results are always
+     --font-emphasis regardless of whether they are numbers or
+     words: emphasis marks the ROLE, not the string length. */
+  --font-micro: 13px;
+  --font-small: 14px;
+  --font-ui: 15px;
+  --font-body: 16px;
+  --font-emphasis: 17px;
+  --font-title: 20px;
+
   --bg: #070b12;
   --panel: #0d1524;
   --card: #101a2c;
@@ -61,7 +73,7 @@ body {
   font-family: "Segoe UI", system-ui, Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--font-body);
   line-height: 1.55;
 }
 
@@ -101,7 +113,7 @@ body {
   color: var(--ink-soft);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--font-small);
   cursor: pointer;
 }
 
@@ -157,24 +169,24 @@ body.advanced-mode .sidebar-advanced-switch::after {
 
 .credit-line {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--font-small);
 }
 
 .credit-name {
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--font-body);
   font-weight: 650;
 }
 
 .credit-sub {
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: var(--font-micro);
   margin-top: 3px;
 }
 
 .sidebar-version {
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--font-micro);
   margin-top: 8px;
   opacity: 0.8;
 }
@@ -189,12 +201,12 @@ body.advanced-mode .sidebar-advanced-switch::after {
 .tagline {
   color: var(--accent);
   margin: 4px 0 26px 0;
-  font-size: 14px;
+  font-size: var(--font-small);
 }
 
 button {
   font-family: inherit;
-  font-size: 15px;
+  font-size: var(--font-ui);
   cursor: pointer;
 }
 
@@ -243,7 +255,7 @@ button {
 .hero p {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 16px;
+  font-size: var(--font-body);
 }
 
 .card {
@@ -257,7 +269,7 @@ button {
 
 .card h3 {
   margin: 0 0 10px 0;
-  font-size: 18px;
+  font-size: var(--font-title);
 }
 
 .card h4 {
@@ -273,7 +285,7 @@ button {
 .label {
   display: block;
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--font-small);
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 2px;
@@ -292,7 +304,7 @@ pre {
   padding: 12px 14px;
   overflow-x: auto;
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: var(--font-small);
 }
 
 /* ---------------- buttons ---------------- */
@@ -346,13 +358,13 @@ pre {
 .file-status {
   margin-top: 12px;
   color: var(--ink-muted);
-  font-size: 14.5px;
+  font-size: var(--font-ui);
 }
 
 .decode-info {
   margin-top: 8px;
   color: var(--accent);
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 
 /* ---------------- flight picker ---------------- */
@@ -370,7 +382,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   width: 100%;
-  font-size: 15px;
+  font-size: var(--font-ui);
 }
 
 /* ---------------- verdict ---------------- */
@@ -418,7 +430,7 @@ pre {
 
 .verdict-item-status {
   margin-left: auto;
-  font-size: 13px;
+  font-size: var(--font-small);
   letter-spacing: 0.6px;
   text-transform: uppercase;
 }
@@ -428,19 +440,19 @@ pre {
 .status-attention .verdict-item-status { color: var(--attention); }
 
 .verdict-item-headline {
-  font-size: 17px;
+  font-size: var(--font-emphasis);
   font-weight: 650;
   margin-bottom: 4px;
 }
 
 .verdict-item-detail {
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: var(--font-body);
 }
 
 .verdict-item-action {
   margin-top: 8px;
-  font-size: 15px;
+  font-size: var(--font-body);
   color: var(--ink-soft);
   background: rgba(111, 178, 255, 0.07);
   border-left: 2px solid var(--accent);
@@ -460,7 +472,7 @@ pre {
   color: var(--accent);
   border-radius: var(--radius-sm);
   padding: 7px 16px;
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 
 .verdict-jump:hover {
@@ -470,7 +482,7 @@ pre {
 /* ---------------- labs ---------------- */
 
 .lab-story {
-  font-size: 17px;
+  font-size: var(--font-emphasis);
   color: var(--ink);
   white-space: pre-line;
 }
@@ -495,16 +507,11 @@ pre {
 }
 
 .metric-tile strong {
-  font-size: 17px;
+  font-size: var(--font-emphasis);
+  font-weight: 600;
+  line-height: 1.45;
 }
 
-/* Sentence-length tile values: body type, not display type. */
-.metric-tile-prose strong {
-  font-size: 13.5px;
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--ink-soft);
-}
 
 /* ---------------- charts ---------------- */
 
@@ -515,7 +522,7 @@ pre {
 
 .chart-container .u-legend {
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 
 .chart-empty {
@@ -525,7 +532,7 @@ pre {
 
 .chart-hint {
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--font-ui);
   margin: 2px 0 0 0;
 }
 
@@ -535,7 +542,7 @@ details.drilldown summary,
 details.advanced-block summary {
   cursor: pointer;
   color: var(--accent);
-  font-size: 15px;
+  font-size: var(--font-ui);
   padding: 4px 0;
   user-select: none;
 }
@@ -583,7 +590,7 @@ body:not(.advanced-mode) [data-screen]:not(.peek-advanced) .advanced-only {
 
 .peek-advanced-row {
   margin: -6px 0 18px 2px;
-  font-size: 13px;
+  font-size: var(--font-small);
 }
 
 .peek-advanced-link {
@@ -591,7 +598,7 @@ body:not(.advanced-mode) [data-screen]:not(.peek-advanced) .advanced-only {
   border: none;
   padding: 0;
   color: var(--accent);
-  font-size: 13px;
+  font-size: var(--font-small);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -657,7 +664,7 @@ body.advanced-mode .peek-advanced-row {
 
 .compare-row-delta {
   margin-left: auto;
-  font-size: 13px;
+  font-size: var(--font-small);
   text-transform: uppercase;
   letter-spacing: 0.6px;
 }
@@ -669,13 +676,13 @@ body.advanced-mode .peek-advanced-row {
 
 .compare-row-sentence {
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: var(--font-body);
   margin-top: 4px;
 }
 
 .compare-row-values {
   color: var(--ink-muted);
-  font-size: 13.5px;
+  font-size: var(--font-small);
   margin-top: 4px;
 }
 
@@ -688,7 +695,7 @@ body.advanced-mode .peek-advanced-row {
 .history-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 
 .history-table th {
@@ -712,7 +719,7 @@ body.advanced-mode .peek-advanced-row {
   border: none;
   color: var(--ink-muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-small);
   padding: 2px 6px;
   border-radius: 6px;
   line-height: 1;
@@ -737,7 +744,7 @@ body.advanced-mode .peek-advanced-row {
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   background: var(--card-soft);
-  font-size: 14px;
+  font-size: var(--font-ui);
   color: var(--ink-soft);
 }
 
@@ -755,7 +762,7 @@ body.advanced-mode .peek-advanced-row {
 
 .quality-warning {
   margin-top: 10px;
-  font-size: 14.5px;
+  font-size: var(--font-ui);
   color: var(--ink-soft);
   background: rgba(242, 193, 78, 0.08);
   border-left: 2px solid var(--watch);
@@ -767,7 +774,7 @@ body.advanced-mode .peek-advanced-row {
 
 .advisor-recommendation {
   margin-top: 10px;
-  font-size: 15px;
+  font-size: var(--font-body);
   color: var(--ink-soft);
   background: rgba(111, 178, 255, 0.07);
   border-left: 2px solid var(--accent);
@@ -799,7 +806,7 @@ body.advanced-mode .peek-advanced-row {
 
 .contribute-status {
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--font-ui);
   margin: 10px 0 0 0;
   min-height: 18px;
 }
@@ -822,7 +829,7 @@ body.advanced-mode .peek-advanced-row {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-ui);
   resize: vertical;
 }
 
@@ -836,7 +843,7 @@ body.advanced-mode .peek-advanced-row {
 .craft-dump-result {
   margin-top: 10px;
   padding: 10px 14px;
-  font-size: 14.5px;
+  font-size: var(--font-ui);
   color: var(--ink-soft);
   background: rgba(111, 178, 255, 0.07);
   border-left: 2px solid var(--accent);
@@ -880,7 +887,7 @@ body.advanced-mode .peek-advanced-row {
 
 .unlock-card p {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--font-body);
 }
 
 .unlock-card .primary-button {
@@ -895,7 +902,7 @@ body.advanced-mode .peek-advanced-row {
   justify-content: space-between;
   gap: 12px;
   margin-top: 10px;
-  font-size: 15px;
+  font-size: var(--font-body);
 }
 
 .craft-card-row select,
@@ -906,7 +913,7 @@ body.advanced-mode .peek-advanced-row {
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  font-size: 15px;
+  font-size: var(--font-body);
 }
 
 .overlay {
@@ -974,7 +981,7 @@ body.advanced-mode .peek-advanced-row {
 
 .overlay-dialog h3 {
   margin: 0 0 10px 0;
-  font-size: 20px;
+  font-size: var(--font-title);
 }
 
 .overlay-dialog p {
@@ -984,7 +991,7 @@ body.advanced-mode .peek-advanced-row {
 
 .overlay-privacy {
   color: var(--ink-muted);
-  font-size: 15px;
+  font-size: var(--font-ui);
 }
 
 .overlay-actions {
@@ -1017,7 +1024,7 @@ body.advanced-mode .peek-advanced-row {
 
 .overlay-footnote {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--font-micro);
   margin: 12px 0 0 0;
 }
 
@@ -1025,7 +1032,7 @@ body.advanced-mode .peek-advanced-row {
 
 .nav-lock {
   float: right;
-  font-size: 13px;
+  font-size: var(--font-small);
   opacity: 0.85;
 }
 
@@ -1122,7 +1129,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   max-width: 560px;
   margin: 0 auto 26px auto;
   color: var(--ink-soft);
-  font-size: 17px;
+  font-size: var(--font-emphasis);
 }
 
 .welcome-actions {
@@ -1138,7 +1145,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border: none;
   border-radius: var(--radius-sm);
   padding: 15px 30px;
-  font-size: 17px;
+  font-size: var(--font-emphasis);
   font-weight: 700;
   box-shadow: 0 8px 24px rgba(62, 207, 142, 0.28);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
@@ -1155,7 +1162,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 15px 26px;
-  font-size: 16px;
+  font-size: var(--font-body);
 }
 
 .welcome-secondary:hover {
@@ -1165,13 +1172,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .welcome-drop-hint {
   color: var(--ink-muted);
-  font-size: 14.5px;
+  font-size: var(--font-ui);
   margin: 16px 0 0 0;
 }
 
 .welcome-status {
   color: var(--warm);
-  font-size: 15px;
+  font-size: var(--font-ui);
   min-height: 20px;
   margin: 8px 0 0 0;
 }
@@ -1197,12 +1204,12 @@ body:not(.log-loaded) .loaded-only { display: none; }
 
 .welcome-step strong {
   color: var(--ink);
-  font-size: 15.5px;
+  font-size: var(--font-body);
 }
 
 .welcome-step span:last-child {
   color: var(--ink-muted);
-  font-size: 13.5px;
+  font-size: var(--font-small);
 }
 
 .welcome-step-num {
@@ -1212,7 +1219,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--font-micro);
   font-weight: 700;
   color: #06281a;
   background: linear-gradient(180deg, var(--warm), var(--warm-deep));
@@ -1231,7 +1238,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   padding: 11px 16px;
   margin-bottom: 16px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--font-body);
 }
 
 .update-banner[hidden] { display: none; }
@@ -1244,7 +1251,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border-radius: var(--radius-sm);
   padding: 7px 16px;
   font-weight: 650;
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 
 .update-banner-button:hover { background: #55dba0; }
@@ -1253,7 +1260,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   background: transparent;
   border: none;
   color: var(--ink-muted);
-  font-size: 15px;
+  font-size: var(--font-ui);
   padding: 4px 6px;
 }
 
@@ -1276,7 +1283,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   gap: 16px;
   flex-wrap: wrap;
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--font-small);
 }
 
 .chart-stat i {
@@ -1296,7 +1303,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .chart-footer-hint {
   margin-left: auto;
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: var(--font-micro);
   letter-spacing: 0.3px;
   white-space: nowrap;
   opacity: 0.8;
@@ -1324,7 +1331,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   background: none;
   border: none;
   color: var(--ink-muted);
-  font-size: 16px;
+  font-size: var(--font-body);
   line-height: 1;
   padding: 4px;
   cursor: pointer;
@@ -1341,7 +1348,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border: none;
   padding: 0;
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--font-small);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -1402,13 +1409,13 @@ body:not(.log-loaded) .loaded-only { display: none; }
 .verdict-tile-evidence {
   margin-top: auto;
   padding-top: 8px;
-  font-size: 13px;
+  font-size: var(--font-small);
   color: var(--accent);
 }
 
 .verdict-tile-headline {
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: var(--font-ui);
   line-height: 1.4;
 }
 
@@ -1474,18 +1481,18 @@ body:not(.log-loaded) .loaded-only { display: none; }
 }
 
 .event-card-time {
-  font-size: 13px;
+  font-size: var(--font-small);
   color: var(--ink-muted);
 }
 
 .event-card-axis {
-  font-size: 16px;
+  font-size: var(--font-body);
   font-weight: 650;
   color: var(--ink);
 }
 
 .event-card-metric {
-  font-size: 14px;
+  font-size: var(--font-ui);
   margin-top: auto;
 }
 
@@ -1552,7 +1559,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
   margin: 14px 0 10px 0;
   padding: 10px 14px;
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: var(--font-body);
   background: rgba(111, 178, 255, 0.05);
   border-left: 2px solid var(--accent);
   border-radius: 0 8px 8px 0;
@@ -1634,7 +1641,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   max-width: 880px;
   margin: -8px 0 22px 0;
   color: var(--ink-soft);
-  font-size: 14.5px;
+  font-size: var(--font-ui);
 }
 
 .screen-intro > p {
@@ -1648,7 +1655,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .screen-intro summary {
   display: inline-block;
   color: var(--accent);
-  font-size: 13.5px;
+  font-size: var(--font-small);
   cursor: pointer;
   user-select: none;
 }
@@ -1661,7 +1668,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   margin: 8px 0 0 0;
   padding: 10px 14px;
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: var(--font-ui);
   background: rgba(111, 178, 255, 0.05);
   border-left: 2px solid var(--line);
   border-radius: 0 8px 8px 0;
@@ -1691,7 +1698,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 
 .stick-inset-caption {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--font-micro);
   color: var(--ink-muted);
   max-width: 340px;
 }
@@ -1703,7 +1710,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   border: 1px solid var(--line, rgba(127, 183, 255, 0.25));
   border-radius: var(--radius-sm);
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: var(--font-micro);
   padding: 3px 12px;
   cursor: pointer;
 }
@@ -1747,7 +1754,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .replay-play {
   width: 44px;
   height: 36px;
-  font-size: 15px;
+  font-size: var(--font-ui);
   background: rgba(111, 178, 255, 0.12);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1770,12 +1777,12 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .replay-time {
   font-variant-numeric: tabular-nums;
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: var(--font-small);
 }
 
 .replay-readout {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--font-small);
 }
 
 .replay-timeline {
@@ -1832,7 +1839,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 
 .replay-add-label {
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: var(--font-small);
 }
 
 #replayAddGraph {
@@ -1870,7 +1877,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   justify-content: space-between;
   align-items: center;
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: var(--font-small);
   margin-bottom: 4px;
 }
 
@@ -1879,7 +1886,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   border: none;
   color: var(--ink-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-ui);
   padding: 2px 6px;
 }
 
@@ -1940,7 +1947,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
   left: 12px;
   padding: 0 8px;
   background: var(--card);
-  font-size: 11px;
+  font-size: var(--font-micro);
   font-weight: 700;
   letter-spacing: 1.6px;
   text-transform: uppercase;
@@ -1949,7 +1956,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 
 .first-step-text {
   margin: 0;
-  font-size: 14.5px;
+  font-size: var(--font-body);
   color: var(--ink-soft);
   line-height: 1.5;
   white-space: pre-line;
@@ -2021,7 +2028,7 @@ body.log-loaded .loaded-log-field {
 body.log-loaded .loaded-log-field::before {
   content: "Loaded log";
   display: block;
-  font-size: 11.5px;
+  font-size: var(--font-micro);
   font-weight: 700;
   letter-spacing: 1.4px;
   text-transform: uppercase;
@@ -2047,7 +2054,7 @@ body.log-loaded .loaded-log-field .file-status {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   color: var(--ink-soft);
-  font-size: 14.5px;
+  font-size: var(--font-body);
   line-height: 1.5;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
@@ -2093,6 +2100,6 @@ body.log-loaded .loaded-log-field .file-status {
 
 .first-steps-clear {
   color: var(--good);
-  font-size: 15px;
+  font-size: var(--font-body);
   margin: 4px 0 0 0;
 }

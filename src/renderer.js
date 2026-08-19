@@ -3314,10 +3314,7 @@ function renderMetricGrid(element, metrics) {
 
   for (const metric of metrics) {
     const tile = document.createElement("div");
-    // Big bold type is for figures. A sentence-length value reads
-    // as body text, set accordingly.
-    const prose = String(metric.value ?? "").length > 28;
-    tile.className = prose ? "metric-tile metric-tile-prose" : "metric-tile";
+    tile.className = "metric-tile";
     tile.innerHTML = `<span class="label">${metric.label}</span><strong>${metric.value}</strong>`;
     element.appendChild(tile);
   }
