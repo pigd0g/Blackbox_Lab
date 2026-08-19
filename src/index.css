@@ -1903,11 +1903,11 @@ section[data-screen="history"] .flight-picker .secondary-button {
   box-shadow: 0 8px 22px rgba(4, 9, 18, 0.45);
 }
 
-/* ---- the path: verdict → what to try first ----
-   Two columns wide, stacked narrow. The panel is the next step
-   on the journey, so it reads as a signpost: accent spine, a
-   connector chevron pointing from the verdict into it, and a
-   quiet variant for "nothing to change". */
+/* ---- verdict + what to try first ----
+   Two columns wide, stacked narrow: the verdict reads on the
+   left, the recommendation stands beside it as its own card.
+   With no recommendation showing, the verdict takes the full
+   width. */
 .verdict-path {
   display: grid;
   grid-template-columns: 1fr;
@@ -1919,26 +1919,22 @@ section[data-screen="history"] .flight-picker .secondary-button {
 @media (min-width: 980px) {
   .verdict-path {
     grid-template-columns: 5fr 3fr;
+    gap: 22px;
   }
 
-  .first-step::before {
-    content: "";
-    position: absolute;
-    left: -11px;
-    top: 22px;
-    border-top: 8px solid transparent;
-    border-bottom: 8px solid transparent;
-    border-left: 11px solid var(--line);
+  .verdict-path:has(> .first-step[hidden]) {
+    grid-template-columns: 1fr;
   }
 }
 
 .first-step {
   position: relative;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-soft);
   background: var(--card-soft);
-  border-radius: var(--radius-sm);
-  padding: 15px 16px 12px;
+  border-radius: var(--radius);
+  padding: 17px 18px 14px;
   margin-top: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 }
 
 .first-step-label {
