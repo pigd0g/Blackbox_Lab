@@ -2475,6 +2475,17 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   const gentleDemand =
     pidAnalysis?.technicalSummary?.demand?.hoverLevel === true;
 
+  // The deep behavior checks (bounce-back, settling, ringing) can
+  // flag Review while every individual command still tracked in
+  // band. The card must not answer that verdict with an
+  // unqualified all-clear: the honest next step is the
+  // confirming flight.
+  const behaviorReviews = (pidAnalysis?.findings ?? []).filter(
+    (line) =>
+      typeof line === "string" &&
+      / (bounce-back|settling|ringing) status: Review$/.test(line)
+  ).length;
+
   const nonCleanEvents = events
     ? (events.overshoot ?? 0) +
       (events.oscillation ?? 0) +
@@ -2501,9 +2512,11 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     pidRec?.text ??
       (nonCleanEvents > 0
         ? `Of ${events.total} commands, ${eventBits}. That rate is inside the fleet's normal range, so no tuning change is earned from this flight alone.\n\nWhat flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
-        : gentleDemand
-          ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps: clear inputs, held briefly. Then read this page again."
-          : "Nothing to change from this flight: every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
+        : behaviorReviews > 0
+          ? `Nothing to change yet: every measured command tracked inside the fleet's normal range, but ${behaviorReviews} response behavior${behaviorReviews === 1 ? "" : "s"} (bounce-back, settling or ringing) ${behaviorReviews === 1 ? "is" : "are"} flagged for confirmation in the findings below.\n\nFly the same maneuvers again: if the pattern returns, it has earned a closer look.`
+          : gentleDemand
+            ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps: clear inputs, held briefly. Then read this page again."
+            : "Nothing to change from this flight: every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
     statusTone(cardStatus("tuning"))
   );
 
