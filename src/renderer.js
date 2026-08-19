@@ -3557,6 +3557,148 @@ function renderSyncedChart(element, dataset, window, entries, options) {
   return true;
 }
 
+// The audit trail behind the Governor verdict: capability, target
+// provenance, per-bank evidence weight, telemetry availability and
+// precomp counts — the same numbers-on-request the Filter and PID
+// Labs already offer, without touching the pilot-facing story.
+function renderGovernorTechnical(dataset) {
+  const card = el("governorTechnicalCard");
+  const grid = el("governorTechnicalGrid");
+  if (!card || !grid) return;
+
+  const gov = dataset?.labs?.governor;
+  if (!gov || gov.capability === "unavailable") {
+    card.hidden = true;
+    return;
+  }
+
+  const rows = [];
+
+  rows.push({
+    label: "Analysis capability",
+    value:
+      gov.capability === "full"
+        ? "Full — a logged governor target was accepted; droop is target-relative"
+        : "Partial — headspeed stability only; swings are measured against the rotor's own trend"
+  });
+
+  const targetColumns = dataset.findColumnsIn([
+    /governorTarget/i,
+    /govTarget/i
+  ]);
+  rows.push({
+    label: "Governor-target source",
+    value:
+      targetColumns.length === 0
+        ? "no governor-target column in this log"
+        : gov.capability === "full"
+          ? `${targetColumns[0]} — accepted as a rotor-speed target`
+          : `${targetColumns[0]} — present but rejected: it does not behave like a rotor-speed target (constant or passthrough, e.g. DIRECT mode)`
+  });
+
+  for (const bank of gov.perBank ?? []) {
+    rows.push({
+      label: `Bank ${bank.targetRpm} rpm`,
+      value:
+        `avg ${bank.averageRpm} rpm · dip ${Math.round(bank.droopRpm)} rpm` +
+        (Number.isFinite(bank.droopPercent)
+          ? ` (${bank.droopPercent.toFixed(1)}%)`
+          : "") +
+        (Number.isFinite(bank.rmsError)
+          ? ` · RMS ${bank.rmsError.toFixed(1)} rpm`
+          : "") +
+        (Number.isFinite(bank.sampleCount)
+          ? ` · ${bank.sampleCount.toLocaleString()} samples${
+              bank.sampleCount < 2000 ? " — limited evidence" : ""
+            }`
+          : "")
+    });
+  }
+
+  if (gov.capability !== "full" && Number.isFinite(gov.droopRpm)) {
+    rows.push({
+      label: "Largest short-term swing",
+      value:
+        `${gov.droopRpm} rpm` +
+        (Number.isFinite(gov.droopPercent)
+          ? ` (${gov.droopPercent}%)`
+          : "") +
+        (Number.isFinite(gov.droopTimeSeconds)
+          ? ` at ${gov.droopTimeSeconds} s`
+          : "") +
+        " — against the rotor's own trend, not a target"
+    });
+  }
+
+  const stableSamples = gov.stableSampleCount ?? 0;
+  rows.push({
+    label: "Stable samples used",
+    value: stableSamples.toLocaleString()
+  });
+  rows.push({
+    label: "Evidence confidence",
+    value:
+      stableSamples >= 5000
+        ? "High — a long stable-flight window backs these numbers"
+        : stableSamples >= 1500
+          ? "Moderate — a usable but not generous stable window"
+          : "Low — short stable window; treat conclusions as provisional"
+  });
+
+  const excursions = dataset.governorEvents?.summary;
+  if (excursions) {
+    rows.push({
+      label: "Headspeed excursions",
+      value:
+        excursions.totalFound === 0
+          ? "none detected in stable flight"
+          : `${excursions.totalFound} (${excursions.under} under · ${excursions.over} over)`
+    });
+  }
+
+  rows.push({
+    label: "ESC output telemetry",
+    value:
+      dataset.findColumnsIn([/^escThr/i, /throttle/i]).length > 0
+        ? "available — significant dips carry output/headroom context"
+        : "not logged — output/headroom context unavailable for events"
+  });
+
+  const governorTerms = ["govP", "govI", "govD", "govF"].filter(
+    (name) =>
+      dataset.findColumnsIn([new RegExp(`^${name}`, "i")]).length > 0
+  );
+  rows.push({
+    label: "Governor P/I/D/F telemetry",
+    value: governorTerms.length > 0 ? governorTerms.join(", ") : "not logged"
+  });
+
+  const precompGovernor = dataset.precomp?.governor;
+  if (precompGovernor) {
+    rows.push({
+      label: "Collective precomp evidence",
+      value:
+        `${precompGovernor.riseCount ?? 0} rise / ${precompGovernor.dropCount ?? 0} drop transients` +
+        (Number.isFinite(precompGovernor.riseDroopPercent)
+          ? ` — rise droop ${precompGovernor.riseDroopPercent}%`
+          : "") +
+        (Number.isFinite(precompGovernor.dropOvershootPercent)
+          ? `, drop overspeed ${precompGovernor.dropOvershootPercent}%`
+          : "")
+    });
+  }
+  const precompTail = dataset.precomp?.tail;
+  if (precompTail && Number.isFinite(precompTail.kickRatio)) {
+    rows.push({
+      label: "Tail-kick evidence",
+      value: `${precompTail.kickRatio}× the tail's baseline error on collective moves`
+    });
+  }
+
+  card.hidden = false;
+  renderMetricGrid(grid, rows);
+}
+
 function renderGovernorEvidence(dataset) {
   const droopTime = dataset.labs.governor?.droopTimeSeconds;
 
@@ -4293,6 +4435,7 @@ function renderAllCharts(dataset) {
   }
 
   renderGovernorEvidence(dataset);
+  renderGovernorTechnical(dataset);
   renderEscEvidence(dataset);
 }
 

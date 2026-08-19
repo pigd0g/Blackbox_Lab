@@ -489,6 +489,7 @@ export function analyzeGovernorLab({
       const bankTarget = bank.targetSum / bank.count;
       return {
         targetRpm: Math.round(bankTarget),
+        sampleCount: bank.count,
         averageRpm: Math.round(bank.actualSum / bank.count),
         droopRpm: Math.round(bank.maxDroop * 10) / 10,
         droopPercent:
