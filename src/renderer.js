@@ -4764,6 +4764,11 @@ function renderFilterProfileBreakdown(dataset) {
 let currentDataset = null;
 let currentFlightLines = null;
 let currentFlightSummary = "";
+// Kept for the exported report: the report's Lab Details must carry
+// the same Filter/PID conclusions the app shows, not just the labs
+// that happen to share the lab result shape.
+let currentFilterAnalysisResult = null;
+let currentPidAnalysisResult = null;
 
 function analyzeFlight(flightIndex) {
   const flight = loadedLog.flights[flightIndex];
@@ -4818,6 +4823,9 @@ function analyzeFlight(flightIndex) {
     pidAnalysisRecommendations,
     rawPreview
   });
+
+  currentFilterAnalysisResult = filterAnalysis ?? null;
+  currentPidAnalysisResult = pidAnalysis ?? null;
 
   currentDataset = buildDataset(lines, pidAnalysis);
   currentPilotInput = currentDataset
@@ -4990,6 +4998,86 @@ function analyzeFlight(flightIndex) {
 // 07. REPORT BUILDER
 // ======================================================
 
+// The exported report's Lab Details renderer expects the lab shape
+// ({status, story, metrics}). Filter and PID analyses carry richer
+// shapes of their own — these adapters translate them so the report
+// tells the same story as the app: score, confidence, Review
+// conditions and the gated top recommendation all survive export.
+function pidLabForReport(analysis) {
+  if (!analysis || !Array.isArray(analysis.summary)) return null;
+
+  const recommendations = analysis.recommendations ?? [];
+
+  return {
+    status:
+      analysis.overallStatus === "Clear"
+        ? "good"
+        : analysis.overallStatus === "Review"
+          ? "watch"
+          : "insufficient",
+    story: analysis.summary.join(" "),
+    metrics: [
+      Number.isFinite(analysis.score) && {
+        label: "Tracking score",
+        value: `${analysis.score}/100`
+      },
+      analysis.confidence?.level && {
+        label: "Confidence",
+        value:
+          `${analysis.confidence.level}` +
+          (analysis.confidence.demand === "gentle"
+            ? " — gentle flight demand"
+            : "")
+      },
+      { label: "Overall status", value: analysis.overallStatus ?? "—" },
+      recommendations.length > 0 && {
+        label: "Top recommendation",
+        value:
+          recommendations[0] +
+          (recommendations.length > 1
+            ? ` (+${recommendations.length - 1} more in the app)`
+            : "")
+      }
+    ].filter(Boolean)
+  };
+}
+
+function filterLabForReport(analysis) {
+  if (!analysis) return null;
+
+  const recommendations = analysis.recommendations ?? [];
+
+  return {
+    status: !Number.isFinite(analysis.score)
+      ? "insufficient"
+      : analysis.severity === "info"
+        ? "good"
+        : "watch",
+    story:
+      (analysis.summaryFindings ?? []).join(" ") ||
+      String(analysis.status ?? ""),
+    metrics: [
+      Number.isFinite(analysis.score) && {
+        label: "Filter score",
+        value: `${analysis.score}/100`
+      },
+      analysis.confidence?.label && {
+        label: "Confidence",
+        value: `${analysis.confidence.label} (${analysis.confidence.score}/100)`
+      },
+      { label: "Status", value: String(analysis.status ?? "—") },
+      recommendations.length > 0 && {
+        label: "Key recommendation",
+        value:
+          recommendations[0] +
+          (recommendations.length > 1
+            ? ` (+${recommendations.length - 1} more in the app)`
+            : "")
+      }
+    ].filter(Boolean)
+  };
+}
+
 buildReportButton.addEventListener("click", () => {
   if (!currentDataset || !currentFlightLines) {
     return;
@@ -5011,6 +5099,8 @@ buildReportButton.addEventListener("click", () => {
     governorEvents: currentDataset.governorEvents,
     precomp: currentDataset.precomp,
     labs: [
+      { title: "Filter Lab", analysis: filterLabForReport(currentFilterAnalysisResult) },
+      { title: "PID Lab", analysis: pidLabForReport(currentPidAnalysisResult) },
       { title: "Governor Lab", analysis: currentDataset.labs.governor },
       { title: "ESC Lab", analysis: currentDataset.labs.esc },
       { title: "Battery Lab", analysis: currentDataset.labs.battery },
