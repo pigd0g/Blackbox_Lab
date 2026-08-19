@@ -1928,22 +1928,17 @@ section[data-screen="history"] .flight-picker .secondary-button {
   }
 }
 
-/* Card chrome comes from .card; this only keeps the floating
-   label anchored and the tone washes effective. */
+/* The recommendation card is HELP, whatever the severity of the
+   finding it answers: it always wears the guidance accent, never
+   the problem's colors. Severity lives on the verdict and the
+   Home list. */
 .first-step {
   position: relative;
+  border-color: rgba(111, 178, 255, 0.32);
+  background: linear-gradient(180deg, rgba(111, 178, 255, 0.07), var(--card) 60%);
 }
 
 .first-step-label {
-  position: absolute;
-  top: -8px;
-  left: 16px;
-  padding: 0 8px;
-  background: var(--bg);
-  font-size: var(--font-micro);
-  font-weight: 700;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
   color: var(--accent);
 }
 
@@ -1955,57 +1950,6 @@ section[data-screen="history"] .flight-picker .secondary-button {
   white-space: pre-line;
 }
 
-.first-step[data-tone="clear"] {
-  border-color: rgba(62, 207, 142, 0.35);
-  background: rgba(62, 207, 142, 0.05);
-}
-
-.first-step[data-tone="clear"] .first-step-label {
-  color: var(--good);
-}
-
-.first-step[data-tone="clear"]::before {
-  border-left-color: rgba(62, 207, 142, 0.55);
-}
-
-.first-step[data-tone="attention"] {
-  border-color: rgba(255, 138, 107, 0.4);
-  background: rgba(255, 138, 107, 0.06);
-}
-
-.first-step[data-tone="attention"] .first-step-label {
-  color: var(--attention);
-}
-
-.first-step[data-tone="attention"]::before {
-  border-left-color: rgba(255, 138, 107, 0.6);
-}
-
-.first-step[data-tone="info"] {
-  border-color: rgba(111, 178, 255, 0.4);
-  background: rgba(111, 178, 255, 0.05);
-}
-
-.first-step[data-tone="info"] .first-step-label {
-  color: var(--accent);
-}
-
-.first-step[data-tone="info"]::before {
-  border-left-color: rgba(111, 178, 255, 0.6);
-}
-
-.first-step[data-tone="watch"] {
-  border-color: rgba(242, 193, 78, 0.38);
-  background: rgba(242, 193, 78, 0.05);
-}
-
-.first-step[data-tone="watch"] .first-step-label {
-  color: var(--watch);
-}
-
-.first-step[data-tone="watch"]::before {
-  border-left-color: rgba(242, 193, 78, 0.55);
-}
 
 /* ---- loaded-log field on Start Here ----
    Invisible before a log; once one is loaded it becomes a small
