@@ -361,7 +361,7 @@ export function analyzeBecLab({
         ? `Receiver voltage dipped ${dipCount} times this flight. Each recovered, but repetition is the pattern that matters with power — review the events below and check connectors, wiring and servo load before it grows.`
         : dipCount > 0
           ? `${dipCount === 1 ? "One brief" : `${dipCount} brief`} voltage dip${dipCount === 1 ? "" : "s"}, recovered normally — ${quietDips === 0 ? "in step with servo demand, which is a power system doing its job under load." : "worth a glance at the event context below."} Nothing here suggests an unstable supply.`
-          : `Receiver power held steady the whole flight: ${referenceVolts.toFixed(2)} V typical, never below ${minimumVolts.toFixed(2)} V, total variation ${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V. This is what a healthy BEC looks like.`;
+          : `Receiver power held steady across the analyzed in-flight window: ${referenceVolts.toFixed(2)} V typical, never below ${minimumVolts.toFixed(2)} V, total variation ${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V. This is what a healthy BEC looks like. (Startup and shutdown samples sit outside this window — the chart may show lower readings there.)`;
 
   const metrics = [
     {
