@@ -167,6 +167,10 @@ export const TRACKING_SCORE_TUNING = {
 
   MAX_TRACKING_DEDUCTION: 50,
 
+  // Command-balance deduction scales with severity: an axis just
+  // past its bar loses the minimum, an axis pinned at extreme
+  // I-dominance loses the full per-axis amount.
+  BALANCE_DEDUCTION_MIN: 4,
   BALANCE_DEDUCTION_PER_AXIS: 10,
   MAX_BALANCE_DEDUCTION: 25,
 
@@ -178,9 +182,33 @@ export const TRACKING_SCORE_TUNING = {
   REAL_WORLD_MARGIN: 2
 };
 
+// ------------------------------------------------------
+// Command-balance bars, per axis
+//
+// Re-anchored 2026-08-21 on the aligned measurement (the
+// command windows read the correct sample rows since the
+// saturation-scope fix) across all 714 corpus flights, 536
+// qualifying highest-error-axis rows. On true data the
+// fleet's NORMAL state is I-doing-most-of-the-work during
+// commands (median I-share: Roll 82 %, Pitch 65 %, Yaw
+// 69 % — with per-axis spreads too different for one global
+// bar). Bars sit at each axis's ~p85 I-share and ~p15
+// support, so the flag marks the genuine tail: expected
+// row rates Roll 13.7 %, Pitch 13.0 %, Yaw 5.6 %, roughly
+// one flight in ten fleet-wide (was 41 % at the old flat
+// 65/35 bars, which had been calibrated against the
+// misaligned windows).
+// ------------------------------------------------------
+export const COMMAND_BALANCE_BARS = {
+  Roll: { iPercent: 92, supportPercent: 8 },
+  Pitch: { iPercent: 84, supportPercent: 10 },
+  Yaw: { iPercent: 81, supportPercent: 20 }
+};
+
 export function computeTrackingScore({
   relativeError = null,
   commandBalanceReviewCount = 0,
+  commandBalanceSeverities = null,
   saturationReviewCount = 0
 } = {}) {
   const tuning = TRACKING_SCORE_TUNING;
@@ -197,9 +225,25 @@ export function computeTrackingScore({
       ) * tuning.MAX_TRACKING_DEDUCTION
     : 0;
 
+  // Severity-aware when severities are supplied: each flagged axis
+  // deducts between the minimum (just past its bar) and the full
+  // per-axis amount (extreme I-dominance). The count-based path
+  // stays as the fallback for callers without severities.
   const balanceDeduction = Math.min(
     tuning.MAX_BALANCE_DEDUCTION,
-    commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
+    Array.isArray(commandBalanceSeverities)
+      ? commandBalanceSeverities.reduce(
+          (sum, severity) =>
+            sum +
+            Math.round(
+              tuning.BALANCE_DEDUCTION_MIN +
+                (tuning.BALANCE_DEDUCTION_PER_AXIS -
+                  tuning.BALANCE_DEDUCTION_MIN) *
+                  Math.min(1, Math.max(0, severity))
+            ),
+          0
+        )
+      : commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
   );
 
   const saturationDeduction = Math.min(
@@ -2378,13 +2422,22 @@ const confidenceLevel =
         highestTrackingErrorAxis?.axis ===
         axisResult.axis;
 
+      // Per-axis bars (COMMAND_BALANCE_BARS): fleet-calibrated on
+      // the aligned measurement — the axes' I-share distributions
+      // differ too much for one global bar.
+      const bars =
+        COMMAND_BALANCE_BARS[axisResult.axis] ?? {
+          iPercent: 92,
+          supportPercent: 8
+        };
+
       const iRemainsDominantDuringCommands =
-        axisResult.iPercent >= 65;
+        axisResult.iPercent >= bars.iPercent;
 
       const commandSupportIsLow =
         axisResult.pPercent +
           axisResult.feedforwardPercent <
-        35;
+        bars.supportPercent;
 
       const status =
   !hasUsableContributionData
@@ -2395,6 +2448,21 @@ const confidenceLevel =
       ? "Review"
       : "Clear";
 
+      // How far past the bar, 0..1 — feeds the severity-scaled
+      // deduction: just-past loses the minimum, pinned-at-extreme
+      // loses the full per-axis amount.
+      const balanceSeverity =
+        status === "Review"
+          ? Math.min(
+              1,
+              Math.max(
+                0,
+                (axisResult.iPercent - bars.iPercent) /
+                  (100 - bars.iPercent)
+              )
+            )
+          : 0;
+
       return {
         axis: axisResult.axis,
         status,
@@ -2402,7 +2470,8 @@ const confidenceLevel =
           axisResult.commandWindowCount,
         isHighestTrackingErrorAxis,
         iRemainsDominantDuringCommands,
-        commandSupportIsLow
+        commandSupportIsLow,
+        balanceSeverity
       };
     }
   );
@@ -2465,6 +2534,9 @@ const pidOverallStatus =
       const scoreParts = computeTrackingScore({
   relativeError: meanRelativeTrackingError,
   commandBalanceReviewCount: commandBalanceReviewAxes.length,
+  commandBalanceSeverities: commandBalanceReviewAxes.map(
+    (axisResult) => axisResult.balanceSeverity ?? 0
+  ),
   saturationReviewCount: saturationReviewTerms.length
 });
 
@@ -2532,6 +2604,30 @@ const pidScoreExplanation = [
     commandBalanceReviewAxes.map(
       (axisResult) => axisResult.axis
     ),
+  // The raw command-window term shares behind the balance verdict,
+  // exported structurally: the severity-aware deduction reads them,
+  // and fleet calibration measures its bars against them instead of
+  // against the verdict they produce.
+  commandBalance: pidCommandTermContributionPercentages.map(
+    (axisResult) => ({
+      axis: axisResult.axis,
+      commandWindowCount: axisResult.commandWindowCount,
+      iPercent: Number.isFinite(axisResult.iPercent)
+        ? Math.round(axisResult.iPercent * 10) / 10
+        : null,
+      pPercent: Number.isFinite(axisResult.pPercent)
+        ? Math.round(axisResult.pPercent * 10) / 10
+        : null,
+      dPercent: Number.isFinite(axisResult.dPercent)
+        ? Math.round(axisResult.dPercent * 10) / 10
+        : null,
+      feedforwardPercent: Number.isFinite(axisResult.feedforwardPercent)
+        ? Math.round(axisResult.feedforwardPercent * 10) / 10
+        : null,
+      isHighestTrackingErrorAxis:
+        highestTrackingErrorAxis?.axis === axisResult.axis
+    })
+  ),
   saturationReviewTermCount:
     saturationReviewTerms.length,
     axisStatus: axisNames.map((axis) => {
@@ -3352,7 +3448,7 @@ highestTrackingErrorAxis
 ...pidCommandBalanceAssessment.map(
   (axisResult) =>
     axisResult.status === "Review"
-      ? `${axisResult.axis} command-balance finding: I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Review setpoint, axis error, feedforward, and I behavior together before changing any PID value.`
+      ? `${axisResult.axis} command-balance finding: I remains dominant during command events while P plus feedforward support stays below the axis's fleet-calibrated bar, and this axis also has the highest tracking error. Review setpoint, axis error, feedforward, and I behavior together before changing any PID value.`
       : axisResult.status === "Clear"
         ? `${axisResult.axis} command-balance finding: No combined tracking-error and command-support concern was identified.`
         : `${axisResult.axis} command-balance finding: More usable command windows are required before evaluating PID-term balance.`
@@ -3585,7 +3681,7 @@ highestTrackingErrorAxis
   )
   .map(
     (axisResult) =>
-      `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
+      `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below the axis's fleet-calibrated bar, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
   ),
  commandBalanceReviewAxes.length === 0 &&
 saturationReviewTerms.length === 0 &&
