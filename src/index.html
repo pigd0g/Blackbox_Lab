@@ -192,6 +192,49 @@
           <div id="firstStepsList"></div>
         </section>
 
+        <!-- The change pack: the earned tuning changes this flight
+             supports, bundled so each is verified by its own
+             instrument on the next log. At most one change per
+             interference group, capped while the doctrine earns
+             its record. -->
+        <section class="card" id="packCard" hidden>
+          <h3>This Flight's Change Pack</h3>
+          <p class="chart-hint" id="packIntro"></p>
+          <div id="packMembers"></div>
+          <p class="chart-hint" id="packHeadspeedNote" hidden>
+            A governor change rides in this pack: the verifying
+            flight only counts for the other changes if headspeed
+            holds as tightly as before — the evaluation checks this.
+          </p>
+          <details class="fold" id="packSnippetFold" hidden>
+            <summary>Apply as CLI snippet</summary>
+            <p class="chart-hint">
+              Paste into the Rotorflight CLI on the bench — never
+              while armed — after saving a dump. First flight after:
+              hover check before any full maneuver.
+            </p>
+            <pre class="pack-snippet" id="packSnippetText"></pre>
+            <button type="button" class="ghost" id="packCopyButton">Copy snippet</button>
+          </details>
+          <details class="fold" id="packRevertFold" hidden>
+            <summary>Revert snippet (the guaranteed undo)</summary>
+            <pre class="pack-snippet" id="packRevertText"></pre>
+            <button type="button" class="ghost" id="packRevertCopyButton">Copy revert</button>
+          </details>
+          <details class="fold advanced-block" id="packQueuedFold" hidden>
+            <summary>Waiting for the next pack</summary>
+            <div id="packQueuedList"></div>
+          </details>
+          <div id="packPrescriptions" hidden>
+            <h4>Evidence flights wanted</h4>
+            <p class="chart-hint">
+              These patterns are one good evidence flight away from a
+              decision — all of them fit in a single flight.
+            </p>
+            <ul id="packPrescriptionList"></ul>
+          </div>
+        </section>
+
         <!-- The unlock nudge: shown while this craft has no CLI
              dump attached yet. One click opens the craft panel. -->
         <section class="card unlock-card" id="unlockDumpCard" hidden>

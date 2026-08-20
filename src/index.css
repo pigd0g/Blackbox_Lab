@@ -2053,3 +2053,31 @@ body.log-loaded .loaded-log-field .file-status {
   font-size: var(--font-body);
   margin: 4px 0 0 0;
 }
+
+/* ---- change pack card ---- */
+.pack-member {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--card-soft);
+}
+.pack-member-head {
+  font-size: var(--font-ui);
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.pack-member-head code {
+  font-size: var(--font-small);
+}
+.pack-snippet {
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: var(--font-small);
+  color: var(--ink-soft);
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+}

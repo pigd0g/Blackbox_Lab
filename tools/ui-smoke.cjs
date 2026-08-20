@@ -527,6 +527,29 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("lab verdicts ok: filter + pid filled, power card on Home");
 
+  // ---- change pack card: present and in a sane state ----
+  const packState = await window.evaluate(() => {
+    const card = document.getElementById("packCard");
+    if (!card) return { exists: false };
+    return {
+      exists: true,
+      hidden: card.hidden,
+      intro: document.getElementById("packIntro")?.textContent ?? "",
+      members: document.querySelectorAll("#packMembers .pack-member").length,
+      prescriptions: document.querySelectorAll("#packPrescriptionList li").length
+    };
+  });
+  if (!packState.exists) throw new Error("packCard missing from Home");
+  if (!packState.hidden && !packState.intro)
+    throw new Error("packCard visible without an intro sentence");
+  console.log(
+    `change pack card ok: ${
+      packState.hidden
+        ? "hidden (nothing earned, nothing to confirm)"
+        : `${packState.members} member(s), ${packState.prescriptions} prescription(s)`
+    }`
+  );
+
   // ---- advanced re-triage: numbers hidden for beginners ----
   const gateProbe = () =>
     window.evaluate(() => {

@@ -116,6 +116,8 @@ import {
   governorEventWindow
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
+import { buildPack } from "./analysis/packBuilder.js";
+import { packSnippet, revertSnippet } from "./analysis/packSnippet.js";
 import {
   analyzeServoLimits,
   servoDisplayName
@@ -2478,6 +2480,110 @@ function statusTone(status) {
       ? "watch"
       : "clear";
 }
+
+// The change pack: the earned changes this flight supports, bundled
+// so each is verified by its own instrument next flight. Hidden when
+// the flight earned nothing and asks for no evidence — What To Do
+// First already tells that story.
+function renderPackCard(dataset, nextSteps, firmwareRevision) {
+  const card = el("packCard");
+  if (!card) return;
+
+  const rawCraftName = dataset?.craftName;
+  const craftName =
+    !rawCraftName || rawCraftName === "Not found"
+      ? "Unknown craft"
+      : rawCraftName;
+  const dump = getCraftDump(localStorage, craftName);
+
+  const pack = buildPack({
+    recommendations: nextSteps,
+    craftDumpParsed: dump?.parsed ?? null,
+    firmwareRevision: firmwareRevision ?? ""
+  });
+
+  const show = pack.members.length > 0 || pack.prescriptions.length > 0;
+  card.hidden = !show;
+  if (!show) return;
+
+  el("packIntro").textContent =
+    pack.members.length > 0
+      ? `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} earned by this flight — each verified by its own instrument on the next log. Change nothing else alongside.`
+      : "No change is earned yet, but the evidence flights below would settle the open questions.";
+
+  const members = el("packMembers");
+  members.innerHTML = "";
+  for (const member of pack.members) {
+    const row = document.createElement("div");
+    row.className = "pack-member";
+    const change = Number.isFinite(member.to)
+      ? `${member.from} \u2192 ${member.to}`
+      : `one ${member.magnitudeClass} ${member.direction}`;
+    const note = member.numericNote
+      ? `<div class="chart-hint">${member.numericNote}</div>`
+      : "";
+    row.innerHTML = `
+      <div class="pack-member-head"><code>${member.setting}</code> <b>${change}</b></div>
+      <div class="chart-hint">${member.card?.meaning ?? ""}</div>
+      <div class="chart-hint">Why: ${member.finding ?? ""}</div>
+      <div class="chart-hint">Verified by: ${member.instrument ?? "its lab"}${
+        member.expectedResult ? ` \u00b7 expect: ${member.expectedResult}` : ""
+      }</div>
+      ${note}`;
+    members.appendChild(row);
+  }
+
+  el("packHeadspeedNote").hidden = !pack.requiresHeadspeedHold;
+
+  const forward = packSnippet(pack);
+  const fold = el("packSnippetFold");
+  fold.hidden = !forward;
+  if (forward) el("packSnippetText").textContent = forward;
+
+  const revert = revertSnippet(pack);
+  const revertFold = el("packRevertFold");
+  revertFold.hidden = !revert;
+  if (revert) el("packRevertText").textContent = revert.text;
+
+  const queuedFold = el("packQueuedFold");
+  queuedFold.hidden = pack.queued.length === 0;
+  if (pack.queued.length > 0) {
+    el("packQueuedList").innerHTML = pack.queued
+      .map(
+        (entry) =>
+          `<p class="chart-hint"><code>${entry.rec.suggestion?.family ?? ""}</code> \u2014 ${entry.reason}</p>`
+      )
+      .join("");
+  }
+
+  const prescriptions = el("packPrescriptions");
+  prescriptions.hidden = pack.prescriptions.length === 0;
+  if (pack.prescriptions.length > 0) {
+    el("packPrescriptionList").innerHTML = pack.prescriptions
+      .map((text) => `<li>${text}</li>`)
+      .join("");
+  }
+}
+
+const copyPackText = (sourceId, button) => {
+  const text = el(sourceId)?.textContent ?? "";
+  if (!text) return;
+  const done = () => {
+    const previous = button.textContent;
+    button.textContent = "Copied";
+    setTimeout(() => { button.textContent = previous; }, 1400);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {});
+  }
+};
+
+el("packCopyButton")?.addEventListener("click", (event) =>
+  copyPackText("packSnippetText", event.currentTarget)
+);
+el("packRevertCopyButton")?.addEventListener("click", (event) =>
+  copyPackText("packRevertText", event.currentTarget)
+);
 
 function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   const cardStatus = (key) =>
@@ -4999,6 +5105,11 @@ function analyzeFlight(flightIndex) {
   });
   currentRecommendations = nextSteps;
   renderFirstSteps(currentDataset, nextSteps, pidAnalysis);
+  renderPackCard(
+    currentDataset,
+    nextSteps,
+    getMetadataValue(currentFlightLines, "Firmware revision")
+  );
   renderNextSteps("pidNextCard", "pidNextList", nextSteps.pid);
   renderNextSteps(
     "governorNextCard",
