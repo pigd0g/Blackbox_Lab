@@ -173,6 +173,28 @@ export function findHighestLoadEvents(
     (first, second) => second.averageLoad - first.averageLoad
   );
 
+  // A load series that does not vary has no highest moment: when
+  // every window ties (a constant-throttle DIRECT flight logs the
+  // same output for the whole flight), ranking the ties just crowns
+  // the earliest windows. "No distinguished load event" is the
+  // honest answer, and the card's empty state says exactly that.
+  // The bar is deliberately at dead-flat only — a governor working
+  // under 3D load varies by single percent and those moments are
+  // real.
+  if (candidates.length >= 5) {
+    const bestAverage = candidates[0].averageLoad;
+    const medianAverage =
+      candidates[Math.floor(candidates.length / 2)].averageLoad;
+
+    if (
+      Number.isFinite(bestAverage) &&
+      Number.isFinite(medianAverage) &&
+      bestAverage <= medianAverage * 1.005
+    ) {
+      return [];
+    }
+  }
+
   const events = [];
 
   for (const candidate of candidates) {

@@ -760,6 +760,67 @@ export function detectInFlightSamples({ timeSeconds, headspeed }) {
   return inFlightIndexes.length >= 100 ? inFlightIndexes : null;
 }
 
+// The flight envelope for LOAD-event selection: from the moment the
+// machine first settles into sustained stable flight to the last
+// stable sample. Spool-up crosses every rotor-speed threshold on its
+// way in, and the governor's first settling seconds run an elevated
+// output plateau that outranks any real flight moment — both live
+// before the first sustained stable segment, so the envelope starts
+// there. It deliberately does NOT require per-sample stability inside
+// the flight: a hard collective pump droops the rotor out of the
+// stable mask, and the hardest load moments are exactly what the
+// selection exists to find. A short stable brush (a settling
+// transient touching a bank for a second) is not "settled" — the
+// first segment must be sustained.
+export function qualifiedLoadEnvelope({
+  timeSeconds,
+  headspeed,
+  governorTarget
+}) {
+  const phase = detectStableFlightPhase({
+    timeSeconds,
+    headspeed: headspeed ?? [],
+    governorTarget: governorTarget ?? []
+  });
+
+  const segments = phase?.segments ?? [];
+  const stableIndexes = phase?.stableIndexes ?? [];
+
+  if (segments.length === 0 || stableIndexes.length === 0) {
+    return null;
+  }
+
+  const minimumSustainedSeconds = 5;
+
+  const sustained = segments.find((segment) => {
+    if (
+      !Number.isInteger(segment.startIndex) ||
+      !(segment.sampleCount > 1)
+    ) {
+      return false;
+    }
+
+    const first = timeSeconds[segment.startIndex];
+    const last =
+      timeSeconds[segment.startIndex + segment.sampleCount - 1];
+
+    return (
+      Number.isFinite(first) &&
+      Number.isFinite(last) &&
+      last - first >= minimumSustainedSeconds
+    );
+  });
+
+  if (!sustained) {
+    return null;
+  }
+
+  return {
+    startIndex: sustained.startIndex,
+    endIndex: stableIndexes[stableIndexes.length - 1]
+  };
+}
+
 // A logged governor target is only a TARGET if the rotor plausibly
 // chased it. Rotorflight's DIRECT mode (and FUNCTION throttle) logs
 // a govTarget column that is not a rotor-speed target at all — on
