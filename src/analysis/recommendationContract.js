@@ -90,7 +90,7 @@ export function finalizeRecommendation(rec, { domain = "tuning" } = {}) {
   rec.level = level;
   rec.domain = domain;
   rec.blockedBy = blockedBy;
-  rec.instrument = instrumentFor(rec);
+  rec.instrument = rec.instrument ?? instrumentFor(rec);
 
   if (level === "confirm" && !rec.nextManeuver) {
     rec.nextManeuver =
@@ -110,6 +110,60 @@ export function finalizeRecommendations(nextSteps) {
     finalizeRecommendation(rec, { domain: "tuning" });
   }
   return nextSteps;
+}
+
+// Response-behavior Reviews (bounce-back, settling, ringing) can
+// exist without any engine recommendation: the pattern is real but
+// below the recommendation gates. The exported report already
+// prescribes the evidence flight for them — the contract must say
+// the same thing, or the pack card and the report disagree. One
+// confirm entry per axis with a Review and no engine entry.
+const CHECK_INSTRUMENT = {
+  "bounce-back": "overshoot",
+  settling: "settle",
+  ringing: "settle"
+};
+
+export function confirmsFromResponseBehavior(
+  responseBehavior,
+  existingRecommendations = []
+) {
+  const coveredAxes = new Set(
+    existingRecommendations
+      .map((rec) => rec.axis)
+      .filter(Boolean)
+  );
+
+  const confirms = [];
+  const seenAxes = new Set();
+
+  for (const checkResult of responseBehavior ?? []) {
+    if (checkResult.status !== "Review") continue;
+    if (coveredAxes.has(checkResult.axis)) continue;
+    if (seenAxes.has(checkResult.axis)) continue;
+    seenAxes.add(checkResult.axis);
+
+    confirms.push(
+      finalizeRecommendation({
+        id: `pid:${checkResult.axis}:${checkResult.check}:confirm`,
+        lab: "pid",
+        axis: checkResult.axis,
+        suggestion: null,
+        confidence: checkResult.confidence ?? null,
+        finding:
+          `${checkResult.axis} ${checkResult.check} flagged for review` +
+          (checkResult.evidence ? ` (${checkResult.evidence})` : "") +
+          ".",
+        gatedReason:
+          "The pattern is real but below the recommendation gates — confirm the pattern with a dedicated evidence flight before any change.",
+        instrument: `pid.${checkResult.axis.toLowerCase()}.${
+          CHECK_INSTRUMENT[checkResult.check] ?? "settle"
+        }`
+      })
+    );
+  }
+
+  return confirms;
 }
 
 // The training-data view of a verified pack member (D5):

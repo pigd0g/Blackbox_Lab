@@ -31,7 +31,10 @@
 
 import { commandEvidenceConfidence } from "./pidAnalysis.js";
 import { estimateSampleRate } from "./flightPhase.js";
-import { finalizeRecommendations } from "./recommendationContract.js";
+import {
+  finalizeRecommendations,
+  confirmsFromResponseBehavior
+} from "./recommendationContract.js";
 
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
@@ -178,12 +181,13 @@ export function buildRecommendations({
   timeSeconds = null,
   governorEvents = null,
   precomp = null,
-  vibrationConcern = false
+  vibrationConcern = false,
+  responseBehavior = null
 } = {}) {
   // Every recommendation leaves this function wearing the contract
   // (level, domain, instrument, next maneuver) — the one shape all
   // surfaces render and the pack builder selects from.
-  return finalizeRecommendations({
+  const nextSteps = finalizeRecommendations({
     pid: buildPidRecommendations({
       trackingAnalysis,
       commandBalanceReviewAxes,
@@ -196,6 +200,16 @@ export function buildRecommendations({
       vibrationConcern
     })
   });
+
+  // Response-behavior Reviews below the gates still deserve their
+  // evidence flight — the report already says so, and the contract
+  // must agree with the report (one axis, one entry, no duplicates
+  // where the engine already spoke).
+  nextSteps.pid.push(
+    ...confirmsFromResponseBehavior(responseBehavior, nextSteps.pid)
+  );
+
+  return nextSteps;
 }
 
 function buildPidRecommendations({

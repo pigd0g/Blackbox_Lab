@@ -5093,6 +5093,7 @@ function analyzeFlight(flightIndex) {
     trackingAnalysis: pidAnalysis?.detectedColumns?.trackingAnalysis,
     commandBalanceReviewAxes:
       pidAnalysis?.technicalSummary?.commandBalanceReviewAxes ?? [],
+    responseBehavior: pidAnalysis?.responseBehavior ?? null,
     timeSeconds: currentDataset?.timeSeconds,
     governorEvents: currentDataset?.governorEvents,
     precomp: currentDataset?.precomp,

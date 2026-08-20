@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import {
   finalizeRecommendation,
   finalizeRecommendations,
+  confirmsFromResponseBehavior,
   toOutcomeRecord,
   CONTRACT_VERSION
 } from "../src/analysis/recommendationContract.js";
@@ -103,4 +104,30 @@ test("the outcome record carries what the ledger and training need", () => {
   assert.equal(row.suggestion.family, "roll_d_gain");
   assert.equal(row.verifyingFlightId, "v1:abc");
   assert.equal(row.contractVersion, CONTRACT_VERSION);
+});
+
+test("a below-gate response-behavior Review becomes a confirm entry with the right instrument", () => {
+  const confirms = confirmsFromResponseBehavior(
+    [
+      { axis: "Roll", check: "bounce-back", status: "Review", confidence: "Medium", evidence: "3 valid events" },
+      { axis: "Roll", check: "settling", status: "Review" },
+      { axis: "Pitch", check: "ringing", status: "Clear" }
+    ],
+    []
+  );
+
+  assert.equal(confirms.length, 1); // one per axis, first Review wins
+  assert.equal(confirms[0].level, "confirm");
+  assert.equal(confirms[0].instrument, "pid.roll.overshoot");
+  assert.match(confirms[0].nextManeuver, /roll inputs/i);
+  assert.match(confirms[0].finding, /3 valid events/);
+});
+
+test("axes the engine already covered get no duplicate confirm", () => {
+  const confirms = confirmsFromResponseBehavior(
+    [{ axis: "Roll", check: "bounce-back", status: "Review" }],
+    [{ axis: "Roll", id: "pid:Roll:slow-settling" }]
+  );
+
+  assert.equal(confirms.length, 0);
 });
