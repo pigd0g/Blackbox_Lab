@@ -31,6 +31,7 @@
 
 import { commandEvidenceConfidence } from "./pidAnalysis.js";
 import { estimateSampleRate } from "./flightPhase.js";
+import { finalizeRecommendations } from "./recommendationContract.js";
 
 export const RECOMMENDATION_GATE = {
   MINIMUM_EVENTS: 2,
@@ -179,7 +180,10 @@ export function buildRecommendations({
   precomp = null,
   vibrationConcern = false
 } = {}) {
-  return {
+  // Every recommendation leaves this function wearing the contract
+  // (level, domain, instrument, next maneuver) — the one shape all
+  // surfaces render and the pack builder selects from.
+  return finalizeRecommendations({
     pid: buildPidRecommendations({
       trackingAnalysis,
       commandBalanceReviewAxes,
@@ -191,7 +195,7 @@ export function buildRecommendations({
       precomp,
       vibrationConcern
     })
-  };
+  });
 }
 
 function buildPidRecommendations({

@@ -1,0 +1,133 @@
+// ======================================================
+// RECOMMENDATION CONTRACT — the one shape every surface
+// renders and every pack is built from.
+// ======================================================
+//
+// A recommendation is a claim with its evidence attached:
+// what was found, how sure we are, what to do about it,
+// and — critically — which INSTRUMENT in the next log will
+// judge it. Labs emit these; the Lab pages, Home, Compare
+// and the exported report render them; the pack builder
+// selects among them; the confirmation ledger files them.
+// Nothing composes its own recommendation text anymore.
+//
+// The shape is deliberately also the training-data schema:
+// a verified pack member is this object plus an outcome.
+//
+// Levels (evidence-gated, see the doctrine):
+//   observed — a finding exists; evidence too thin or the
+//              item is blocked. No knob.
+//   confirm  — plausible pattern; the exact next-flight
+//              maneuver that would confirm it is named.
+//   earned   — evidence cleared its gates; the change is
+//              stated (numeric only with a dump on file).
+//
+// Domains: tuning | mechanical | data | setup | none.
+//
+// ======================================================
+
+export const CONTRACT_VERSION = 1;
+
+// The maneuver a "confirm" asks for, per axis family. One
+// sentence, flyable, demand-matched by construction (same
+// headspeed, deliberate inputs).
+const CONFIRM_MANEUVERS = {
+  Roll: "Repeat 4-6 deliberate roll inputs with clean stops and reversals at the same headspeed.",
+  Pitch: "Repeat 4-6 deliberate pitch inputs with clean stops and reversals at the same headspeed.",
+  Yaw: "Repeat 4-6 deliberate yaw stops in both directions at the same headspeed.",
+  governor: "Fly the same collective work at the same headspeed bank, including a few firm pitch pumps."
+};
+
+// Machine-readable instrument key per recommendation family —
+// the observable that verifies this change on the next log.
+// The verification autopilot compares exactly this metric.
+function instrumentFor(rec) {
+  if (rec.lab === "governor") {
+    return "governor.droop";
+  }
+  if (/overshoot/.test(rec.id ?? "")) {
+    return `pid.${(rec.axis ?? "").toLowerCase()}.overshoot`;
+  }
+  return `pid.${(rec.axis ?? "").toLowerCase()}.settle`;
+}
+
+// Level derivation from the engine's existing gate outputs.
+// An earned change requires a concrete suggestion; a gated
+// finding whose gate asks for more evidence is a confirm;
+// a gate that points at a PRECEDING problem (vibration
+// first) blocks the item instead — it stays observed with
+// the blocker named, and the pack builder must not pick it.
+function levelFor(rec) {
+  if (rec.suggestion) {
+    return { level: "earned", blockedBy: null };
+  }
+
+  const gate = rec.gatedReason ?? "";
+
+  if (/vibration|filters come before/i.test(gate)) {
+    return { level: "observed", blockedBy: "vibration" };
+  }
+
+  if (/fly a log|another log|more distinct|repeat|confirm the pattern|re-read this page/i.test(gate)) {
+    return { level: "confirm", blockedBy: null };
+  }
+
+  return { level: "observed", blockedBy: null };
+}
+
+// Augment one engine recommendation with its contract
+// fields, in place and non-breaking: every existing
+// consumer keeps working, every new surface reads the
+// contract fields only.
+export function finalizeRecommendation(rec, { domain = "tuning" } = {}) {
+  if (!rec || typeof rec !== "object") {
+    return rec;
+  }
+
+  const { level, blockedBy } = levelFor(rec);
+
+  rec.contractVersion = CONTRACT_VERSION;
+  rec.level = level;
+  rec.domain = domain;
+  rec.blockedBy = blockedBy;
+  rec.instrument = instrumentFor(rec);
+
+  if (level === "confirm" && !rec.nextManeuver) {
+    rec.nextManeuver =
+      CONFIRM_MANEUVERS[rec.axis] ??
+      CONFIRM_MANEUVERS[rec.lab] ??
+      "Fly the same maneuvers again at the same headspeed.";
+  }
+
+  return rec;
+}
+
+export function finalizeRecommendations(nextSteps) {
+  for (const rec of nextSteps?.pid ?? []) {
+    finalizeRecommendation(rec, { domain: "tuning" });
+  }
+  for (const rec of nextSteps?.governor ?? []) {
+    finalizeRecommendation(rec, { domain: "tuning" });
+  }
+  return nextSteps;
+}
+
+// The training-data view of a verified pack member (D5):
+// the contract object plus what the verifying flight said.
+// Kept here so the schema evolves WITH the contract, never
+// beside it. Outcome: kept | revert | inconclusive.
+export function toOutcomeRecord(rec, { outcome, verifyingFlightId = null } = {}) {
+  return {
+    contractVersion: rec.contractVersion ?? CONTRACT_VERSION,
+    id: rec.id ?? null,
+    lab: rec.lab ?? null,
+    axis: rec.axis ?? null,
+    level: rec.level ?? null,
+    domain: rec.domain ?? null,
+    instrument: rec.instrument ?? null,
+    suggestion: rec.suggestion ?? null,
+    confidence: rec.confidence ?? null,
+    outcome: outcome ?? null,
+    verifyingFlightId
+  };
+}
