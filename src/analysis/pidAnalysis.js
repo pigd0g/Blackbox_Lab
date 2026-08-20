@@ -1576,6 +1576,30 @@ const pidColumns = findMatchingColumns(
    
 const groupedPidColumns =
   groupPidColumns(pidColumns);
+
+// PID-term activity is scored on the SAME qualified flight rows as
+// the tracking analysis. The full log includes spool-up, landing and
+// post-flight seconds where a term (the I-term especially) can wind
+// against a grounded airframe — activity that must not be able to
+// turn a qualified flight analysis into Review. Full-log values are
+// the fallback only when no qualified window exists at all, where
+// the tracking analysis is empty too. Sampling by the same rows also
+// keeps the command-event windows (compacted qualified-row space)
+// aligned with these arrays.
+const pidTermColumnValues = (columnName) =>
+  hasStableFlightRows
+    ? getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        columnName,
+        stableRowIndexes
+      )
+    : getColumnValues(
+        lines,
+        telemetryHeaderIndex,
+        columnName
+      );
+
   const pidTermValues = {
   p: groupedPidColumns.p.map(
     (columnName, axisIndex) => ({
@@ -1583,11 +1607,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1597,11 +1617,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1611,11 +1627,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1626,11 +1638,7 @@ const groupedPidColumns =
           axisNames[axisIndex] ??
           `Axis ${axisIndex}`,
         columnName,
-        values: getColumnValues(
-          lines,
-          telemetryHeaderIndex,
-          columnName
-        )
+        values: pidTermColumnValues(columnName)
       })
     )
 };
@@ -1739,6 +1747,7 @@ const analyzeNearPeakActivity = (
       nearPeakSampleCount: 0,
       nearPeakPercent: null,
       longestNearPeakRun: 0,
+      longestNearPeakRunEndIndex: null,
       threshold: null
     };
   }
@@ -1750,8 +1759,11 @@ const analyzeNearPeakActivity = (
   let nearPeakSampleCount = 0;
   let currentNearPeakRun = 0;
   let longestNearPeakRun = 0;
+  let longestNearPeakRunEndIndex = null;
 
-  for (const value of values) {
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+
     if (!Number.isFinite(value)) {
       currentNearPeakRun = 0;
       continue;
@@ -1766,10 +1778,10 @@ const analyzeNearPeakActivity = (
       nearPeakSampleCount += 1;
       currentNearPeakRun += 1;
 
-      longestNearPeakRun = Math.max(
-        longestNearPeakRun,
-        currentNearPeakRun
-      );
+      if (currentNearPeakRun > longestNearPeakRun) {
+        longestNearPeakRun = currentNearPeakRun;
+        longestNearPeakRunEndIndex = index;
+      }
     } else {
       currentNearPeakRun = 0;
     }
@@ -1786,8 +1798,30 @@ const analyzeNearPeakActivity = (
           ) * 100
         : null,
     longestNearPeakRun,
+    longestNearPeakRunEndIndex,
     threshold
   };
+};
+
+// A saturation reading is only auditable if it can be walked back
+// to its place in the flight. The run end index is in qualified-row
+// space, so the moment resolves through the same clock the command
+// events print with.
+const nearPeakMomentText = (termResult) => {
+  if (
+    !hasStableFlightRows ||
+    !Number.isInteger(termResult?.longestNearPeakRunEndIndex)
+  ) {
+    return "";
+  }
+
+  const seconds = stableSampleTimeSeconds(
+    termResult.longestNearPeakRunEndIndex
+  );
+
+  return seconds === null
+    ? ""
+    : ` ending near ${seconds.toFixed(1)} s, inside the analyzed flight window`;
 };
 
 const pidTermNearPeakActivity = {
@@ -3533,7 +3567,7 @@ highestTrackingErrorAxis
           : "Unavailable"
       }% with a longest run of ${
         termResult.longestNearPeakRun ?? 0
-      } samples. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
+      } samples${nearPeakMomentText(termResult)}. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
   ),
       ...pidTermSaturationAssessment.feedforward
   .filter(
@@ -3593,14 +3627,59 @@ highestTrackingErrorAxis
       : 0
   };
 
-  // "Clear" is a promise that nothing below needs follow-up. The
-  // per-axis behavior checks (bounce-back, settling, ringing) file
-  // their statuses inside the technical findings — an overall Clear
-  // must not sit on top of Review lines a pilot would only find by
-  // reading that far.
-  const behaviorReviewCount = pidResult.findings.filter((line) =>
-    typeof line === "string" &&
-    / (bounce-back|settling|ringing) status: Review$/.test(line)
+  // The per-axis behavior checks (bounce-back, settling, ringing)
+  // file their verdicts as technical-finding lines. Collected here
+  // as structured data so surfaces that cannot show the full
+  // findings list — the exported report above all — can still carry
+  // the checks' statuses, evidence counts and recommendations
+  // instead of silently dropping them.
+  const responseBehavior = [];
+  const behaviorStatusPattern =
+    /^(\w+) (bounce-back|settling|ringing) status: (.+)$/;
+
+  for (const line of pidResult.findings) {
+    if (typeof line !== "string") {
+      continue;
+    }
+
+    const match = behaviorStatusPattern.exec(line);
+
+    if (!match) {
+      continue;
+    }
+
+    const [, axis, check, status] = match;
+
+    const companion = (label) => {
+      const prefix = `${axis} ${check} ${label}: `;
+      const companionLine = pidResult.findings.find(
+        (candidate) =>
+          typeof candidate === "string" &&
+          candidate.startsWith(prefix)
+      );
+
+      return companionLine
+        ? companionLine.slice(prefix.length)
+        : null;
+    };
+
+    responseBehavior.push({
+      axis,
+      check,
+      status,
+      confidence: companion("confidence"),
+      evidence: companion("evidence"),
+      recommendation: companion("recommendation")
+    });
+  }
+
+  pidResult.responseBehavior = responseBehavior;
+
+  // "Clear" is a promise that nothing below needs follow-up. An
+  // overall Clear must not sit on top of Review lines a pilot would
+  // only find by reading the technical findings.
+  const behaviorReviewCount = responseBehavior.filter(
+    (checkResult) => checkResult.status === "Review"
   ).length;
 
   if (

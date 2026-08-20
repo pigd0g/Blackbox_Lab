@@ -24,13 +24,15 @@ const source = readFileSync(
 );
 
 test("behavior Review findings lift an overall Clear", () => {
-  // The post-processing block exists and reads the same status
-  // lines the findings emit.
+  // The post-processing block exists: the behavior checks are
+  // collected as structured data from the same status lines the
+  // findings emit, and the Review count derives from that.
   assert.match(source, /behaviorReviewCount/);
   assert.match(
     source,
-    /\(bounce-back\|settling\|ringing\) status: Review/
+    /\(bounce-back\|settling\|ringing\) status: \(\.\+\)\$/
   );
+  assert.match(source, /pidResult\.responseBehavior = responseBehavior/);
   assert.match(
     source,
     /overallStatus === "Clear" &&\s*\n\s*behaviorReviewCount > 0/
