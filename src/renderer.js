@@ -119,6 +119,12 @@ import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import { buildPack } from "./analysis/packBuilder.js";
 import { packSnippet, revertSnippet } from "./analysis/packSnippet.js";
 import {
+  fileAnalysis,
+  latestPack
+} from "./analysis/confirmationLedger.js";
+import { assessAppliedState } from "./analysis/appliedState.js";
+import { gradeAppliedPack } from "./analysis/verificationAutopilot.js";
+import {
   analyzeServoLimits,
   servoDisplayName
 } from "./analysis/servoLimitAnalysis.js";
@@ -2485,7 +2491,7 @@ function statusTone(status) {
 // so each is verified by its own instrument next flight. Hidden when
 // the flight earned nothing and asks for no evidence — What To Do
 // First already tells that story.
-function renderPackCard(dataset, nextSteps, firmwareRevision) {
+function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   const card = el("packCard");
   if (!card) return;
 
@@ -2502,7 +2508,54 @@ function renderPackCard(dataset, nextSteps, firmwareRevision) {
     firmwareRevision: firmwareRevision ?? ""
   });
 
-  const show = pack.members.length > 0 || pack.prescriptions.length > 0;
+  // The craft's memory: check the previous pack against this log's
+  // own headers, and file this flight's findings. Bundled samples are
+  // shipped data, not the pilot's craft — they never touch the ledger.
+  let appliedAssessment = null;
+  let openItems = [];
+  if (!context.isSample && context.craftKey && context.sourceHash) {
+    const previous = latestPack(localStorage, context.craftKey, {
+      excludeSourceHash: context.sourceHash
+    });
+    if (previous) {
+      appliedAssessment = assessAppliedState({
+        packMembers: previous.members,
+        getHeaderValue: (header) =>
+          getMetadataValue(currentFlightLines, header)
+      });
+      appliedAssessment.grading = gradeAppliedPack({
+        pack: previous,
+        appliedState: appliedAssessment
+      });
+    }
+    openItems = fileAnalysis(localStorage, context.craftKey, {
+      sourceHash: context.sourceHash,
+      dateMs: context.dateMs ?? 0,
+      confirms: [...(nextSteps?.pid ?? []), ...(nextSteps?.governor ?? [])]
+        .filter((rec) => rec.level === "confirm"),
+      axisEvidence: context.axisEvidence ?? {},
+      pack
+    });
+  }
+
+  const banner = el("packAppliedBanner");
+  const bannerText =
+    appliedAssessment?.verdict === "applied"
+      ? "Previous change pack confirmed on this log \u2713 \u2014 per-change verification verdicts arrive with the field calibration."
+      : appliedAssessment?.verdict === "partial"
+        ? `Previous change pack partially applied (${appliedAssessment.applied} of ${appliedAssessment.applied + appliedAssessment.missed} confirmed on this log) \u2014 unapplied changes are not graded.`
+        : appliedAssessment?.verdict === "not-applied"
+          ? "Previous change pack not found on this log \u2014 nothing is graded against it."
+          : null;
+  if (banner) {
+    banner.hidden = !bannerText;
+    if (bannerText) banner.textContent = bannerText;
+  }
+
+  const show =
+    pack.members.length > 0 ||
+    pack.prescriptions.length > 0 ||
+    Boolean(bannerText);
   card.hidden = !show;
   if (!show) return;
 
@@ -2559,8 +2612,19 @@ function renderPackCard(dataset, nextSteps, firmwareRevision) {
   const prescriptions = el("packPrescriptions");
   prescriptions.hidden = pack.prescriptions.length === 0;
   if (pack.prescriptions.length > 0) {
+    const seenCounts = new Map();
+    for (const item of openItems) {
+      if (item.nextManeuver && item.flights?.length > 1) {
+        seenCounts.set(item.nextManeuver, item.flights.length);
+      }
+    }
     el("packPrescriptionList").innerHTML = pack.prescriptions
-      .map((text) => `<li>${text}</li>`)
+      .map((text) => {
+        const seen = seenCounts.get(text);
+        return `<li>${text}${
+          seen ? ` <b>\u2014 pattern seen in ${seen} flights now.</b>` : ""
+        }</li>`;
+      })
       .join("");
   }
 }
@@ -5106,11 +5170,28 @@ function analyzeFlight(flightIndex) {
   });
   currentRecommendations = nextSteps;
   renderFirstSteps(currentDataset, nextSteps, pidAnalysis);
-  renderPackCard(
-    currentDataset,
-    nextSteps,
-    getMetadataValue(currentFlightLines, "Firmware revision")
-  );
+  {
+    const rawCraft = getMetadataValue(currentFlightLines, "Craft name");
+    const axisEvidence = {};
+    for (const axisResult of pidAnalysis?.detectedColumns?.trackingAnalysis
+      ?.commandEvents ?? []) {
+      axisEvidence[axisResult.axis] = (axisResult.events ?? []).filter(
+        (event) => Number.isFinite(event.responsePeak)
+      ).length;
+    }
+    renderPackCard(
+      currentDataset,
+      nextSteps,
+      getMetadataValue(currentFlightLines, "Firmware revision"),
+      {
+        craftKey: rawCraft === "Not found" ? "Unknown craft" : rawCraft,
+        sourceHash: hashFlightLines(currentFlightLines),
+        dateMs: resolveFlightDateMs(currentFlightLines, file.lastModified),
+        isSample: file.name.startsWith("sample-"),
+        axisEvidence
+      }
+    );
+  }
   renderNextSteps("pidNextCard", "pidNextList", nextSteps.pid);
   renderNextSteps(
     "governorNextCard",
