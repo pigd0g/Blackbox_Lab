@@ -187,17 +187,15 @@ export const TRACKING_SCORE_TUNING = {
 //
 // Re-anchored 2026-08-21 on the aligned measurement (the
 // command windows read the correct sample rows since the
-// saturation-scope fix) across all 714 corpus flights, 536
-// qualifying highest-error-axis rows. On true data the
-// fleet's NORMAL state is I-doing-most-of-the-work during
-// commands (median I-share: Roll 82 %, Pitch 65 %, Yaw
-// 69 % — with per-axis spreads too different for one global
-// bar). Bars sit at each axis's ~p85 I-share and ~p15
-// support, so the flag marks the genuine tail: expected
-// row rates Roll 13.7 %, Pitch 13.0 %, Yaw 5.6 %, roughly
-// one flight in ten fleet-wide (was 41 % at the old flat
-// 65/35 bars, which had been calibrated against the
-// misaligned windows).
+// saturation-scope fix), calibrated across the whole
+// contributed fleet. On true data the fleet's NORMAL state
+// is I-doing-most-of-the-work during commands (median
+// I-share: Roll 82 %, Pitch 65 %, Yaw 69 % — with per-axis
+// spreads too different for one global bar). Bars sit at
+// each axis's ~p85 I-share and ~p15 support, so the flag
+// marks the genuine tail — roughly one flight in ten
+// fleet-wide, where the previous global bars, set before
+// the alignment fix, read closer to four in ten.
 // ------------------------------------------------------
 export const COMMAND_BALANCE_BARS = {
   Roll: { iPercent: 92, supportPercent: 8 },
