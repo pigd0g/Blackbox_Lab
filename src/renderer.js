@@ -52,7 +52,8 @@ import {
 import {
   isUsableGovernorTarget,
   detectStableFlightPhase,
-  detectInFlightSamples
+  detectInFlightSamples,
+  qualifiedLoadEnvelope
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import {
@@ -3974,6 +3975,29 @@ function renderEscEvidence(dataset) {
       })()
     : null;
 
+  // The airborne mask alone still admits the tail of the spool-up
+  // ramp and the governor's first settling seconds — an elevated
+  // output plateau that outranks real flight moments. The stable
+  // phase bounds the flight (first sustained stable segment → last
+  // stable sample); inside those bounds the permissive mask stays,
+  // so a hard collective pump that droops the rotor out of the
+  // stable mask remains exactly as eligible as it should be.
+  const loadEnvelope = airborneMask
+    ? qualifiedLoadEnvelope({
+        timeSeconds: dataset.timeSeconds,
+        headspeed: dataset.headspeed,
+        governorTarget: dataset.governorTarget
+      })
+    : null;
+
+  if (loadEnvelope && airborneMask) {
+    for (let i = 0; i < airborneMask.length; i += 1) {
+      if (i < loadEnvelope.startIndex || i > loadEnvelope.endIndex) {
+        airborneMask[i] = 0;
+      }
+    }
+  }
+
   const events = findHighestLoadEvents(
     { timeSeconds: dataset.timeSeconds, load: loadSeries },
     { windowSeconds: 2, count: 3, qualifiedMask: airborneMask }
@@ -4125,6 +4149,10 @@ function renderEscEvidence(dataset) {
         ? `${value.toFixed(digits)}${suffix}`
         : "—";
 
+    // When the ranking runs on ESC output (no usable current), the
+    // load figures ARE output percentages — printing them in amps
+    // would invent current measurements the log never made, and the
+    // watt figures built on that dead channel go with them.
     escEventsTable.innerHTML = `
       <tr>
         <th>When</th><th>Avg current</th><th>Peak current</th>
@@ -4135,10 +4163,10 @@ function renderEscEvidence(dataset) {
           ({ event, output, voltage, baseline, sagPercent, watts, explanation }) => `
         <tr>
           <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
-          <td>${cell(event.averageLoad, 1, " A")}</td>
-          <td>${cell(event.peakLoad, 1, " A")}</td>
+          <td>${currentCarriesData ? cell(event.averageLoad, 1, " A") : "—"}</td>
+          <td>${currentCarriesData ? cell(event.peakLoad, 1, " A") : "—"}</td>
           <td>${cell(output?.max, 0, "%")}</td>
-          <td>${cell(watts?.max, 0, " W")}</td>
+          <td>${currentCarriesData ? cell(watts?.max, 0, " W") : "—"}</td>
           <td>${
             Number.isFinite(sagPercent) &&
             Number.isFinite(baseline?.volts) &&
@@ -4242,30 +4270,47 @@ function renderEscEvidence(dataset) {
         chartLoadCollective.hidden = true;
       }
 
+      // A dead current channel earns no trace and no watt chart —
+      // the same capability state the table and the rest of ESC Lab
+      // report. Voltage stands on its own.
       renderSyncedChart(
         chartLoadPower,
         dataset,
         window,
         [
-          { label: "Current (A)", values: currentAmps, color: CHART_COLORS[1] },
+          currentCarriesData && {
+            label: "Current (A)",
+            values: currentAmps,
+            color: CHART_COLORS[1]
+          },
           { label: "Voltage (V)", values: voltageVolts, color: CHART_COLORS[0] }
-        ],
-        { yLabel: "amps · volts", markers, linkGroup: "loadSync" }
+        ].filter(Boolean),
+        {
+          yLabel: currentCarriesData ? "amps · volts" : "volts",
+          markers,
+          linkGroup: "loadSync"
+        }
       );
 
-      renderSyncedChart(
-        chartLoadWatts,
-        dataset,
-        window,
-        [
-          {
-            label: "Electrical power (W)",
-            values: wattValues,
-            color: CHART_COLORS[2]
-          }
-        ],
-        { yLabel: "watts", markers, linkGroup: "loadSync" }
-      );
+      chartLoadWatts.hidden = !currentCarriesData;
+
+      if (currentCarriesData) {
+        renderSyncedChart(
+          chartLoadWatts,
+          dataset,
+          window,
+          [
+            {
+              label: "Electrical power (W)",
+              values: wattValues,
+              color: CHART_COLORS[2]
+            }
+          ],
+          { yLabel: "watts", markers, linkGroup: "loadSync" }
+        );
+      } else {
+        chartLoadWatts.innerHTML = "";
+      }
 
       if (temperatureEntries.length > 0) {
         renderSyncedChart(
@@ -4361,8 +4406,16 @@ function renderEscEvidence(dataset) {
       <tr>
         <td>${bank.targetRpm} rpm</td>
         <td>${profileCell(averageAt(outputPercent, bank.indexes), 1, "%")}</td>
-        <td>${profileCell(averageAt(currentAmps, bank.indexes), 1, " A")}</td>
-        <td>${profileCell(averageAt(wattValues, bank.indexes), 0, " W")}</td>
+        <td>${
+          currentCarriesData
+            ? profileCell(averageAt(currentAmps, bank.indexes), 1, " A")
+            : "—"
+        }</td>
+        <td>${
+          currentCarriesData
+            ? profileCell(averageAt(wattValues, bank.indexes), 0, " W")
+            : "—"
+        }</td>
         <td>${
           temperatureValues
             ? profileCell(maximumAt(temperatureValues, bank.indexes), 0, " °C")
@@ -5044,6 +5097,44 @@ function pidLabForReport(analysis) {
 
   const recommendations = analysis.recommendations ?? [];
 
+  // The report is what gets handed to another pilot or tuner: a
+  // Review status whose evidence stayed behind in the app cannot be
+  // audited by whoever receives it. The response-behavior checks
+  // (bounce-back, settling, ringing) therefore export WITH their
+  // evidence counts — and when the evidence is too thin to earn a
+  // tuning change, the report says what to fly next instead of
+  // stopping at "worth reviewing".
+  const behaviorReviews = (analysis.responseBehavior ?? []).filter(
+    (checkResult) => checkResult.status === "Review"
+  );
+
+  const behaviorStory = behaviorReviews
+    .map(
+      (checkResult) =>
+        `${checkResult.axis} ${checkResult.check} flagged for review` +
+        (checkResult.evidence ? ` (${checkResult.evidence}` : "") +
+        (checkResult.evidence && checkResult.confidence
+          ? `, ${checkResult.confidence} confidence)`
+          : checkResult.evidence
+            ? ")"
+            : "") +
+        (checkResult.recommendation
+          ? `: ${checkResult.recommendation}`
+          : ".")
+    )
+    .join(" ");
+
+  const reviewAxes = [
+    ...new Set(behaviorReviews.map((checkResult) => checkResult.axis))
+  ];
+
+  const nextFlightStep =
+    reviewAxes.length > 0
+      ? `Repeat several deliberate ${reviewAxes.join(
+          " and "
+        )} inputs with clean stops and reversals at the same headspeed. If the same response pattern returns, those confirmed events determine the tuning change — this flight alone does not earn one.`
+      : null;
+
   return {
     status:
       analysis.overallStatus === "Clear"
@@ -5051,7 +5142,9 @@ function pidLabForReport(analysis) {
         : analysis.overallStatus === "Review"
           ? "watch"
           : "insufficient",
-    story: analysis.summary.join(" "),
+    story: [analysis.summary.join(" "), behaviorStory]
+      .filter(Boolean)
+      .join(" "),
     metrics: [
       Number.isFinite(analysis.score) && {
         label: "Tracking score",
@@ -5066,6 +5159,20 @@ function pidLabForReport(analysis) {
             : "")
       },
       { label: "Overall status", value: analysis.overallStatus ?? "—" },
+      behaviorReviews.length > 0 && {
+        label: "Response behavior",
+        value: behaviorReviews
+          .map(
+            (checkResult) =>
+              `${checkResult.axis} ${checkResult.check}: Review` +
+              (checkResult.evidence ? ` (${checkResult.evidence})` : "")
+          )
+          .join("; ")
+      },
+      nextFlightStep && {
+        label: "Next flight",
+        value: nextFlightStep
+      },
       recommendations.length > 0 && {
         label: "Top recommendation",
         value:
