@@ -1966,6 +1966,18 @@ if (sampleRate && hasSpectrumRuns) {
     // on. Two tracking numbers are only worth subtracting when both
     // were measured from enough clean responses to mean anything.
     pidConfidence: pidAnalysis?.confidence ?? null,
+    // Clean command-response counts per axis — a comparison is only a
+    // comparison where both flights interrogated the same axes (#32).
+    axisEvidence: Object.fromEntries(
+      (pidAnalysis?.detectedColumns?.trackingAnalysis?.commandEvents ?? []).map(
+        (axisResult) => [
+          axisResult.axis,
+          (axisResult.events ?? []).filter((event) =>
+            Number.isFinite(event.responsePeak)
+          ).length
+        ]
+      )
+    ),
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     filterAdvice,
     sampleRateHz: sampleRate,
@@ -5457,6 +5469,34 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
   if (compareSwapButton) {
     compareSwapButton.hidden = false;
   }
+  // The footing first (#32): what the comparison stands on — demand
+  // match, per-axis evidence, flight balance — shown BEFORE any
+  // improvement wording, open by default whenever it is not clean.
+  {
+    const fold = el("compareComparability");
+    if (fold) {
+      const comparability = result.comparability;
+      const show = Boolean(comparability?.lines?.length);
+      fold.hidden = !show;
+      if (show) {
+        el("compareComparabilityHead").textContent =
+          comparability.level === "comparable"
+            ? "Comparability: good — these flights can carry a verdict"
+            : comparability.level === "partial"
+              ? "Comparability: partial — read the results as observations"
+              : "Comparability: weak — these flights measured different things";
+        el("compareComparabilityLines").innerHTML =
+          comparability.lines
+            .map((line) => `<p class="chart-hint">${line}</p>`)
+            .join("") +
+          (comparability.guidance
+            ? `<p class="chart-hint"><b>${comparability.guidance}</b></p>`
+            : "");
+        fold.open = comparability.level !== "comparable";
+      }
+    }
+  }
+
   compareSummary.textContent = result.summary;
   compareRows.innerHTML = "";
 

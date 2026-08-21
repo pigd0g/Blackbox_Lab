@@ -251,8 +251,94 @@ export function chronologicalOrder(startIsoA, startIsoB) {
   return a <= b ? "keep" : "swap";
 }
 
+/**
+ * Can these two flights carry a before/after conclusion at all?
+ * Exposed BEFORE any improvement wording (#32): flight-to-flight
+ * variation can be as large as a tuning change, so the comparison
+ * states what evidence it stands on — demand match, per-axis clean
+ * command counts on both sides, duration balance, and both scores'
+ * evidence strength — and downgrades its own language when the
+ * footing is weak.
+ */
+export function assessComparability(baseline, comparison) {
+  const lines = [];
+  let level = "comparable";
+  const demote = (to) => {
+    if (to === "weak" || level === "weak") level = to === "weak" ? "weak" : level;
+    else level = "partial";
+  };
+
+  const beforeDemand = baseline?.pidConfidence?.demand ?? null;
+  const afterDemand = comparison?.pidConfidence?.demand ?? null;
+  if (beforeDemand && afterDemand) {
+    if (beforeDemand === afterDemand) {
+      lines.push(`Flight demand: comparable (both flown ${beforeDemand === "gentle" ? "gently" : "with real inputs"}).`);
+    } else {
+      lines.push("Flight demand: NOT comparable — one flight was flown gently, the other much harder. The measurements describe different flying, not the change.");
+      demote("weak");
+    }
+  }
+
+  const thin = (confidence) =>
+    confidence?.level === "Low" || confidence?.level === "Insufficient";
+  const beforeThin = thin(baseline?.pidConfidence);
+  const afterThin = thin(comparison?.pidConfidence);
+  if (beforeThin || afterThin) {
+    lines.push(
+      `Evidence strength: ${beforeThin && afterThin ? "both flights are" : beforeThin ? "the earlier flight is" : "the later flight is"} thin on clean command responses.`
+    );
+    demote(beforeThin && afterThin ? "weak" : "partial");
+  }
+
+  const axes = new Set([
+    ...Object.keys(baseline?.axisEvidence ?? {}),
+    ...Object.keys(comparison?.axisEvidence ?? {})
+  ]);
+  const axisLines = [];
+  let comparableAxes = 0;
+  for (const axis of axes) {
+    const before = baseline?.axisEvidence?.[axis] ?? 0;
+    const after = comparison?.axisEvidence?.[axis] ?? 0;
+    const ok = before >= 8 && after >= 8;
+    if (ok) comparableAxes += 1;
+    axisLines.push(`${axis} ${before} vs ${after}${ok ? "" : " (too few on one side)"}`);
+  }
+  if (axisLines.length > 0) {
+    lines.push(`Clean command events per axis (before vs after): ${axisLines.join("; ")}.`);
+    if (comparableAxes === 0) demote("weak");
+    else if (comparableAxes < axes.size) demote("partial");
+  }
+
+  const durationOf = (dataset) => {
+    const t = dataset?.timeSeconds;
+    return Array.isArray(t) && t.length ? t[t.length - 1] : null;
+  };
+  const beforeDuration = durationOf(baseline);
+  const afterDuration = durationOf(comparison);
+  if (Number.isFinite(beforeDuration) && Number.isFinite(afterDuration) && beforeDuration > 0 && afterDuration > 0) {
+    const ratio = Math.min(beforeDuration, afterDuration) / Math.max(beforeDuration, afterDuration);
+    if (ratio < 0.4) {
+      lines.push(`Flight length: unbalanced (${Math.round(beforeDuration)} s vs ${Math.round(afterDuration)} s) — the longer flight simply had more chances to show events.`);
+      demote("partial");
+    }
+  }
+
+  return {
+    level,
+    causal: level === "comparable",
+    lines,
+    guidance:
+      level === "comparable"
+        ? null
+        : "Treat differences below as observations, not proof of a tuning change. Repeat the same maneuvers at the same headspeed to confirm them."
+  };
+}
+
 export function compareFlights(baseline, comparison, options = {}) {
   const rows = [];
+  const comparability = assessComparability(baseline, comparison);
+  const causally = (causalSentence, neutralSentence) =>
+    comparability.causal ? causalSentence : neutralSentence;
 
   // ---- vibration ----
   const peakBefore = strongestPeak(baseline.spectra);
@@ -274,7 +360,10 @@ export function compareFlights(baseline, comparison, options = {}) {
       sentence:
         described.direction === "same"
           ? `Biggest vibration peak is about the same (${peakAfter.magnitude.toFixed(1)} at ${peakAfter.hz.toFixed(0)} Hz).`
-          : `Your change made the biggest vibration peak ${described.word}: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`
+          : causally(
+              `Your change made the biggest vibration peak ${described.word}: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`,
+              `The biggest vibration peak measured ${described.word} in the later flight: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`
+            )
     });
   }
 
@@ -584,14 +673,19 @@ export function compareFlights(baseline, comparison, options = {}) {
   const evidenceKnown =
     Boolean(baseline.pidConfidence) && Boolean(comparison.pidConfidence);
   const likeForLike =
-    aircraft.same && evidenceKnown && headlineEvidence.comparable;
+    aircraft.same &&
+    evidenceKnown &&
+    headlineEvidence.comparable &&
+    comparability.causal;
   const unlikeReason = !aircraft.same
     ? ""
     : !evidenceKnown
       ? "this pair does not carry enough evidence to verify the two flights were flown alike."
-      : headlineEvidence.comparable
-        ? ""
-        : headlineEvidence.reason;
+      : !headlineEvidence.comparable
+        ? headlineEvidence.reason
+        : comparability.causal
+          ? ""
+          : "the flights' demand or per-axis evidence was only partially comparable (the comparability panel above has the details).";
 
   // Different helicopters: the numbers are shown for reference, but
   // "90% better" is a tuning judgment and there is no tune being
@@ -633,6 +727,7 @@ export function compareFlights(baseline, comparison, options = {}) {
   return {
     rows,
     summary,
+    comparability,
     better,
     worse,
     uncomparable,

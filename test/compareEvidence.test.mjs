@@ -325,3 +325,48 @@ test("unit differences are not disagreements — the cross-check is scale-free",
   );
   assert.equal(nearTen.note, null);
 });
+
+// ---- #32: the comparability assessment is exposed, and weak footing
+// downgrades causal wording ----
+
+import { assessComparability, compareFlights as compareForComparability } from "../src/analysis/compareFlights.js";
+
+test("matched demand and axis evidence reads comparable", () => {
+  const side = (demand) => ({
+    pidConfidence: { level: "High", demand },
+    axisEvidence: { Roll: 12, Pitch: 10, Yaw: 9 },
+    timeSeconds: [0, 100]
+  });
+  const result = assessComparability(side("normal"), side("normal"));
+  assert.equal(result.level, "comparable");
+  assert.equal(result.causal, true);
+});
+
+test("a demand mismatch is weak and says why", () => {
+  const side = (demand) => ({
+    pidConfidence: { level: "High", demand },
+    axisEvidence: { Roll: 12 },
+    timeSeconds: [0, 100]
+  });
+  const result = assessComparability(side("gentle"), side("normal"));
+  assert.equal(result.level, "weak");
+  assert.equal(result.causal, false);
+  assert.ok(result.lines.some((line) => /NOT comparable/.test(line)));
+  assert.match(result.guidance, /observations, not proof/);
+});
+
+test("one-sided axis evidence is partial", () => {
+  const before = {
+    pidConfidence: { level: "High", demand: "normal" },
+    axisEvidence: { Roll: 12, Yaw: 2 },
+    timeSeconds: [0, 100]
+  };
+  const after = {
+    pidConfidence: { level: "High", demand: "normal" },
+    axisEvidence: { Roll: 11, Yaw: 14 },
+    timeSeconds: [0, 100]
+  };
+  const result = assessComparability(before, after);
+  assert.equal(result.level, "partial");
+  assert.ok(result.lines.some((line) => /too few on one side/.test(line)));
+});
