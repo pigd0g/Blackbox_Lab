@@ -790,6 +790,30 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
   let worstDeviation = 0;
   let worstTime = null;
 
+  // Observed headspeed banks (#35): with no target to cluster on,
+  // the trend itself identifies the banks a pilot flew — same 1.5 %
+  // cluster width the governed path uses. Per bank the evidence is
+  // weighed separately, so a lightly-flown headspeed can never hide
+  // inside a whole-flight average.
+  const observedBanks = [];
+  const observedBankFor = (level) => {
+    for (const bank of observedBanks) {
+      if (Math.abs(level - bank.level) <= bank.level * 0.015) {
+        return bank;
+      }
+    }
+    const bank = {
+      level,
+      actualSum: 0,
+      count: 0,
+      maxDip: 0,
+      dipTime: null,
+      squaredDeviationSum: 0
+    };
+    observedBanks.push(bank);
+    return bank;
+  };
+
   for (const index of inFlightIndexes) {
     const actual = Number(headspeed[index]);
 
@@ -811,7 +835,50 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
       worstDeviation = deviation;
       worstTime = Number(timeSeconds[index]);
     }
+
+    if (
+      Number.isFinite(trend[index]) &&
+      trend[index] > 0 &&
+      Number.isFinite(actual)
+    ) {
+      const bank = observedBankFor(trend[index]);
+      bank.actualSum += actual;
+      bank.count += 1;
+      if (Number.isFinite(deviation)) {
+        bank.squaredDeviationSum += deviation * deviation;
+        const dip = trend[index] - shortTerm[index];
+        if (Number.isFinite(dip) && dip > bank.maxDip) {
+          bank.maxDip = dip;
+          bank.dipTime = Number(timeSeconds[index]);
+        }
+      }
+    }
   }
+
+  const perBank = observedBanks
+    .filter((bank) => bank.count >= Math.max(200, sampleRate * 2))
+    .sort((a, b) => a.level - b.level)
+    .map((bank) => {
+      const averageRpm = bank.actualSum / bank.count;
+      return {
+        targetRpm: Math.round(averageRpm),
+        observed: true,
+        sampleCount: bank.count,
+        averageRpm: Math.round(averageRpm),
+        droopRpm: Math.round(bank.maxDip * 10) / 10,
+        droopPercent:
+          averageRpm > 0
+            ? Math.round((bank.maxDip / averageRpm) * 1000) / 10
+            : null,
+        rmsError:
+          Math.round(
+            Math.sqrt(bank.squaredDeviationSum / bank.count) * 10
+          ) / 10,
+        droopTimeSeconds: Number.isFinite(bank.dipTime)
+          ? Math.round(bank.dipTime * 100) / 100
+          : null
+      };
+    });
 
   if (meanCount < 100) {
     return null;
@@ -850,6 +917,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     capability: "partial",
     mode: "headspeed-hold",
     hasRotorSpeedData: true,
+    perBank,
     story,
     droopRpm: Math.round(worstDeviation * 10) / 10,
     droopPercent:

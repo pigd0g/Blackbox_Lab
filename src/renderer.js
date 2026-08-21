@@ -3636,7 +3636,7 @@ function renderGovernorTechnical(dataset) {
 
   for (const bank of gov.perBank ?? []) {
     rows.push({
-      label: `Bank ${bank.targetRpm} rpm`,
+      label: `Bank ${bank.targetRpm} rpm${bank.observed ? " (observed)" : ""}`,
       value:
         `avg ${bank.averageRpm} rpm · dip ${Math.round(bank.droopRpm)} rpm` +
         (Number.isFinite(bank.droopPercent)
