@@ -88,10 +88,15 @@ export function analyzeEscLab({
   headspeed,
   governorTarget
 }) {
+    // A current channel must CARRY data to be a source: an all-zero
+    // EscI falling back to an all-zero Ibat still measures nothing,
+    // and nothing must never be displayed as 0.0 A (#34).
     const selectedAmperage =
     hasUsablePositiveData(escCurrent)
       ? escCurrent
-      : amperage;
+      : hasUsablePositiveData(amperage)
+        ? amperage
+        : null;
 
   const { selected: selectedVoltage, note: voltageSourceNote } =
     chooseVoltageSource(escVoltage, vbat);
@@ -416,6 +421,13 @@ export function analyzeEscLab({
       )} / ${ampsStats.max.toFixed(
         1
       )} A (est.)`
+    });
+  } else {
+    // The same capability state Home and Log Quality report: a fitted
+    // sensor with no usable data reads as unavailable, never as zero.
+    metrics.push({
+      label: "Stable current avg / peak",
+      value: "Unavailable — no usable current telemetry"
     });
   }
 
