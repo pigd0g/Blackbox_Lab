@@ -4758,10 +4758,24 @@ function renderPidProfileBreakdown(pidAnalysis, lines) {
     a.averageTrackingError >= b.averageTrackingError ? a : b
   );
 
+  // Ranking is a claim the evidence must carry: the same
+  // under-sampling bar the Technical PID Analysis applies (a thin
+  // bank cannot be crowned) governs this sentence too — one
+  // qualification standard on every surface (#33).
+  const largestSampleCount = usableProfiles.reduce(
+    (max, profile) => Math.max(max, profile.sampleCount ?? 0),
+    0
+  );
+  const underSampled = (profile) =>
+    (profile.sampleCount ?? 0) < 5000 ||
+    (profile.sampleCount ?? 0) * 20 < largestSampleCount;
+
   pidProfileNote.textContent =
     best.targetRpm === worst.targetRpm
       ? ""
-      : `${best.targetRpm} rpm tracked best overall; ${worst.targetRpm} rpm tracked worst. Overshoot rate = share of commanded samples where the response exceeded the target beyond a small deadband.`;
+      : underSampled(best) || underSampled(worst)
+        ? `${best.targetRpm} rpm showed the lowest observed tracking error, but the headspeeds carry very different amounts of evidence — collect more flight time at the thin one before deciding which tracks best. Overshoot rate = share of commanded samples where the response exceeded the target beyond a small deadband.`
+        : `${best.targetRpm} rpm tracked best overall; ${worst.targetRpm} rpm tracked worst. Overshoot rate = share of commanded samples where the response exceeded the target beyond a small deadband.`;
 }
 
 function renderFilterProfileBreakdown(dataset) {
