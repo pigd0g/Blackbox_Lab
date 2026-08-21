@@ -2526,7 +2526,10 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     craftDumpParsed: dump?.parsed ?? null,
     firmwareRevision: firmwareRevision ?? "",
     getHeaderValue,
-    dumpFreshness
+    dumpFreshness,
+    // The governor lab's sustained banks: two or more means this
+    // flight mixed regimes and tuning members are withheld.
+    headspeedBanks: dataset?.labs?.governor?.perBank ?? null
   });
 
   const dumpNote = el("packDumpNote");
@@ -2603,15 +2606,21 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   const show =
     pack.members.length > 0 ||
     pack.prescriptions.length > 0 ||
+    Boolean(pack.withheld && pack.queued.length > 0) ||
     Boolean(bannerText) ||
     dumpIsStale;
   card.hidden = !show;
   if (!show) return;
 
   el("packIntro").textContent =
-    pack.members.length > 0
-      ? `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} earned by this flight — each verified by its own instrument on the next log. Change nothing else alongside.`
-      : "No change is earned yet, but the evidence flights below would settle the open questions.";
+    pack.withheld && pack.queued.length > 0
+      ? `This flight held ${pack.withheld.banks.length} different headspeed banks (${pack.withheld.banks
+          .map((rpm) => `${rpm} rpm`)
+          .join(", ")}), so its evidence mixes two flight regimes. ` +
+        `${pack.queued.length} earned change${pack.queued.length === 1 ? " waits" : "s wait"} for a single-bank flight — fly one bank and the pack unlocks.`
+      : pack.members.length > 0
+        ? `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} earned by this flight — each verified by its own instrument on the next log. Change nothing else alongside.`
+        : "No change is earned yet, but the evidence flights below would settle the open questions.";
 
   const members = el("packMembers");
   members.innerHTML = "";

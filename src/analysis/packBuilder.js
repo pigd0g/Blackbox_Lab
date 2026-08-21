@@ -43,7 +43,8 @@ export function buildPack({
   firmwareRevision = "",
   packCap = PACK_CAP,
   getHeaderValue = null,
-  dumpFreshness = null
+  dumpFreshness = null,
+  headspeedBanks = null
 } = {}) {
   const all = [
     ...(recommendations?.pid ?? []),
@@ -68,7 +69,50 @@ export function buildPack({
   const members = [];
   const queued = [];
 
+  // A flight that held two or more distinct headspeed banks mixed
+  // two regimes into every instrument that earned these changes —
+  // and the verifying flight could not attribute its deltas either.
+  // Until per-regime segmentation exists, tuning members are
+  // withheld on such flights: honest refusal over confident
+  // misattribution. Evidence prescriptions still ride along.
+  // Bank clusters within a few percent are one flown regime: a
+  // drooping acro bank smears across the lab's 1.5% clusters, and
+  // telling a pilot who flew hover + acro that they "held four
+  // banks" would be the instrument talking, not the flight.
+  const bankRpms = (Array.isArray(headspeedBanks) ? headspeedBanks : [])
+    .map((bank) => bank?.averageRpm ?? bank?.targetRpm)
+    .filter((rpm) => Number.isFinite(rpm) && rpm > 0)
+    .sort((a, b) => a - b);
+
+  const regimes = [];
+  for (const rpm of bankRpms) {
+    const last = regimes[regimes.length - 1];
+    if (last && rpm <= last.max * 1.03) {
+      last.max = rpm;
+      last.sum += rpm;
+      last.count += 1;
+    } else {
+      regimes.push({ max: rpm, sum: rpm, count: 1 });
+    }
+  }
+  const sustainedBanks = regimes.map((regime) => ({
+    averageRpm: Math.round(regime.sum / regime.count)
+  }));
+  const multiBankWithheld = sustainedBanks.length >= 2;
+
   for (const rec of ordered) {
+    if (multiBankWithheld) {
+      queued.push({
+        rec,
+        reason:
+          "this flight held " +
+          `${sustainedBanks.length} different headspeed banks — ` +
+          "its evidence mixes two regimes, so tuning changes wait " +
+          "for a single-bank flight"
+      });
+      continue;
+    }
+
     const setting = rec.suggestion.family;
     const group = groupOf(setting);
 
@@ -175,6 +219,14 @@ export function buildPack({
       members.some((member) => isGovernorGroup(member.group)) &&
       members.some((member) => !isGovernorGroup(member.group)),
     numericAllowed,
-    firmwarePin: CARDS_FIRMWARE_PIN
+    firmwarePin: CARDS_FIRMWARE_PIN,
+    withheld: multiBankWithheld
+      ? {
+          reason: "multi-bank flight",
+          banks: sustainedBanks.map(
+            (bank) => bank.averageRpm ?? bank.targetRpm
+          )
+        }
+      : null
   };
 }

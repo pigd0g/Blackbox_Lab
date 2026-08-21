@@ -244,3 +244,106 @@ test("a dump-only number under a stale dump carries the freshness warning", () =
   assert.equal(pack.members[0].currentSource, "dump");
   assert.match(pack.members[0].freshnessNote, /refresh it/);
 });
+
+// ---- multi-bank guard ----
+
+test("a flight that held two headspeed banks withholds every tuning member", () => {
+  const pack = buildPack({
+    recommendations: {
+      pid: [earned("Roll", "roll_d_gain"), earned("Pitch", "pitch_f_gain")],
+      governor: []
+    },
+    firmwareRevision: FIRMWARE,
+    headspeedBanks: [
+      { targetRpm: 1330, averageRpm: 1331, observed: true },
+      { targetRpm: 1850, averageRpm: 1848, observed: true }
+    ]
+  });
+
+  assert.equal(pack.members.length, 0, "no tuning member may pack");
+  assert.equal(pack.queued.length, 2, "earned changes wait, not vanish");
+  assert.ok(pack.withheld, "the pack must say why it is empty");
+  assert.deepEqual(pack.withheld.banks, [1331, 1848]);
+  assert.match(pack.queued[0].reason, /headspeed banks/);
+});
+
+test("a single sustained bank changes nothing about packing", () => {
+  const pack = buildPack({
+    recommendations: {
+      pid: [earned("Roll", "roll_d_gain")],
+      governor: []
+    },
+    firmwareRevision: FIRMWARE,
+    headspeedBanks: [{ targetRpm: 1820, averageRpm: 1821, observed: true }]
+  });
+
+  assert.equal(pack.members.length, 1);
+  assert.equal(pack.withheld, null);
+});
+
+test("confirm prescriptions still ride along on a multi-bank flight", () => {
+  const pack = buildPack({
+    recommendations: {
+      pid: [
+        earned("Roll", "roll_d_gain"),
+        {
+          id: "pid:Roll:confirm",
+          lab: "pid",
+          axis: "Roll",
+          level: "confirm",
+          blockedBy: null,
+          confidence: "Medium",
+          suggestion: null,
+          nextManeuver: "three crisp roll stops each way"
+        }
+      ],
+      governor: []
+    },
+    firmwareRevision: FIRMWARE,
+    headspeedBanks: [
+      { targetRpm: 1330, averageRpm: 1331 },
+      { targetRpm: 1850, averageRpm: 1849 }
+    ]
+  });
+
+  assert.equal(pack.members.length, 0);
+  assert.deepEqual(pack.prescriptions, ["three crisp roll stops each way"]);
+});
+
+test("bank clusters within a few percent count as one flown regime", () => {
+  // A drooping acro bank smears across the lab's clusters: 1804,
+  // 1824 and 1848 are one regime beside the 1324 hover bank.
+  const pack = buildPack({
+    recommendations: {
+      pid: [earned("Roll", "roll_d_gain")],
+      governor: []
+    },
+    firmwareRevision: FIRMWARE,
+    headspeedBanks: [
+      { averageRpm: 1324 },
+      { averageRpm: 1804 },
+      { averageRpm: 1824 },
+      { averageRpm: 1848 }
+    ]
+  });
+
+  assert.ok(pack.withheld);
+  assert.equal(pack.withheld.banks.length, 2, "two regimes, not four");
+
+  // The same three acro clusters alone are ONE regime — no withhold.
+  const single = buildPack({
+    recommendations: {
+      pid: [earned("Roll", "roll_d_gain")],
+      governor: []
+    },
+    firmwareRevision: FIRMWARE,
+    headspeedBanks: [
+      { averageRpm: 1804 },
+      { averageRpm: 1824 },
+      { averageRpm: 1848 }
+    ]
+  });
+
+  assert.equal(single.withheld, null);
+  assert.equal(single.members.length, 1);
+});
