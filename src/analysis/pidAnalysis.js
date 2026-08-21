@@ -197,6 +197,25 @@ export const TRACKING_SCORE_TUNING = {
 // fleet-wide, where the previous global bars, set before
 // the alignment fix, read closer to four in ten.
 // ------------------------------------------------------
+// ------------------------------------------------------
+// Response-behavior Review bars, per axis
+//
+// Re-anchored 2026-08-21 on the whole contributed fleet:
+// the original bars sat at or below each check's fleet
+// MEDIAN (roll bounce-back's bar flagged nine qualifying
+// flights in ten), so a Review described normal flying.
+// Each bar now sits at its axis's ~p85, so a Review names
+// the genuine tail. Settling is judged in MILLISECONDS —
+// the old fixed sample count meant a different bar at
+// every logging rate. A field-expert-labeled case anchors
+// the acceptance of this round.
+// ------------------------------------------------------
+export const RESPONSE_REVIEW_BARS = {
+  bounceBackPercent: { Roll: 54, Pitch: 27, Yaw: 21 },
+  settleMs: { Roll: 290, Pitch: 230, Yaw: 150 },
+  ringingCrossings: { Roll: 30, Pitch: 6, Yaw: 8 }
+};
+
 export const COMMAND_BALANCE_BARS = {
   Roll: { iPercent: 92, supportPercent: 8 },
   Pitch: { iPercent: 84, supportPercent: 10 },
@@ -2983,7 +3002,8 @@ const trimmedMaximumBounceBackPercent =
   bounceBackConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating bounce-back.`
     : Number.isFinite(medianBounceBackPercent) &&
-        medianBounceBackPercent >= 15
+        medianBounceBackPercent >=
+          (RESPONSE_REVIEW_BARS.bounceBackPercent[axisResult.axis] ?? 54)
       ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
       : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
 
@@ -2994,7 +3014,8 @@ const trimmedMaximumBounceBackPercent =
   bounceBackConfidence === "Low"
     ? "Insufficient Data"
     : Number.isFinite(medianBounceBackPercent) &&
-        medianBounceBackPercent >= 15
+        medianBounceBackPercent >=
+          (RESPONSE_REVIEW_BARS.bounceBackPercent[axisResult.axis] ?? 54)
       ? "Review"
       : "Clear";
 return [
@@ -3149,7 +3170,8 @@ const trimmedMaximumSettlingDurationSamples =
     : Number.isFinite(
         medianSettlingDurationSamples
       ) &&
-        medianSettlingDurationSamples >= 100
+        medianSettlingDurationSamples * (1000 / samplesPerSecond) >=
+          (RESPONSE_REVIEW_BARS.settleMs[axisResult.axis] ?? 290)
       ? `Review ${axisResult.axis} for slow settling after command changes. Confirm the pattern with another log before changing PID values.`
       : `No repeated slow-settling pattern was identified for ${axisResult.axis}.`;
       const settlingStatus =
@@ -3159,7 +3181,8 @@ const trimmedMaximumSettlingDurationSamples =
     : Number.isFinite(
         medianSettlingDurationSamples
       ) &&
-        medianSettlingDurationSamples >= 100
+        medianSettlingDurationSamples * (1000 / samplesPerSecond) >=
+          (RESPONSE_REVIEW_BARS.settleMs[axisResult.axis] ?? 290)
       ? "Review"
       : "Clear";
   return [
@@ -3296,7 +3319,8 @@ const trimmedMaximumRingingCrossingCount =
     : Number.isFinite(
         medianRingingCrossingCount
       ) &&
-        medianRingingCrossingCount >= 3
+        medianRingingCrossingCount >=
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 30)
       ? `Review ${axisResult.axis} for repeated post-command ringing. Confirm the pattern with another log before changing PID or filter values.`
       : `No repeated sustained-ringing pattern was identified for ${axisResult.axis}.`;
       const ringingStatus =
@@ -3306,7 +3330,8 @@ const trimmedMaximumRingingCrossingCount =
     : Number.isFinite(
         medianRingingCrossingCount
       ) &&
-        medianRingingCrossingCount >= 3
+        medianRingingCrossingCount >=
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 30)
       ? "Review"
       : "Clear";
   return [
