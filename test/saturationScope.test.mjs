@@ -45,10 +45,13 @@ function buildFlight(iTermAt) {
   for (let row = 0; row < ROW_COUNT; row += 1) {
     const t = row / SAMPLE_RATE;
 
-    // Gentle varying activity so no term sits at a constant value
-    // (a constant column is "always at its own maximum" by
-    // definition and would fake near-peak everywhere).
-    const wobble = 10 + 5 * Math.sin(t * 2);
+    // Gentle varying activity so no term sits at a constant value,
+    // anchored by one brief spike so the column's maximum is a
+    // single real event. A pure sine (or a constant) rides its own
+    // maximum every cycle by definition and would fake near-peak
+    // dwell that no real flight term shows.
+    const wobble =
+      t >= 30 && t < 30.05 ? 30 : 10 + 5 * Math.sin(t * 2);
 
     lines.push(
       [
@@ -89,10 +92,16 @@ function buildFlight(iTermAt) {
   );
 }
 
-// ~2.1 s pinned at 100 starting at `at` seconds, gentle wobble
-// otherwise.
-const iTermWithRunAt = (at) => (t) =>
-  t >= at && t < at + 2.1 ? 100 : 10 + 6 * Math.sin(t * 1.7);
+// ~2.1 s pinned at 100 starting at `at` seconds; gentle wobble
+// otherwise, with one brief in-window anchor spike so the term's
+// maximum is a single real event — a periodic wobble that kisses
+// its own maximum every cycle is not how flight I-terms behave,
+// and it would fake near-peak dwell time.
+const iTermWithRunAt = (at) => (t) => {
+  if (t >= at && t < at + 2.1) return 100;
+  if (t >= 30 && t < 30.05) return 30;
+  return 10 + 6 * Math.sin(t * 1.7);
+};
 
 const rollISaturationLine = (result) =>
   (result.findings ?? []).find(

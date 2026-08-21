@@ -210,6 +210,23 @@ export const TRACKING_SCORE_TUNING = {
 // every logging rate. A field-expert-labeled case anchors
 // the acceptance of this round.
 // ------------------------------------------------------
+// PID-term saturation Review bars, per axis — fleet-calibrated
+// (~p85 of both dimensions jointly, roughly one flight in nine
+// fleet-wide) and stated in physical units: the run length is
+// milliseconds, not samples, so the same flight reads the same at
+// any logging rate. Calibrated on the I-term distributions; P and
+// D terms share the bars, which is conservative for them (their
+// near-peak activity runs lower by nature). One field-expert-
+// labeled soft case (ceiling-zone riding below the 98 % near-peak
+// line) deliberately remains sub-threshold — whether the ZONE
+// definition should widen is an open calibration question, not a
+// bar question.
+export const SATURATION_REVIEW_BARS = {
+  Roll: { sharePercent: 0.18, runMs: 145 },
+  Pitch: { sharePercent: 0.24, runMs: 155 },
+  Yaw: { sharePercent: 0.35, runMs: 185 }
+};
+
 export const RESPONSE_REVIEW_BARS = {
   bounceBackPercent: { Roll: 54, Pitch: 27, Yaw: 21 },
   settleMs: { Roll: 290, Pitch: 230, Yaw: 150 },
@@ -1963,14 +1980,21 @@ const classifyPidTermSaturation = (
     };
   }
 
+  const bars =
+    SATURATION_REVIEW_BARS[nearPeakResult?.axis] ??
+    SATURATION_REVIEW_BARS.Roll;
+
+  const longestRunMs =
+    longestNearPeakRun * (1000 / samplesPerSecond);
+
   const sustainedRunDetected =
-    longestNearPeakRun >= 100;
+    longestRunMs >= bars.runMs;
 
   const elevatedNearPeakActivity =
-    nearPeakPercent >= 0.25;
+    nearPeakPercent >= bars.sharePercent;
 
   const moderateNearPeakActivity =
-    nearPeakPercent >= 0.10;
+    nearPeakPercent >= bars.sharePercent / 2;
 
   const status =
     sustainedRunDetected &&
