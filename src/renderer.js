@@ -3212,9 +3212,9 @@ function renderNextSteps(cardId, listId, recommendations) {
       return `
         <div class="event-detail-explain">
           <p><strong>${escapeHtml(rec.finding)}</strong></p>
-          <p>${escapeHtml(rec.hypothesis)}</p>
+          <p>${escapeHtml(rec.hypothesis ?? "")}</p>
           ${action}
-          <p class="chart-hint">Confidence: ${escapeHtml(rec.confidence)} · based on ${rec.evidence.length} event${rec.evidence.length === 1 ? "" : "s"} on this page</p>
+          <p class="chart-hint">Confidence: ${escapeHtml(rec.confidence ?? "\u2014")} · based on ${(rec.evidence ?? []).length} event${(rec.evidence ?? []).length === 1 ? "" : "s"} on this page</p>
         </div>`;
     })
     .join("");

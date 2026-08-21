@@ -92,6 +92,13 @@ export function finalizeRecommendation(rec, { domain = "tuning" } = {}) {
   rec.blockedBy = blockedBy;
   rec.instrument = rec.instrument ?? instrumentFor(rec);
 
+  // Contract guarantee: every renderer may map over the evidence
+  // list without ceremony — an entry born without one gets the
+  // empty list, never undefined (v1.4.0 field crash, RS6 log).
+  if (!Array.isArray(rec.evidence)) {
+    rec.evidence = [];
+  }
+
   if (level === "confirm" && !rec.nextManeuver) {
     rec.nextManeuver =
       CONFIRM_MANEUVERS[rec.axis] ??
@@ -154,6 +161,8 @@ export function confirmsFromResponseBehavior(
           `${checkResult.axis} ${checkResult.check} flagged for review` +
           (checkResult.evidence ? ` (${checkResult.evidence})` : "") +
           ".",
+        hypothesis:
+          "The pattern is real, but this flight offered too few clean commands to earn a change — one dedicated evidence flight settles it.",
         gatedReason:
           "The pattern is real but below the recommendation gates — confirm the pattern with a dedicated evidence flight before any change.",
         instrument: `pid.${checkResult.axis.toLowerCase()}.${

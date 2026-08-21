@@ -131,3 +131,15 @@ test("axes the engine already covered get no duplicate confirm", () => {
 
   assert.equal(confirms.length, 0);
 });
+
+test("every finalized entry carries an evidence array — renderers map without ceremony", () => {
+  const bridge = confirmsFromResponseBehavior(
+    [{ axis: "Roll", check: "bounce-back", status: "Review" }],
+    []
+  )[0];
+  assert.ok(Array.isArray(bridge.evidence));
+  assert.equal(typeof bridge.hypothesis, "string");
+
+  const bare = finalizeRecommendation({ id: "x", lab: "pid", axis: "Roll" });
+  assert.ok(Array.isArray(bare.evidence));
+});
