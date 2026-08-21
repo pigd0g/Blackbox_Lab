@@ -22,17 +22,62 @@
 //
 // Labeled specimen: Tron 7.0 log — pitch |I| 206 vs flight
 // median 4 during a 255 deg/s roll command, dumped at
-// release into a felt pitch-up. Detection is Observed-only
-// until the fleet probe sets per-pair Review bars.
+// release into a felt pitch-up.
 //
 // ======================================================
 
 export const CROSS_AXIS_TAIL_SECONDS = 0.6;
 
-// Per-pair Review bars: null until the fleet probe sets them
-// (fleet-calibration discipline — bars are measured, never
-// guessed). While null, every pair reports Observed only.
-export const CROSS_AXIS_REVIEW_BARS = null;
+// Per-pair Review bars, measured on the 742-flight fleet sweep of
+// 2026-08-22 (fleet-calibration discipline — bars are measured,
+// never guessed). A pair reads Review only when its strongest
+// event clears ALL THREE legs:
+//   ratio >= bar.ratio   (per-pair fleet p95 of strongest ratio)
+//   delta >= bar.delta   (per-pair fleet p50 — guards against
+//                         ratio inflation over near-zero baselines)
+//   releaseDrop >= CROSS_AXIS_DUMP_SHARE * delta
+//                        (at least half the built charge released
+//                         in the tail — the dump signature itself)
+// Composite rule verified on the annotated Tron 7.0 package: the
+// felt pitch-up flight reads Review; the softened-technique rerun
+// and a near-zero-baseline high-ratio flight both stay Observed.
+// Fleet Review volume at these bars: 3.2 % of flights.
+// Pairs with yaw as the OFF axis carry no bar and stay Observed:
+// yaw |I| baselines run in the hundreds (tail torque holding),
+// so the ratio leg has no comparable meaning there — those pairs
+// need their own labeled specimen before bars are set.
+export const CROSS_AXIS_REVIEW_BARS = {
+  "Pitch->Roll": { ratio: 49.5, delta: 152 },
+  "Roll->Pitch": { ratio: 63.0, delta: 160 },
+  "Yaw->Roll": { ratio: 43.4, delta: 139 },
+  "Yaw->Pitch": { ratio: 53.8, delta: 158 }
+};
+
+export const CROSS_AXIS_DUMP_SHARE = 0.5;
+
+// Review/Observed for one measured pair, judged on its strongest
+// event against the pair's bars. Pairs without bars are Observed
+// by definition — never Review, never silent.
+export function crossAxisPairStatus(pair) {
+  const bars =
+    CROSS_AXIS_REVIEW_BARS[
+      `${pair?.commandAxis}->${pair?.offAxis}`
+    ];
+  const strongest = pair?.strongest;
+
+  if (!bars || !strongest) {
+    return "Observed";
+  }
+
+  const meetsAllLegs =
+    strongest.ratio >= bars.ratio &&
+    strongest.delta >= bars.delta &&
+    strongest.delta > 0 &&
+    strongest.releaseDrop >=
+      CROSS_AXIS_DUMP_SHARE * strongest.delta;
+
+  return meetsAllLegs ? "Review" : "Observed";
+}
 
 const median = (values) => {
   const finite = values
@@ -250,7 +295,8 @@ export function analyzeCrossAxisIDump({
 }
 
 // One findings line per measured pair, strict format — the
-// fleet-calibration probe parses these.
+// fleet-calibration probe parses these. The status rides at the
+// end, after the measurement the probe reads.
 export function crossAxisFindingLines(pairs, describeMoment) {
   return (pairs ?? []).map((pair) => {
     const moment =
@@ -268,7 +314,8 @@ export function crossAxisFindingLines(pairs, describeMoment) {
       `across ${pair.eventCount} measured event${
         pair.eventCount === 1 ? "" : "s"
       }` +
-      (moment ? `, ${moment}` : "")
+      (moment ? `, ${moment}` : "") +
+      ` — ${crossAxisPairStatus(pair)}`
     );
   });
 }

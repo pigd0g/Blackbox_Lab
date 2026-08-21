@@ -11,7 +11,8 @@ import {
 
 import {
   analyzeCrossAxisIDump,
-  crossAxisFindingLines
+  crossAxisFindingLines,
+  crossAxisPairStatus
 } from "./crossAxisAnalysis.js";
 function findMatchingColumns(columns, searchTerms) {
   if (!Array.isArray(columns)) {
@@ -2408,7 +2409,8 @@ const commandEvidence = assessCommandEvidence(commandEvents);
 
 // Cross-axis I coupling: off-axis integrator build during a
 // command, measured in the same compacted row space as the
-// events and term columns. Observed-only until fleet bars land.
+// events and term columns. Each pair carries a Review/Observed
+// status judged against the fleet-calibrated per-pair bars.
 const crossAxisPairs = analyzeCrossAxisIDump({
   commandEvents,
   iTermValuesByAxis: Object.fromEntries(
@@ -2701,12 +2703,13 @@ const pidScoreExplanation = [
   ),
   saturationReviewTermCount:
     saturationReviewTerms.length,
-  // Off-axis I build per ordered axis pair, exported raw so the
-  // fleet probe calibrates bars against the measurement, not the
-  // verdict it will one day produce.
+  // Off-axis I build per ordered axis pair. The measurement stays
+  // raw — the fleet probe calibrates bars against it — and the
+  // status carries the verdict those bars produce.
   crossAxisCoupling: crossAxisPairs.map((pair) => ({
     commandAxis: pair.commandAxis,
     offAxis: pair.offAxis,
+    status: crossAxisPairStatus(pair),
     eventCount: pair.eventCount,
     baseline: Math.round(pair.baseline * 10) / 10,
     medianPeak: Number.isFinite(pair.medianPeak)

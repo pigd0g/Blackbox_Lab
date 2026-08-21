@@ -17,7 +17,9 @@ import assert from "node:assert/strict";
 
 import {
   analyzeCrossAxisIDump,
-  crossAxisFindingLines
+  crossAxisFindingLines,
+  crossAxisPairStatus,
+  CROSS_AXIS_REVIEW_BARS
 } from "../src/analysis/crossAxisAnalysis.js";
 
 const SAMPLE_RATE = 100;
@@ -159,5 +161,92 @@ test("findings lines carry the probe-parsable format", () => {
 
   for (const line of lines) {
     assert.match(line, pattern);
+    assert.match(
+      line,
+      / — (Review|Observed)$/,
+      "every findings line must end with its status"
+    );
   }
+});
+
+test("review bars exist only where the ratio leg is comparable", () => {
+  // Bars cover the four pairs whose off axis is cyclic. Pairs with
+  // yaw as the off axis have no bar: yaw |I| baselines run in the
+  // hundreds, so a peak-over-baseline ratio means something
+  // different there.
+  assert.deepEqual(
+    Object.keys(CROSS_AXIS_REVIEW_BARS).sort(),
+    ["Pitch->Roll", "Roll->Pitch", "Yaw->Pitch", "Yaw->Roll"]
+  );
+
+  for (const bars of Object.values(CROSS_AXIS_REVIEW_BARS)) {
+    assert.ok(bars.ratio > 0);
+    assert.ok(bars.delta > 0);
+  }
+});
+
+const statusPair = (strongest, commandAxis = "Roll", offAxis = "Pitch") => ({
+  commandAxis,
+  offAxis,
+  eventCount: 1,
+  baseline: 3,
+  medianPeak: strongest.peak ?? null,
+  strongest
+});
+
+test("a specimen-grade dump reads Review", () => {
+  // The annotated Tron 7.0 felt-pitch-up numbers: ratio and delta
+  // above their bars, most of the built charge released in the tail.
+  assert.equal(
+    crossAxisPairStatus(
+      statusPair({ peak: 204, ratio: 68, delta: 201, releaseDrop: 160 })
+    ),
+    "Review"
+  );
+});
+
+test("high ratio over a near-zero baseline stays Observed", () => {
+  // Ratio alone would flag this; the delta leg is what refuses a
+  // 64-peak event dressed up by a baseline of one.
+  assert.equal(
+    crossAxisPairStatus(
+      statusPair({ peak: 64, ratio: 64, delta: 64, releaseDrop: 64 })
+    ),
+    "Observed"
+  );
+});
+
+test("a softened release below the ratio bar stays Observed", () => {
+  // The technique rerun of the same maneuvers: same craft, same
+  // tune, ratio well under the bar.
+  assert.equal(
+    crossAxisPairStatus(
+      statusPair({ peak: 208, ratio: 17.3, delta: 196, releaseDrop: 141 })
+    ),
+    "Observed"
+  );
+});
+
+test("a build that never dumps stays Observed", () => {
+  // Ratio and delta clear their bars, but the charge holds through
+  // the tail — no release, no felt movement, no Review.
+  assert.equal(
+    crossAxisPairStatus(
+      statusPair({ peak: 204, ratio: 68, delta: 201, releaseDrop: 40 })
+    ),
+    "Observed"
+  );
+});
+
+test("pairs without bars are Observed by definition", () => {
+  assert.equal(
+    crossAxisPairStatus(
+      statusPair(
+        { peak: 900, ratio: 80, delta: 800, releaseDrop: 700 },
+        "Roll",
+        "Yaw"
+      )
+    ),
+    "Observed"
+  );
 });
