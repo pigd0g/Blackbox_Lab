@@ -8,6 +8,11 @@ import {
   detectStableFlightPhase,
   buildRollingMean
 } from "./flightPhase.js";
+
+import {
+  analyzeCrossAxisIDump,
+  crossAxisFindingLines
+} from "./crossAxisAnalysis.js";
 function findMatchingColumns(columns, searchTerms) {
   if (!Array.isArray(columns)) {
     return [];
@@ -2401,6 +2406,31 @@ if (
 // — which is a limit on the verdict, not a detail beneath it.
 const commandEvidence = assessCommandEvidence(commandEvents);
 
+// Cross-axis I coupling: off-axis integrator build during a
+// command, measured in the same compacted row space as the
+// events and term columns. Observed-only until fleet bars land.
+const crossAxisPairs = analyzeCrossAxisIDump({
+  commandEvents,
+  iTermValuesByAxis: Object.fromEntries(
+    pidTermValues.i.map((termResult) => [
+      termResult.axis,
+      termResult.values
+    ])
+  ),
+  samplesPerSecond
+});
+
+const crossAxisFindings = crossAxisFindingLines(
+  crossAxisPairs,
+  (strongest) =>
+    `strongest at ${eventMomentText(
+      strongest.peakSampleIndex,
+      Number.isInteger(strongest.peakSampleIndex)
+        ? stableRowIndexes[strongest.peakSampleIndex] ?? null
+        : null
+    )}`
+);
+
 confidenceScore = Math.max(
   0,
   confidenceScore - commandEvidence.penalty
@@ -2671,6 +2701,28 @@ const pidScoreExplanation = [
   ),
   saturationReviewTermCount:
     saturationReviewTerms.length,
+  // Off-axis I build per ordered axis pair, exported raw so the
+  // fleet probe calibrates bars against the measurement, not the
+  // verdict it will one day produce.
+  crossAxisCoupling: crossAxisPairs.map((pair) => ({
+    commandAxis: pair.commandAxis,
+    offAxis: pair.offAxis,
+    eventCount: pair.eventCount,
+    baseline: Math.round(pair.baseline * 10) / 10,
+    medianPeak: Number.isFinite(pair.medianPeak)
+      ? Math.round(pair.medianPeak * 10) / 10
+      : null,
+    strongestPeak: Math.round(pair.strongest.peak * 10) / 10,
+    strongestDelta: Math.round(pair.strongest.delta * 10) / 10,
+    strongestRatio: Math.round(pair.strongest.ratio * 10) / 10,
+    strongestReleaseDrop:
+      Math.round(pair.strongest.releaseDrop * 10) / 10,
+    strongestCommandMagnitude: Number.isFinite(
+      pair.strongest.commandMagnitude
+    )
+      ? Math.round(pair.strongest.commandMagnitude * 10) / 10
+      : null
+  })),
     axisStatus: axisNames.map((axis) => {
   const commandBalance =
     pidCommandBalanceAssessment.find(
@@ -2745,6 +2797,7 @@ const pidScoreExplanation = [
 ...commandEvents.map((axisResult) =>
   `${axisResult.axis} meaningful command events detected: ${axisResult.eventCount}`
 ),
+...crossAxisFindings,
 ...commandEvents.flatMap((axisResult) => {
   const validPeakEvents =
     axisResult.events.filter((event) =>
