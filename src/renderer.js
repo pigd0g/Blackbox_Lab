@@ -122,7 +122,10 @@ import {
   fileAnalysis,
   latestPack
 } from "./analysis/confirmationLedger.js";
-import { assessAppliedState } from "./analysis/appliedState.js";
+import {
+  assessAppliedState,
+  assessDumpFreshness
+} from "./analysis/appliedState.js";
 import { gradeAppliedPack } from "./analysis/verificationAutopilot.js";
 import {
   analyzeServoLimits,
@@ -2502,11 +2505,52 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       : rawCraftName;
   const dump = getCraftDump(localStorage, craftName);
 
+  const getHeaderValue = (header) =>
+    getMetadataValue(currentFlightLines, header);
+
+  // A dump read once can silently go stale behind configurator
+  // sessions. The flown headers of THIS log are the arbiter: any
+  // disagreement flags the dump, and mapped settings use the flown
+  // value regardless — a stale dump can never mis-number a pack for
+  // settings the log itself carries.
+  const dumpFreshness = dump?.parsed
+    ? assessDumpFreshness({ dumpParsed: dump.parsed, getHeaderValue })
+    : null;
+
   const pack = buildPack({
     recommendations: nextSteps,
     craftDumpParsed: dump?.parsed ?? null,
-    firmwareRevision: firmwareRevision ?? ""
+    firmwareRevision: firmwareRevision ?? "",
+    getHeaderValue,
+    dumpFreshness
   });
+
+  const dumpNote = el("packDumpNote");
+  const dumpUpdateRow = el("packDumpUpdateRow");
+  const dumpIsStale = Boolean(dumpFreshness && !dumpFreshness.fresh);
+  if (dumpNote && dumpUpdateRow) {
+    dumpNote.hidden = !dumpIsStale;
+    dumpUpdateRow.hidden = !dumpIsStale;
+    if (dumpIsStale) {
+      const savedDate = dump?.savedAtMs
+        ? new Date(dump.savedAtMs).toLocaleDateString()
+        : null;
+      dumpNote.textContent =
+        `The saved settings dump${savedDate ? ` (read ${savedDate})` : ""} disagrees with this flight on ` +
+        `${dumpFreshness.mismatches.length} setting${
+          dumpFreshness.mismatches.length === 1 ? "" : "s"
+        } (${dumpFreshness.mismatches
+          .slice(0, 3)
+          .map((m) => m.setting)
+          .join(", ")}${dumpFreshness.mismatches.length > 3 ? ", \u2026" : ""}) — the configuration changed since it was read. ` +
+        "This flight's own values are used where the log carries them; refresh the dump for the rest.";
+      const updateButton = el("packDumpUpdateButton");
+      if (updateButton) {
+        updateButton.onclick = () =>
+          openCraftCardPanel(context.craftKey ?? "Unknown craft");
+      }
+    }
+  }
 
   // The craft's memory: check the previous pack against this log's
   // own headers, and file this flight's findings. Bundled samples are
@@ -2555,7 +2599,8 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   const show =
     pack.members.length > 0 ||
     pack.prescriptions.length > 0 ||
-    Boolean(bannerText);
+    Boolean(bannerText) ||
+    dumpIsStale;
   card.hidden = !show;
   if (!show) return;
 
@@ -2572,8 +2617,9 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     const change = Number.isFinite(member.to)
       ? `${member.from} \u2192 ${member.to}`
       : `one ${member.magnitudeClass} ${member.direction}`;
-    const note = member.numericNote
-      ? `<div class="chart-hint">${member.numericNote}</div>`
+    const noteText = member.freshnessNote ?? member.numericNote;
+    const note = noteText
+      ? `<div class="chart-hint">${noteText}</div>`
       : "";
     row.innerHTML = `
       <div class="pack-member-head"><code>${member.setting}</code> <b>${change}</b></div>

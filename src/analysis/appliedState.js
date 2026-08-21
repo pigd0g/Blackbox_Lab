@@ -107,3 +107,33 @@ export function assessAppliedState({ packMembers = [], getHeaderValue }) {
 
   return { verdict, members, applied, missed };
 }
+
+/**
+ * Is the saved CLI dump still telling the truth? Every mapped
+ * setting present in BOTH the dump and this log's flown headers is
+ * compared; any disagreement means the configuration changed since
+ * the dump was read (configurator sessions the app never saw).
+ * Fresh means "no observed disagreement", not proof — unmapped
+ * settings cannot be checked from a log.
+ */
+export function assessDumpFreshness({ dumpParsed, getHeaderValue }) {
+  const mismatches = [];
+  let checked = 0;
+
+  for (const setting of Object.keys(HEADER_MAP)) {
+    const saved = Number(dumpParsed?.[setting]);
+    if (!Number.isFinite(saved)) {
+      continue;
+    }
+    const flown = readHeaderSetting(getHeaderValue, setting);
+    if (flown === null) {
+      continue;
+    }
+    checked += 1;
+    if (flown !== saved) {
+      mismatches.push({ setting, dump: saved, flown });
+    }
+  }
+
+  return { checked, mismatches, fresh: mismatches.length === 0 };
+}

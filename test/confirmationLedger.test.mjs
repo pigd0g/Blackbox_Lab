@@ -23,6 +23,7 @@ import {
 } from "../src/analysis/confirmationLedger.js";
 import {
   assessAppliedState,
+  assessDumpFreshness,
   readHeaderSetting
 } from "../src/analysis/appliedState.js";
 import {
@@ -140,4 +141,16 @@ test("the grader stays silent until floors exist", () => {
 
   assert.equal(graded.members[0].grade, GRADE.AWAITING_CALIBRATION);
   assert.equal(graded.members[1].grade, GRADE.NOT_APPLIED);
+});
+
+test("dump freshness compares saved values against flown headers", () => {
+  const result = assessDumpFreshness({
+    dumpParsed: { roll_d_gain: "15", pitch_d_gain: "40", yaw_cw_stop_gain: "120" },
+    getHeaderValue: (h) =>
+      h === "rollPID" ? "52,102,15,100,0" : h === "pitchPID" ? "53,104,45,100,0" : "Not found"
+  });
+
+  assert.equal(result.checked, 2); // stop gain unmapped -> unchecked
+  assert.equal(result.fresh, false);
+  assert.deepEqual(result.mismatches, [{ setting: "pitch_d_gain", dump: 40, flown: 45 }]);
 });

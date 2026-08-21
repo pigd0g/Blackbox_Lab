@@ -216,3 +216,31 @@ test("a directional member never becomes a guessed number in the snippet", () =>
   assert.ok(!/^set /m.test(forward.split("\n").filter((l) => l.includes("roll_d_gain"))[0]));
   assert.match(forward, /# roll_d_gain: one small step up/);
 });
+
+test("the flown header value beats a stale dump for mapped settings", () => {
+  const pack = buildPack({
+    recommendations: { pid: [earned("Roll", "roll_d_gain")], governor: [] },
+    craftDumpParsed: { roll_d_gain: "5" }, // stale
+    firmwareRevision: FIRMWARE,
+    getHeaderValue: (h) => (h === "rollPID" ? "52,102,10,100,0" : "Not found")
+  });
+
+  assert.equal(pack.members[0].from, 10); // flown, not 5
+  assert.equal(pack.members[0].currentSource, "log");
+});
+
+test("a dump-only number under a stale dump carries the freshness warning", () => {
+  const pack = buildPack({
+    recommendations: {
+      pid: [earned("Yaw", "yaw_cw_stop_gain")], // unmapped in headers
+      governor: []
+    },
+    craftDumpParsed: { yaw_cw_stop_gain: "115" },
+    firmwareRevision: FIRMWARE,
+    getHeaderValue: () => "Not found",
+    dumpFreshness: { fresh: false, checked: 5, mismatches: [{ setting: "roll_d_gain", dump: 5, flown: 10 }] }
+  });
+
+  assert.equal(pack.members[0].currentSource, "dump");
+  assert.match(pack.members[0].freshnessNote, /refresh it/);
+});

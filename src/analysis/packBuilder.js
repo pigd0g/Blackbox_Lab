@@ -31,6 +31,7 @@ import {
   cardsApplyTo,
   CARDS_FIRMWARE_PIN
 } from "./knowledgeCards.js";
+import { readHeaderSetting } from "./appliedState.js";
 
 export const PACK_CAP = 3;
 
@@ -40,7 +41,9 @@ export function buildPack({
   recommendations = null,
   craftDumpParsed = null,
   firmwareRevision = "",
-  packCap = PACK_CAP
+  packCap = PACK_CAP,
+  getHeaderValue = null,
+  dumpFreshness = null
 } = {}) {
   const all = [
     ...(recommendations?.pid ?? []),
@@ -88,7 +91,16 @@ export function buildPack({
 
     const card = getCard(setting);
     const direction = rec.suggestion.direction === "down" ? "down" : "up";
-    const current = craftDumpParsed?.[setting];
+    // The truest current value is what the helicopter actually FLEW:
+    // the log's own headers beat the saved dump wherever both exist,
+    // which makes numeric steps immune to a stale dump for every
+    // mapped setting. The dump remains the source for settings the
+    // headers do not carry.
+    const flown = getHeaderValue
+      ? readHeaderSetting(getHeaderValue, setting)
+      : null;
+    const current = flown ?? craftDumpParsed?.[setting];
+    const currentSource = flown !== null ? "log" : "dump";
     const step = numericAllowed
       ? numericStep(setting, current, direction)
       : null;
@@ -107,11 +119,26 @@ export function buildPack({
       }
     }
 
+    let freshnessNote = null;
+    if (
+      step &&
+      currentSource === "dump" &&
+      dumpFreshness &&
+      !dumpFreshness.fresh
+    ) {
+      freshnessNote =
+        `the saved dump disagrees with this flight on ${dumpFreshness.mismatches.length} setting${
+          dumpFreshness.mismatches.length === 1 ? "" : "s"
+        } — refresh it before trusting dump-only numbers like this one`;
+    }
+
     members.push({
       rec,
       setting,
       group,
       direction,
+      currentSource,
+      freshnessNote,
       magnitudeClass: rec.suggestion.magnitudeClass ?? "small step",
       from: step?.from ?? null,
       to: step?.to ?? null,
