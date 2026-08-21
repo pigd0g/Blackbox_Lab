@@ -5122,29 +5122,47 @@ function pidLabForReport(analysis) {
     (checkResult) => checkResult.status === "Review"
   );
 
-  const behaviorStory = behaviorReviews
-    .map(
-      (checkResult) =>
-        `${checkResult.axis} ${checkResult.check} flagged for review` +
-        (checkResult.evidence ? ` (${checkResult.evidence}` : "") +
-        (checkResult.evidence && checkResult.confidence
-          ? `, ${checkResult.confidence} confidence)`
-          : checkResult.evidence
-            ? ")"
-            : "") +
-        (checkResult.recommendation
-          ? `: ${checkResult.recommendation}`
-          : ".")
-    )
-    .join(" ");
+  // An axis under Review exports its WHOLE response story: the
+  // sibling checks with real events ride along even below Review —
+  // an intermittent pattern (one bounce-back, one slow settle, one
+  // clean response) reads differently from a consistent fault, and
+  // the report's recipient deserves that distinction (#36).
+  const reviewAxes = new Set(behaviorReviews.map((c) => c.axis));
+  const behaviorCompanions = (analysis.responseBehavior ?? []).filter(
+    (checkResult) =>
+      checkResult.status !== "Review" &&
+      reviewAxes.has(checkResult.axis) &&
+      checkResult.evidence &&
+      !/^0 valid/.test(checkResult.evidence)
+  );
 
-  const reviewAxes = [
-    ...new Set(behaviorReviews.map((checkResult) => checkResult.axis))
-  ];
+  const describeCheck = (checkResult, flagged) =>
+    `${checkResult.axis} ${checkResult.check}${
+      flagged ? " flagged for review" : ` (${checkResult.status})`
+    }` +
+    (checkResult.evidence ? ` (${checkResult.evidence}` : "") +
+    (checkResult.evidence && checkResult.stat
+      ? `, ${checkResult.check === "settling" ? "median " : ""}${checkResult.stat}`
+      : "") +
+    (checkResult.evidence && checkResult.confidence
+      ? `, ${checkResult.confidence} confidence)`
+      : checkResult.evidence
+        ? ")"
+        : "") +
+    (flagged && checkResult.recommendation
+      ? `: ${checkResult.recommendation}`
+      : ".");
+
+  const behaviorStory = [
+    ...behaviorReviews.map((c) => describeCheck(c, true)),
+    ...behaviorCompanions.map((c) => describeCheck(c, false))
+  ].join(" ");
+
+  const reviewedAxisList = [...reviewAxes];
 
   const nextFlightStep =
-    reviewAxes.length > 0
-      ? `Repeat several deliberate ${reviewAxes.join(
+    reviewedAxisList.length > 0
+      ? `Repeat several deliberate ${reviewedAxisList.join(
           " and "
         )} inputs with clean stops and reversals at the same headspeed. If the same response pattern returns, those confirmed events determine the tuning change — this flight alone does not earn one.`
       : null;

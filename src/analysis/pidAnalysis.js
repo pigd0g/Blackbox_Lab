@@ -3757,13 +3757,29 @@ highestTrackingErrorAxis
         : null;
     };
 
+    // The check's key statistic, so surfaces that cannot show the
+    // findings list still carry the number that matters (#36).
+    const statLabel = {
+      "bounce-back": `${axis} median event bounce-back`,
+      settling: `${axis} median settling duration`,
+      ringing: `${axis} average ringing target crossings`
+    }[check];
+    const statLine = statLabel
+      ? pidResult.findings.find(
+          (candidate) =>
+            typeof candidate === "string" &&
+            candidate.startsWith(statLabel + ": ")
+        )
+      : null;
+
     responseBehavior.push({
       axis,
       check,
       status,
       confidence: companion("confidence"),
       evidence: companion("evidence"),
-      recommendation: companion("recommendation")
+      recommendation: companion("recommendation"),
+      stat: statLine ? statLine.slice(statLabel.length + 2) : null
     });
   }
 
