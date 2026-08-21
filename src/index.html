@@ -153,6 +153,15 @@
           <p class="welcome-drop-hint">…or drag a <strong>.bbl</strong>
             file anywhere onto this window</p>
           <p class="welcome-status" id="welcomeStatus"></p>
+          <details class="fold academy-shelf" id="academyShelf">
+            <summary>Diagnosis Academy — practice on a flight with a known problem</summary>
+            <p class="chart-hint">
+              Six flights, each hiding exactly one real problem.
+              Load one, explore the labs, form your diagnosis —
+              then reveal the answer and compare reasoning.
+            </p>
+            <div id="academyList"></div>
+          </details>
           <div class="welcome-steps">
             <div class="welcome-step">
               <span class="welcome-step-num">1</span>
@@ -175,6 +184,25 @@
         <section class="hero loaded-only">
           <h2>Welcome to Blackbox Lab</h2>
           <p>Simple first. Deeper when you want it.</p>
+        </section>
+
+        <section class="card" id="academyCard" hidden>
+          <h3 id="academyCardTitle"></h3>
+          <p class="chart-hint" id="academyCardBrief"></p>
+          <p hidden id="academyDumpRow">
+            <button type="button" class="ghost" id="academyDumpCopyButton">
+              Copy the paired CLI dump
+            </button>
+          </p>
+          <button type="button" class="secondary-button" id="academyRevealButton">
+            Reveal the diagnosis
+          </button>
+          <div id="academyReveal" hidden>
+            <h4>What was planted, and how the labs see it</h4>
+            <ol id="academyRevealChain"></ol>
+            <h4>The fix</h4>
+            <p id="academyRevealFix"></p>
+          </div>
         </section>
 
         <section class="card" id="verdictCard" hidden>

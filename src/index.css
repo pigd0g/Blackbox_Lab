@@ -2081,3 +2081,42 @@ body.log-loaded .loaded-log-field .file-status {
   overflow-x: auto;
   white-space: pre;
 }
+
+/* ---- Diagnosis Academy ---- */
+.academy-shelf {
+  margin-top: 14px;
+  text-align: left;
+}
+.academy-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--card-soft);
+}
+.academy-entry strong {
+  display: block;
+  font-size: var(--font-ui);
+  color: var(--ink);
+}
+.academy-teaser {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--ink-soft);
+}
+#academyReveal h4 {
+  margin: 14px 0 6px;
+}
+#academyRevealChain {
+  margin: 0;
+  padding-left: 20px;
+}
+#academyRevealChain li {
+  margin: 6px 0;
+  color: var(--ink-soft);
+  font-size: var(--font-ui);
+}

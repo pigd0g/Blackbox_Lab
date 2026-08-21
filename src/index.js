@@ -63,6 +63,25 @@ ipcMain.handle('read-sample-log', (event, name) => {
   }
 });
 
+// Academy companion files (the stale-dump teaching pair):
+// text only, same whitelisted directory.
+ipcMain.handle('read-sample-text', (event, name) => {
+  const safeName = path.basename(String(name));
+
+  if (!safeName.toLowerCase().endsWith('.txt')) {
+    return null;
+  }
+
+  try {
+    return fs.readFileSync(
+      path.join(samplesDirectory, safeName),
+      'utf8'
+    );
+  } catch {
+    return null;
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
 

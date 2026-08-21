@@ -111,6 +111,7 @@ import {
   saveCraftDump
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
+import { ACADEMY_ENTRIES } from "./academy.js";
 import {
   detectGovernorEvents,
   governorEventWindow
@@ -1155,6 +1156,9 @@ async function routeSettingsDump(file) {
 
 async function loadFromFile(file) {
   noteAction(`opening ${file.name}`);
+  // Any load starts as a normal flight; the Academy loader
+  // re-arms its card only after this completes for its file.
+  setAcademyEntry(null);
   beginLoadProgress();
   setLoadStatus(`Reading ${file.name}...`);
   await new Promise((resolve) => setTimeout(resolve, 30));
@@ -6616,6 +6620,132 @@ el("welcomeOpenButton").addEventListener("click", openFilePicker);
 el("welcomeSampleButton").addEventListener("click", () => {
   trySampleButton.click();
 });
+
+// ======================================================
+// DIAGNOSIS ACADEMY — the shelf and the reveal card
+// ======================================================
+
+const academyCard = el("academyCard");
+const academyCardTitle = el("academyCardTitle");
+const academyCardBrief = el("academyCardBrief");
+const academyRevealButton = el("academyRevealButton");
+const academyReveal = el("academyReveal");
+const academyRevealChain = el("academyRevealChain");
+const academyRevealFix = el("academyRevealFix");
+const academyDumpRow = el("academyDumpRow");
+const academyDumpCopyButton = el("academyDumpCopyButton");
+const academyList = el("academyList");
+
+let activeAcademyEntry = null;
+
+function setAcademyEntry(entry) {
+  activeAcademyEntry = entry;
+
+  if (!academyCard) return;
+
+  if (!entry) {
+    academyCard.hidden = true;
+    return;
+  }
+
+  academyCardTitle.textContent = entry.title;
+  academyCardBrief.textContent = entry.brief;
+  academyReveal.hidden = true;
+  academyRevealButton.hidden = false;
+  academyDumpRow.hidden = !entry.dumpFile;
+
+  academyRevealChain.textContent = "";
+  for (const step of entry.reveal.diagnosis) {
+    const item = document.createElement("li");
+    item.textContent = step;
+    academyRevealChain.appendChild(item);
+  }
+  academyRevealFix.textContent = entry.reveal.fix;
+
+  academyCard.hidden = false;
+}
+
+if (academyRevealButton) {
+  academyRevealButton.addEventListener("click", () => {
+    academyReveal.hidden = false;
+    academyRevealButton.hidden = true;
+    noteAction(
+      `academy reveal: ${activeAcademyEntry?.id ?? "unknown"}`
+    );
+  });
+}
+
+if (academyDumpCopyButton) {
+  academyDumpCopyButton.addEventListener("click", async () => {
+    const entry = activeAcademyEntry;
+    if (!entry?.dumpFile || !window.blackboxLab?.readSampleText) {
+      return;
+    }
+    const text = await window.blackboxLab.readSampleText(
+      entry.dumpFile
+    );
+    if (!text) {
+      academyDumpCopyButton.textContent =
+        "Could not read the paired dump";
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    academyDumpCopyButton.textContent =
+      "Copied — paste it via Add CLI settings";
+  });
+}
+
+async function loadAcademyEntry(entry) {
+  if (!window.blackboxLab) {
+    fileStatus.textContent =
+      "Academy flights are available when running the desktop app.";
+    return;
+  }
+
+  fileStatus.textContent = `Loading: ${entry.title}...`;
+
+  const bytes = await window.blackboxLab.readSampleLog(entry.file);
+
+  if (!bytes) {
+    fileStatus.textContent = "Could not load that academy flight.";
+    return;
+  }
+
+  await loadFromFile(
+    new File([new Uint8Array(bytes)], entry.file)
+  );
+
+  setAcademyEntry(entry);
+  fileStatus.textContent = `Loaded: ${entry.title} — find the problem, then reveal.`;
+}
+
+if (academyList) {
+  for (const entry of ACADEMY_ENTRIES) {
+    const row = document.createElement("div");
+    row.className = "academy-entry";
+
+    const label = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = entry.title;
+    const teaser = document.createElement("span");
+    teaser.className = "academy-teaser";
+    teaser.textContent = entry.teaser;
+    label.appendChild(title);
+    label.appendChild(teaser);
+
+    const loadButton = document.createElement("button");
+    loadButton.type = "button";
+    loadButton.className = "ghost";
+    loadButton.textContent = "Load";
+    loadButton.addEventListener("click", () => {
+      loadAcademyEntry(entry);
+    });
+
+    row.appendChild(label);
+    row.appendChild(loadButton);
+    academyList.appendChild(row);
+  }
+}
 
 // Mirror every fileStatus message into the hero while it is
 // visible — loading feedback happens before .log-loaded flips.
