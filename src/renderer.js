@@ -118,6 +118,7 @@ import {
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import { buildPack } from "./analysis/packBuilder.js";
+import { profileName } from "./analysis/profileSegments.js";
 import { packSnippet, revertSnippet } from "./analysis/packSnippet.js";
 import {
   fileAnalysis,
@@ -2528,8 +2529,11 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     getHeaderValue,
     dumpFreshness,
     // The governor lab's sustained banks: two or more means this
-    // flight mixed regimes and tuning members are withheld.
-    headspeedBanks: dataset?.labs?.governor?.perBank ?? null
+    // flight mixed regimes and tuning members are withheld —
+    // unless recorded profile switches let the pack attribute
+    // changes per profile instead.
+    headspeedBanks: dataset?.labs?.governor?.perBank ?? null,
+    profileSegments: dataset?.profileSegments ?? null
   });
 
   const dumpNote = el("packDumpNote");
@@ -2607,10 +2611,13 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     pack.members.length > 0 ||
     pack.prescriptions.length > 0 ||
     Boolean(pack.withheld && pack.queued.length > 0) ||
+    Boolean(pack.profiles && pack.queued.length > 0) ||
     Boolean(bannerText) ||
     dumpIsStale;
   card.hidden = !show;
   if (!show) return;
+
+  const flownProfileCount = pack.profiles?.flown?.length ?? 0;
 
   el("packIntro").textContent =
     pack.withheld && pack.queued.length > 0
@@ -2618,9 +2625,15 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
           .map((rpm) => `${rpm} rpm`)
           .join(", ")}), so its evidence mixes two flight regimes. ` +
         `${pack.queued.length} earned change${pack.queued.length === 1 ? " waits" : "s wait"} for a single-bank flight — fly one bank and the pack unlocks.`
-      : pack.members.length > 0
-        ? `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} earned by this flight — each verified by its own instrument on the next log. Change nothing else alongside.`
-        : "No change is earned yet, but the evidence flights below would settle the open questions.";
+      : pack.profiles && pack.members.length > 0
+        ? `This flight flew ${flownProfileCount} PID profiles; each change below was earned entirely in ${pack.profiles.packProfileName}, and this pack verifies that profile. ` +
+          `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} — each verified by its own instrument on the next log. Change nothing else alongside.`
+        : pack.profiles && pack.queued.length > 0
+          ? `This flight flew ${flownProfileCount} PID profiles and no earned change could be attributed to a single one — ` +
+            `${pack.queued.length} change${pack.queued.length === 1 ? " waits" : "s wait"}, each with its reason below. A single-profile flight unlocks them.`
+          : pack.members.length > 0
+            ? `${pack.members.length} change${pack.members.length === 1 ? "" : "s"} earned by this flight — each verified by its own instrument on the next log. Change nothing else alongside.`
+            : "No change is earned yet, but the evidence flights below would settle the open questions.";
 
   const members = el("packMembers");
   members.innerHTML = "";
@@ -2634,10 +2647,15 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     const note = noteText
       ? `<div class="chart-hint">${noteText}</div>`
       : "";
+    const earnedIn =
+      member.profile !== undefined
+        ? `<div class="chart-hint">Earned in: ${profileName(member.profile)}</div>`
+        : "";
     row.innerHTML = `
       <div class="pack-member-head"><code>${member.setting}</code> <b>${change}</b></div>
       <div class="chart-hint">${member.card?.meaning ?? ""}</div>
       <div class="chart-hint">Why: ${member.finding ?? ""}</div>
+      ${earnedIn}
       <div class="chart-hint">Verified by: ${member.instrument ?? "its lab"}${
         member.expectedResult ? ` \u00b7 expect: ${member.expectedResult}` : ""
       }</div>
@@ -5135,7 +5153,8 @@ function analyzeFlight(flightIndex) {
     extraSummary,
     telemetryText,
     filterAnalysis,
-    pidAnalysis
+    pidAnalysis,
+    profileSegments
   } = buildLogAnalysis({
     fileType,
     lines,
@@ -5172,6 +5191,11 @@ function analyzeFlight(flightIndex) {
   currentPidAnalysisResult = pidAnalysis ?? null;
 
   currentDataset = buildDataset(lines, pidAnalysis);
+  if (currentDataset) {
+    // In-flight PID profile switches (empty when none happened) —
+    // the pack builder attributes earned changes with these.
+    currentDataset.profileSegments = profileSegments ?? [];
+  }
   currentPilotInput = currentDataset
     ? readPilotInput(currentDataset)
     : null;

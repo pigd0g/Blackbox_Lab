@@ -32,6 +32,11 @@ import {
   CARDS_FIRMWARE_PIN
 } from "./knowledgeCards.js";
 import { readHeaderSetting } from "./appliedState.js";
+import {
+  distinctProfiles,
+  attributeRows,
+  profileName
+} from "./profileSegments.js";
 
 export const PACK_CAP = 3;
 
@@ -44,7 +49,8 @@ export function buildPack({
   packCap = PACK_CAP,
   getHeaderValue = null,
   dumpFreshness = null,
-  headspeedBanks = null
+  headspeedBanks = null,
+  profileSegments = null
 } = {}) {
   const all = [
     ...(recommendations?.pid ?? []),
@@ -72,9 +78,11 @@ export function buildPack({
   // A flight that held two or more distinct headspeed banks mixed
   // two regimes into every instrument that earned these changes —
   // and the verifying flight could not attribute its deltas either.
-  // Until per-regime segmentation exists, tuning members are
-  // withheld on such flights: honest refusal over confident
-  // misattribution. Evidence prescriptions still ride along.
+  // When the log recorded no profile switch to segment by, tuning
+  // members are withheld on such flights: honest refusal over
+  // confident misattribution. Evidence prescriptions still ride
+  // along. (A recorded switch lifts this — see the per-profile
+  // attribution below, which knows which rows flew which tune.)
   // Bank clusters within a few percent are one flown regime: a
   // drooping acro bank smears across the lab's 1.5% clusters, and
   // telling a pilot who flew hover + acro that they "held four
@@ -98,7 +106,23 @@ export function buildPack({
   const sustainedBanks = regimes.map((regime) => ({
     averageRpm: Math.round(regime.sum / regime.count)
   }));
-  const multiBankWithheld = sustainedBanks.length >= 2;
+
+  // Per-profile segmentation: when the log RECORDED its profile
+  // switches, each earned change is attributed to the profile whose
+  // rows its evidence lives in — and the blanket multi-bank refusal
+  // above gives way to that attribution: the flight can say which
+  // tune earned what, so it does. The pack verifies ONE profile per
+  // flight; members attributed elsewhere queue for their own pack.
+  // Changes whose evidence spans profiles, or carries no row
+  // anchors, still queue — attribution is never guessed.
+  const segments = Array.isArray(profileSegments)
+    ? profileSegments
+    : [];
+  const flownProfiles = distinctProfiles(segments);
+  const multiProfile = flownProfiles.length >= 2;
+  const multiBankWithheld =
+    !multiProfile && sustainedBanks.length >= 2;
+  let packProfile;
 
   for (const rec of ordered) {
     if (multiBankWithheld) {
@@ -111,6 +135,59 @@ export function buildPack({
           "for a single-bank flight"
       });
       continue;
+    }
+
+    let memberProfile = null;
+
+    if (multiProfile) {
+      const anchoredRows = (rec.evidence ?? [])
+        .map((item) => item?.rowIndex)
+        .filter(Number.isInteger);
+
+      if (anchoredRows.length === 0) {
+        queued.push({
+          rec,
+          reason:
+            "this flight flew " +
+            `${flownProfiles.length} PID profiles and this change's ` +
+            "evidence carries no row anchors — it cannot say which " +
+            "profile earned it, so it waits for a single-profile flight"
+        });
+        continue;
+      }
+
+      const owners = attributeRows(segments, anchoredRows);
+
+      if (owners.profiles.length !== 1 || owners.unanchored > 0) {
+        const names = owners.profiles.map(profileName).join(" and ");
+
+        queued.push({
+          rec,
+          reason:
+            owners.profiles.length > 1
+              ? `its evidence spans ${names} — mixed-profile evidence ` +
+                "cannot be attributed, so it waits for a " +
+                "single-profile flight"
+              : "part of its evidence falls outside every profile " +
+                "segment — it waits for a single-profile flight"
+        });
+        continue;
+      }
+
+      memberProfile = owners.profiles[0];
+
+      if (packProfile === undefined) {
+        packProfile = memberProfile;
+      } else if (memberProfile !== packProfile) {
+        queued.push({
+          rec,
+          reason:
+            `earned in ${profileName(memberProfile)} — this pack ` +
+            `verifies ${profileName(packProfile)}, so it waits for ` +
+            "its own pack"
+        });
+        continue;
+      }
     }
 
     const setting = rec.suggestion.family;
@@ -145,13 +222,27 @@ export function buildPack({
       : null;
     const current = flown ?? craftDumpParsed?.[setting];
     const currentSource = flown !== null ? "log" : "dump";
-    const step = numericAllowed
-      ? numericStep(setting, current, direction)
-      : null;
+
+    // The log's headers (and the saved dump) describe the profile
+    // the log STARTED in — for a change earned in a switched-to
+    // profile, no source names that profile's current values, so
+    // the member stays directional and says why.
+    const numbersDescribeThisProfile =
+      !multiProfile || memberProfile === null;
+
+    const step =
+      numericAllowed && numbersDescribeThisProfile
+        ? numericStep(setting, current, direction)
+        : null;
 
     let numericNote = null;
     if (!step) {
-      if (!numericAllowed) {
+      if (!numbersDescribeThisProfile) {
+        numericNote =
+          `the log's headers describe the profile it started in, not ` +
+          `${profileName(memberProfile)} — direction only until a ` +
+          `log flown in ${profileName(memberProfile)} from the start`;
+      } else if (!numericAllowed) {
         numericNote = `numeric values need a firmware ${CARDS_FIRMWARE_PIN} log — direction only`;
       } else if (craftDumpParsed == null) {
         numericNote = "no CLI dump on file for this craft — direction only";
@@ -181,6 +272,7 @@ export function buildPack({
       setting,
       group,
       direction,
+      profile: multiProfile ? memberProfile : undefined,
       currentSource,
       freshnessNote,
       magnitudeClass: rec.suggestion.magnitudeClass ?? "small step",
@@ -220,6 +312,18 @@ export function buildPack({
       members.some((member) => !isGovernorGroup(member.group)),
     numericAllowed,
     firmwarePin: CARDS_FIRMWARE_PIN,
+    // Multi-profile flights: which profiles flew, and which one this
+    // pack's members belong to (undefined when nothing attributed).
+    profiles: multiProfile
+      ? {
+          flown: flownProfiles,
+          packProfile: packProfile === undefined ? null : packProfile,
+          packProfileName:
+            packProfile === undefined
+              ? null
+              : profileName(packProfile)
+        }
+      : null,
     withheld: multiBankWithheld
       ? {
           reason: "multi-bank flight",

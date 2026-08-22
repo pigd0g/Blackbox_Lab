@@ -13,6 +13,10 @@
 //
 // ======================================================
 
+// Rotorflight adjustment function id for the PID profile
+// (fc/rc_adjustments.h: ADJUSTMENT_PID_PROFILE = 2).
+const PID_PROFILE_ADJUSTMENT = 2;
+
 export function decodedFlightToCsvLines(flight) {
   const lines = [];
 
@@ -58,11 +62,34 @@ export function decodedFlightToCsvLines(flight) {
   const slowNames = flight.slowFieldNames;
   const columnNames = [...mainNames, ...slowNames];
 
+  // In-flight PID profile switches, decoded from adjustment events.
+  // The column carries the ACTIVE profile number per row — 0 until
+  // the first switch, because the log never names the profile it
+  // started in (headers record that profile's settings, not its
+  // number). Flights without a switch get no column at all: absence
+  // means single-profile, and the analysis stays exactly as it was.
+  const profileSwitches = (flight.events ?? [])
+    .filter(
+      (event) =>
+        event.adjustmentFunction === PID_PROFILE_ADJUSTMENT &&
+        Number.isFinite(event.value) &&
+        Number.isInteger(event.afterMainFrame)
+    )
+    .sort((a, b) => a.afterMainFrame - b.afterMainFrame);
+
+  const emitPidProfile = profileSwitches.length > 0;
+
+  if (emitPidProfile) {
+    columnNames.push("pidProfile");
+  }
+
   lines.push(columnNames.join(","));
 
   // ---- data rows with slow values carried forward ----
   const slowCurrent = new Array(slowNames.length).fill(0);
   let slowCursor = 0;
+  let activeProfile = 0;
+  let profileCursor = 0;
 
   const vbatIndex = flight.mainFieldNames.indexOf("Vbat");
   const emitVbatAlias = vbatIndex >= 0 && mainNames.includes("vbatLatest");
@@ -101,6 +128,18 @@ export function decodedFlightToCsvLines(flight) {
 
     for (let i = 0; i < slowCurrent.length; i += 1) {
       row[cursor + i] = slowCurrent[i];
+    }
+
+    if (emitPidProfile) {
+      while (
+        profileCursor < profileSwitches.length &&
+        profileSwitches[profileCursor].afterMainFrame < frameIndex
+      ) {
+        activeProfile = profileSwitches[profileCursor].value;
+        profileCursor += 1;
+      }
+
+      row[cursor + slowCurrent.length] = activeProfile;
     }
 
     lines.push(row.join(","));

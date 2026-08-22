@@ -16,6 +16,7 @@ import {
   hasUsableRotorSpeed
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
+import { buildProfileSegments } from "./profileSegments.js";
 
 // Does this log carry a governor target, or only rotor speed?
 // Models on an ESC or external governor log the second without the
@@ -357,6 +358,7 @@ export function buildLogAnalysis({
   let analysisContext = null;
   let filterAnalysis = null;
   let pidAnalysis = null;
+  let profileSegments = [];
   // ====================================================
   // BLACKBOX BBL LOG
   // ====================================================
@@ -377,6 +379,14 @@ export function buildLogAnalysis({
 
     const telemetryHeaderIndex =
       findTelemetryHeaderIndex(lines);
+
+    // In-flight PID profile switches, when the log carries them.
+    // Empty for single-profile flights and for sources without the
+    // pidProfile column — nothing downstream changes in that case.
+    profileSegments = buildProfileSegments({
+      lines,
+      telemetryHeaderIndex
+    });
 
     let averageEscOutput = null;
     let averageEscRPM = null;
@@ -1066,6 +1076,7 @@ const headers = csvHeaderLine
   analysisContext,
   filterAnalysis,
   pidAnalysis,
+  profileSegments,
   filterAnalysisSummaryFindings: filterAnalysis?.summaryFindings ?? []
   };
   }
