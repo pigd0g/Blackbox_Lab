@@ -1570,10 +1570,17 @@ current demand; the steady downward slope is normal discharge.
                view next to the conclusion, so the pair can be
                audited at a glance. -->
           <div class="decode-info" id="comparePairInfo"></div>
-          <details class="fold" id="compareComparability" hidden>
-            <summary id="compareComparabilityHead"></summary>
+          <!-- The footing, before any verdict: every dimension the
+               two flights can differ on, side by side, and the
+               confidence those differences leave. Always visible. -->
+          <div class="comparability" id="compareComparability" hidden>
+            <div class="comparability-head">
+              <strong id="compareComparabilityHead"></strong>
+              <span class="comparability-confidence" id="compareComparabilityConfidence"></span>
+            </div>
+            <table class="comparability-table" id="compareComparabilityTable"></table>
             <div id="compareComparabilityLines"></div>
-          </details>
+          </div>
           <p class="verdict-summary" id="compareSummary"></p>
           <div id="compareRows"></div>
         </section>

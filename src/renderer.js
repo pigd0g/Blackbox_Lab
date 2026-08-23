@@ -2198,6 +2198,10 @@ if (sampleRate && hasSpectrumRuns) {
     // on. Two tracking numbers are only worth subtracting when both
     // were measured from enough clean responses to mean anything.
     pidConfidence: pidAnalysis?.confidence ?? null,
+    // Per-axis commanded-rate magnitudes: the stick demand a flight
+    // asked for, so Compare can match flights on what they asked.
+    demandRates:
+      pidAnalysis?.technicalSummary?.demand?.axisSetpointMagnitudes ?? null,
     // Clean command-response counts per axis — a comparison is only a
     // comparison where both flights interrogated the same axes (#32).
     axisEvidence: Object.fromEntries(
@@ -6311,26 +6315,62 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
   // match, per-axis evidence, flight balance — shown BEFORE any
   // improvement wording, open by default whenever it is not clean.
   {
-    const fold = el("compareComparability");
-    if (fold) {
+    const panel = el("compareComparability");
+    if (panel) {
       const comparability = result.comparability;
-      const show = Boolean(comparability?.lines?.length);
-      fold.hidden = !show;
+      const rows = comparability?.rows ?? [];
+      const show = rows.length > 0 || Boolean(comparability?.lines?.length);
+      panel.hidden = !show;
       if (show) {
         el("compareComparabilityHead").textContent =
           comparability.level === "comparable"
-            ? "Comparability: good — these flights can carry a verdict"
+            ? "Like-for-like check: these flights can carry a verdict"
             : comparability.level === "partial"
-              ? "Comparability: partial — read the results as observations"
-              : "Comparability: weak — these flights measured different things";
-        el("compareComparabilityLines").innerHTML =
-          comparability.lines
-            .map((line) => `<p class="chart-hint">${line}</p>`)
-            .join("") +
-          (comparability.guidance
-            ? `<p class="chart-hint"><b>${comparability.guidance}</b></p>`
-            : "");
-        fold.open = comparability.level !== "comparable";
+              ? "Like-for-like check: partial — read the results as observations"
+              : "Like-for-like check: weak — these flights measured different things";
+
+        const confidenceEl = el("compareComparabilityConfidence");
+        if (confidenceEl) {
+          const level = comparability.confidence ?? null;
+          confidenceEl.dataset.level = level ?? "";
+          confidenceEl.textContent = level
+            ? `Verdict confidence: ${level}` +
+              (comparability.reducedBy?.length
+                ? ` — reduced by ${comparability.reducedBy.join(", ")}`
+                : "")
+            : "";
+        }
+
+        const verdictWord = {
+          match: "comparable",
+          partial: "partly",
+          mismatch: "not comparable"
+        };
+        const table = el("compareComparabilityTable");
+        if (table) {
+          table.innerHTML = rows.length
+            ? `<tr><th>Dimension</th><th>Before</th><th>After</th><th>Verdict</th></tr>` +
+              rows
+                .map(
+                  (row) => `
+              <tr data-verdict="${row.verdict ?? "unknown"}">
+                <td class="dim">${escapeHtml(row.dimension)}${
+                  row.note ? `<span class="note">${escapeHtml(row.note)}</span>` : ""
+                }</td>
+                <td>${escapeHtml(row.before ?? "—")}</td>
+                <td>${escapeHtml(row.after ?? "—")}</td>
+                <td class="verdict"><span class="status-dot"></span>${
+                  row.verdict ? verdictWord[row.verdict] : "not judged"
+                }</td>
+              </tr>`
+                )
+                .join("")
+            : "";
+        }
+
+        el("compareComparabilityLines").innerHTML = comparability.guidance
+          ? `<p class="chart-hint"><b>${comparability.guidance}</b></p>`
+          : "";
       }
     }
   }

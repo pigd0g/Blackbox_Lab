@@ -11,6 +11,8 @@
 //
 // ======================================================
 
+import { demandSignature, compareDemand } from "./demandSignature.js";
+
 function strongestPeak(spectra) {
   if (!spectra || spectra.length === 0) {
     return null;
@@ -323,10 +325,23 @@ export function assessComparability(baseline, comparison) {
     }
   }
 
+  // The demand signature (#38 / preview #32): every dimension the two
+  // flights can differ on, side by side, with the verdict confidence
+  // it leaves. The weaker of the two rulings governs the wording.
+  const demand = compareDemand(
+    demandSignature(baseline),
+    demandSignature(comparison)
+  );
+  const rank = { weak: 0, partial: 1, comparable: 2 };
+  if (rank[demand.level] < rank[level]) level = demand.level;
+
   return {
     level,
     causal: level === "comparable",
     lines,
+    rows: demand.rows,
+    confidence: demand.confidence,
+    reducedBy: demand.reducedBy,
     guidance:
       level === "comparable"
         ? null
@@ -724,18 +739,29 @@ export function compareFlights(baseline, comparison, options = {}) {
                 ? "Mixed result: some things improved, others got worse. Trade-off territory."
                 : `The measurements moved in both directions, and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
 
+  // The verdict names the confidence it carries, and what lowered it,
+  // in the same sentence the pilot reads first.
+  const confidenceSentence =
+    comparability.confidence && rows.length > 0 && aircraft.same
+      ? ` Verdict confidence: ${comparability.confidence}${
+          comparability.reducedBy?.length
+            ? ` — reduced by ${comparability.reducedBy.join(", ")}`
+            : ""
+        }.`
+      : "";
+
   return {
     rows,
-    summary,
-    comparability,
+    summary: summary + confidenceSentence,
+    // The footing (rows, confidence, level, lines) AND the causal
+    // gate (likeForLike, reason) — one object. A second key of the
+    // same name used to overwrite the first here, which is why the
+    // comparability panel never showed on the page.
+    comparability: { ...comparability, likeForLike, reason: unlikeReason },
     better,
     worse,
     uncomparable,
     sameAircraft: aircraft.same,
-    // Whether the pair earned causal language, and if not, why —
-    // surfaced so the UI and tests can see the gate, not just its
-    // effect on the wording.
-    comparability: { likeForLike, reason: unlikeReason },
     setupDiff
   };
 }

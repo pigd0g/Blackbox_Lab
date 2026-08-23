@@ -653,6 +653,66 @@ body.advanced-mode .peek-advanced-row {
 
 /* ---------------- compare ---------------- */
 
+/* ---- comparability: the footing table ---- */
+.comparability {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px 8px;
+  margin: 10px 0 14px;
+  background: var(--card-soft);
+}
+.comparability-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.comparability-head strong { color: var(--ink); }
+.comparability-confidence {
+  margin-left: auto;
+  font-size: var(--font-small);
+  color: var(--ink-soft);
+}
+.comparability-confidence[data-level="High"] { color: var(--good); }
+.comparability-confidence[data-level="Medium"] { color: var(--watch); }
+.comparability-confidence[data-level="Low"] { color: var(--attention); }
+.comparability-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-small);
+}
+.comparability-table th {
+  text-align: left;
+  color: var(--ink-muted);
+  font-weight: 600;
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--line-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--font-micro);
+}
+.comparability-table td {
+  padding: 5px 8px 5px 0;
+  vertical-align: top;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.comparability-table tr:last-child td { border-bottom: none; }
+.comparability-table td.dim { color: var(--ink); }
+.comparability-table td.verdict { white-space: nowrap; }
+.comparability-table .status-dot { margin-right: 6px; }
+.comparability-table tr[data-verdict="match"] .status-dot { background: var(--good); }
+.comparability-table tr[data-verdict="partial"] .status-dot { background: var(--watch); }
+.comparability-table tr[data-verdict="mismatch"] .status-dot { background: var(--attention); }
+.comparability-table tr[data-verdict="unknown"] .status-dot { background: var(--ink-muted); }
+.comparability-table .note {
+  display: block;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.comparability .chart-hint { margin-top: 8px; }
+
 .compare-row {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);

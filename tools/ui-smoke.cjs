@@ -351,6 +351,17 @@ const { mkdirSync } = require("node:fs");
   );
   const compareSummary = await window.textContent("#compareSummary");
   console.log("compare rows:", compareRowCount, "| summary:", compareSummary);
+  // The like-for-like table is VISIBLE (it used to be overwritten
+  // away before it reached the page) with a verdict confidence.
+  const footing = await window.evaluate(() => ({
+    visible: document.getElementById("compareComparability")?.offsetParent !== null,
+    rows: document.querySelectorAll("#compareComparabilityTable tr[data-verdict]").length,
+    confidence: document.getElementById("compareComparabilityConfidence")?.textContent ?? ""
+  }));
+  if (!footing.visible || footing.rows < 3 || !/Verdict confidence: (High|Medium|Low)/.test(footing.confidence)) {
+    throw new Error("comparability footing missing: " + JSON.stringify(footing));
+  }
+  console.log("comparability ok:", footing.rows, "dimensions |", footing.confidence);
   await window.screenshot({ path: "smoke-shots/08-compare.png" });
 
   // ---- multi-flight "after" file: the flight picker ----
