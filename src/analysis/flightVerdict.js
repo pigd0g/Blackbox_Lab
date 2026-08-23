@@ -255,10 +255,13 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
 // ------------------------------------------------------
 // Tuning verdict — from the PID Lab score
 // ------------------------------------------------------
-function tuningVerdict(pidAnalysis) {
+function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
   const score = pidAnalysis?.score;
   const overallStatus =
     pidAnalysis?.overallStatus ?? null;
+  const confidenceLevel = pidAnalysis?.confidence?.level ?? null;
+  const thinEvidence =
+    confidenceLevel === "Low" || confidenceLevel === "Insufficient";
 
   // A score earned in a gentle hover and one earned in hard
   // maneuvers are different measurements wearing the same number
@@ -319,6 +322,45 @@ function tuningVerdict(pidAnalysis) {
         "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
       action:
         "Open the PID Lab and read its review items: they say exactly where to look.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
+  }
+
+  // The score measures tracking and only tracking — it CAN be high
+  // while the airframe shakes, because the filtered gyro still
+  // follows the stick. But a tune read through an open vibration
+  // finding is not a tune to be enjoyed: the recommendation engine
+  // already holds every tuning change on it (filters before PIDs),
+  // and the card must say the same — the number stands, the
+  // verdict waits for the flight after the fix.
+  if (vibrationConcern) {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: `Tracking score ${score}/100, read through a vibration finding${demandSuffix}`,
+      detail:
+        "The response follows the sticks, but a strong vibration is open on this flight — the tuning instruments are read through it, and no tuning change is earned until the mechanical source is fixed.",
+      action:
+        "Fix the vibration first (see the Vibration card), fly again, and read this score fresh on that flight.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
+  }
+
+  // "Crisp" is a claim; thin evidence cannot carry it. Few clean
+  // commands make a high score a hover's score, not a tune's.
+  if (thinEvidence) {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: `Tracking score ${score}/100 on thin evidence${demandSuffix}`,
+      detail:
+        "The machine followed the few clean commands this flight offered, but too few of them to call the tune crisp — the score is honest, the confidence is not there yet.",
+      action:
+        "Fly 4–6 deliberate stops and reversals on each axis at one headspeed; the PID Lab then has the evidence to rate the tune.",
       screen: "pid",
       evidence: "PID Lab findings"
     };
@@ -760,10 +802,19 @@ export function buildFlightVerdict({
       ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
       : null);
 
+  const vibration = vibrationVerdict(
+    spectra,
+    governedHeadspeed,
+    filterAdvice,
+    pidAnalysis
+  );
+
   const cards = [
-  vibrationVerdict(spectra, governedHeadspeed, filterAdvice, pidAnalysis),
+  vibration,
   rotorSpeedVerdictFromLab(labs?.governor),
-  tuningVerdict(pidAnalysis),
+  tuningVerdict(pidAnalysis, {
+    vibrationConcern: vibration?.status === "attention"
+  }),
   powerVerdictFromLab(labs?.esc),
   batteryVerdictFromLab(labs?.battery),
   signalVerdict(signalLab),
