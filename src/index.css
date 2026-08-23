@@ -521,6 +521,21 @@ pre {
   line-height: 1.45;
 }
 
+/* Technical grids speak in sentences, not headline numbers: the
+   values step down a size so the rows read as text. */
+#governorTechnicalGrid .metric-tile strong,
+.advanced-block .metric-grid .metric-tile strong {
+  font-size: var(--font-ui);
+  font-weight: 600;
+}
+
+/* Sentence-length values anywhere: text, not headline. */
+.metric-tile-long strong {
+  font-size: var(--font-ui);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 
 /* ---------------- charts ---------------- */
 
@@ -597,19 +612,26 @@ body:not(.advanced-mode) [data-screen]:not(.peek-advanced) .advanced-only {
   display: block;
 }
 
+/* The advanced reveal sits right under every Verdict/TTF pair —
+   a quiet button, not a link lost between folds. */
 .peek-advanced-row {
-  margin: -6px 0 18px 2px;
+  margin: 2px 0 18px 0;
   font-size: var(--font-small);
 }
-
 .peek-advanced-link {
-  background: none;
-  border: none;
-  padding: 0;
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
   color: var(--accent);
   font-size: var(--font-small);
-  text-decoration: underline;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.peek-advanced-link:hover {
+  background: rgba(111, 178, 255, 0.1);
+  border-color: var(--accent);
 }
 
 .peek-advanced-note {

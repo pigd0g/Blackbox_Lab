@@ -1089,9 +1089,11 @@ function applyAdvancedMode(enabled) {
   // Advanced blocks are always present; the mode only decides
   // whether they start unfolded. Pilots can still open any
   // fold by hand in beginner mode — that is the point.
-  document.querySelectorAll("details.advanced-block").forEach((block) => {
-    block.open = enabled;
-  });
+  document
+    .querySelectorAll("details.advanced-block, details.drilldown")
+    .forEach((block) => {
+      block.open = enabled;
+    });
 }
 
 applyAdvancedMode(localStorage.getItem("blackboxLabAdvanced") === "1");
@@ -4084,7 +4086,11 @@ function renderMetricGrid(element, metrics) {
 
   for (const metric of metrics) {
     const tile = document.createElement("div");
-    tile.className = "metric-tile";
+    // A number wears display bold; a sentence-length value steps
+    // down to text size and weight (ticket #19's rule, applied
+    // wherever the grid renders).
+    const long = String(metric.value ?? "").length > 60;
+    tile.className = long ? "metric-tile metric-tile-long" : "metric-tile";
     tile.innerHTML = `<span class="label">${metric.label}</span><strong>${metric.value}</strong>`;
     element.appendChild(tile);
   }
