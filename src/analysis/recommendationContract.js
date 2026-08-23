@@ -99,6 +99,13 @@ export function finalizeRecommendation(rec, { domain = "tuning" } = {}) {
     rec.evidence = [];
   }
 
+  // The count a confidence line quotes. Engine entries keep up to
+  // six anchored rows but were measured on every qualifying event;
+  // the number shown is the number measured, never the number kept.
+  if (!Number.isInteger(rec.evidenceCount)) {
+    rec.evidenceCount = rec.evidence.length;
+  }
+
   if (level === "confirm" && !rec.nextManeuver) {
     rec.nextManeuver =
       CONFIRM_MANEUVERS[rec.axis] ??
@@ -150,6 +157,16 @@ export function confirmsFromResponseBehavior(
     if (seenAxes.has(checkResult.axis)) continue;
     seenAxes.add(checkResult.axis);
 
+    // The confirm entry carries the check's own event rows: the
+    // finding, the confidence line and the pack card all count the
+    // same evidence, and a multi-profile flight can attribute it.
+    const evidenceRows = Array.isArray(checkResult.evidenceRows)
+      ? checkResult.evidenceRows
+      : [];
+    const eventCount = Number.isInteger(checkResult.eventCount)
+      ? checkResult.eventCount
+      : evidenceRows.length;
+
     confirms.push(
       finalizeRecommendation({
         id: `pid:${checkResult.axis}:${checkResult.check}:confirm`,
@@ -157,6 +174,12 @@ export function confirmsFromResponseBehavior(
         axis: checkResult.axis,
         suggestion: null,
         confidence: checkResult.confidence ?? null,
+        evidence: evidenceRows,
+        evidenceCount: eventCount,
+        evidenceLabel:
+          `${eventCount} valid ${checkResult.axis} ${checkResult.check} ` +
+          `event${eventCount === 1 ? "" : "s"}; more repeat events are ` +
+          "needed before a tuning change is earned",
         finding:
           `${checkResult.axis} ${checkResult.check} flagged for review` +
           (checkResult.evidence ? ` (${checkResult.evidence})` : "") +

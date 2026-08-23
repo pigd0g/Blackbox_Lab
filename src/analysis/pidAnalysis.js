@@ -3877,18 +3877,107 @@ highestTrackingErrorAxis
         )
       : null;
 
+    // The events behind the check, as row anchors — the same
+    // predicates the findings above counted with. A card that says
+    // "4 valid events" and a confidence line that counts its own
+    // evidence must count the SAME rows (#61).
+    const axisResult = commandEvents.find(
+      (candidate) => candidate.axis === axis
+    );
+    const eligibleEvents = (axisResult?.events ?? []).filter((event) =>
+      check === "bounce-back"
+        ? event?.bounceBackEligible === true &&
+          Number.isFinite(event?.bounceBackPercent)
+        : check === "settling"
+          ? event?.settlingEligible === true &&
+            Number.isFinite(event?.settlingDurationSamples)
+          : event?.ringingEligible === true &&
+            Number.isFinite(event?.ringingTargetCrossingCount)
+    );
+    const evidenceRows = eligibleEvents.map((event) => ({
+      kind: "command-event",
+      axis,
+      check,
+      rowIndex: event.sampleRowIndex ?? null,
+      ...(check === "bounce-back"
+        ? {
+            bounceBackPercent:
+              Math.round(event.bounceBackPercent * 10) / 10
+          }
+        : check === "settling"
+          ? { settlingSamples: event.settlingDurationSamples }
+          : { ringingCrossings: event.ringingTargetCrossingCount })
+    }));
+
     responseBehavior.push({
       axis,
       check,
       status,
       confidence: companion("confidence"),
       evidence: companion("evidence"),
+      eventCount: evidenceRows.length,
+      evidenceRows,
       recommendation: companion("recommendation"),
       stat: statLine ? statLine.slice(statLabel.length + 2) : null
     });
   }
 
   pidResult.responseBehavior = responseBehavior;
+
+  // Technical recommendations follow the same priority the
+  // evidence-gated workflow uses everywhere else (#62): an axis with
+  // an active response-behavior Review — a detected pattern, counted
+  // events, a confidence and a confirmation maneuver — leads; the
+  // generic "highest tracking error" observation stays visible but
+  // is labeled the secondary context it is, and never displaces the
+  // Review axis. Without any Review the tracking-error lead stands.
+  const responseReviews = responseBehavior.filter(
+    (checkResult) => checkResult.status === "Review"
+  );
+
+  if (
+    responseReviews.length > 0 &&
+    Array.isArray(pidResult.recommendations)
+  ) {
+    const trackingLeadPattern =
+      /^No command-balance or PID-term saturation review condition was identified\. If further tuning is desired, compare (\w+) first because it had the highest tracking error\.$/;
+    const trackingLead = pidResult.recommendations.find((line) =>
+      trackingLeadPattern.test(line)
+    );
+    const trackingLeadAxis = trackingLead
+      ? trackingLeadPattern.exec(trackingLead)[1]
+      : null;
+    const reviewAxes = [
+      ...new Set(responseReviews.map((checkResult) => checkResult.axis))
+    ];
+
+    const leadLines = responseReviews.map((checkResult) => {
+      const maneuver = {
+        Roll: "Repeat 4-6 deliberate roll inputs with clean stops and reversals at the same headspeed",
+        Pitch: "Repeat 4-6 deliberate pitch inputs with clean stops and reversals at the same headspeed",
+        Yaw: "Repeat 4-6 deliberate yaw stops in both directions at the same headspeed"
+      }[checkResult.axis] ?? "Fly the same maneuvers again at the same headspeed";
+      return (
+        `${checkResult.axis} ${checkResult.check} is the current Review finding` +
+        (checkResult.evidence ? `, supported by ${checkResult.evidence}` : "") +
+        (checkResult.confidence ? ` at ${checkResult.confidence} confidence` : "") +
+        ". No PID change is earned yet. " +
+        `${maneuver} to confirm whether the pattern repeats.`
+      );
+    });
+
+    const secondary = trackingLeadAxis
+      ? reviewAxes.includes(trackingLeadAxis)
+        ? `${trackingLeadAxis} also had the highest average tracking error, which is consistent with its Review finding above.`
+        : `Secondary context: ${trackingLeadAxis} had the highest average tracking error, but no separate ${trackingLeadAxis} Review condition was identified — confirm the ${reviewAxes.join(" and ")} finding above first.`
+      : null;
+
+    pidResult.recommendations = [
+      ...leadLines,
+      ...pidResult.recommendations.filter((line) => line !== trackingLead),
+      secondary
+    ].filter(Boolean);
+  }
 
   // "Clear" is a promise that nothing below needs follow-up. An
   // overall Clear must not sit on top of Review lines a pilot would

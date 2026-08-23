@@ -3267,6 +3267,17 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;");
 }
 
+// The evidence a confidence line quotes: the count the finding was
+// measured on (not the handful of anchored rows kept for zooming),
+// worded by the entry when it knows better (#61).
+function recommendationEvidenceLabel(rec) {
+  if (rec.evidenceLabel) return rec.evidenceLabel;
+  const count = Number.isInteger(rec.evidenceCount)
+    ? rec.evidenceCount
+    : (rec.evidence ?? []).length;
+  return `${count} event${count === 1 ? "" : "s"} on this page`;
+}
+
 function renderNextSteps(cardId, listId, recommendations) {
   const card = el(cardId);
   const list = el(listId);
@@ -3291,7 +3302,7 @@ function renderNextSteps(cardId, listId, recommendations) {
           <p><strong>${escapeHtml(rec.finding)}</strong></p>
           <p>${escapeHtml(rec.hypothesis ?? "")}</p>
           ${action}
-          <p class="chart-hint">Confidence: ${escapeHtml(rec.confidence ?? "\u2014")} · based on ${(rec.evidence ?? []).length} event${(rec.evidence ?? []).length === 1 ? "" : "s"} on this page</p>
+          <p class="chart-hint">Confidence: ${escapeHtml(rec.confidence ?? "\u2014")} · based on ${escapeHtml(recommendationEvidenceLabel(rec))}</p>
         </div>`;
     })
     .join("");

@@ -380,6 +380,7 @@ function buildPidRecommendations({
       finding,
       hypothesis,
       evidence,
+      evidenceCount: slowEvents.length,
       confidence,
       suggestion,
       expectedResult,
@@ -459,6 +460,7 @@ function buildOvershootRecommendation({
     axis,
     finding,
     evidence,
+    evidenceCount: big.length,
     confidence,
     suggestion: null,
     expectedResult: null,
@@ -656,6 +658,7 @@ function buildGovernorRecommendations({
         peakErrorPercent: event.peakErrorPercent,
         outputMaxPercent: event.outputMaxPercent
       })),
+      evidenceCount: powerLimitEvents.length,
       confidence: "High",
       suggestion: null,
       expectedResult: null,
@@ -699,6 +702,7 @@ function buildGovernorRecommendations({
         peakErrorPercent: event.peakErrorPercent,
         hunting: event.hunting
       })),
+      evidenceCount: collectiveDropEvents.length,
       confidence,
       suggestion: gated
         ? null

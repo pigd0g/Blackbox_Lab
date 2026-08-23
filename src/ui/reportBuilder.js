@@ -126,7 +126,10 @@ function buildRecommendationsHtml(recommendations) {
         <div class="verdict-headline">${escapeHtml(rec.finding)}</div>
         <div class="verdict-detail">${escapeHtml(rec.hypothesis)}</div>
         ${action}
-        <div class="verdict-detail" style="margin-top:6px;color:#7c8da1;">Confidence: ${escapeHtml(rec.confidence)} · based on ${rec.evidence.length} event${rec.evidence.length === 1 ? "" : "s"} in this flight</div>
+        <div class="verdict-detail" style="margin-top:6px;color:#7c8da1;">Confidence: ${escapeHtml(rec.confidence)} · based on ${escapeHtml(
+          rec.evidenceLabel ??
+            `${Number.isInteger(rec.evidenceCount) ? rec.evidenceCount : rec.evidence.length} event${(Number.isInteger(rec.evidenceCount) ? rec.evidenceCount : rec.evidence.length) === 1 ? "" : "s"} in this flight`
+        )}</div>
       </div>`;
     })
     .join("");
