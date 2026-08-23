@@ -44,10 +44,13 @@ export const RECOMMENDATION_GATE = {
   // yaw settles slow as its nature, roll fast). Bars sit at each
   // axis's fleet p90, yaw at p95: Roll p90 0.125, Pitch p90
   // 0.118, Yaw p95 0.219.
+  // Yaw re-read 2026-08-23 on the post-ghost-fix fleet (742
+  // flights): yaw pirouettes are the long ramps the ghost events
+  // rode on; with them gone yaw's p95 slow share reads 0.18.
   SLOW_SETTLE_SHARE_MINIMUM: {
     Roll: 0.13,
     Pitch: 0.12,
-    Yaw: 0.22
+    Yaw: 0.18
   },
   HUNTING_MINIMUM_CROSSINGS: 3,
   // Governor excursions are fleet-rare by calibration (median

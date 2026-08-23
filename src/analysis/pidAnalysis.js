@@ -233,14 +233,24 @@ export const SATURATION_REVIEW_BARS = {
   Yaw: { sharePercent: 0.35, runMs: 185 }
 };
 
+// Re-read 2026-08-23 on the full fleet (742 flights) after the
+// ramp-ghost fix changed the event population: bounce-back and
+// settling bars held their percentile (flag share 11-13 %); the
+// ringing bars had drifted to ~p79 (ghost duplicates measured from
+// the hold carried few crossings and diluted the medians) — Roll 30
+// → 40, Pitch 6 → 8 put them back at p85. Sweep + derivation:
+// egodrift tools/blackbox/bars_probe.mjs + bars_reanchor.py.
 export const RESPONSE_REVIEW_BARS = {
   bounceBackPercent: { Roll: 54, Pitch: 27, Yaw: 21 },
   settleMs: { Roll: 290, Pitch: 230, Yaw: 150 },
-  ringingCrossings: { Roll: 30, Pitch: 6, Yaw: 8 }
+  ringingCrossings: { Roll: 40, Pitch: 8, Yaw: 8 }
 };
 
+// Roll re-read 2026-08-23 (same round): p85 I-share 93.2 / p15
+// support 6.1 on the post-fix command windows; 92/8 had come to flag
+// one flight in five. Pitch and Yaw held (13.7 % / 14.7 %).
 export const COMMAND_BALANCE_BARS = {
-  Roll: { iPercent: 92, supportPercent: 8 },
+  Roll: { iPercent: 93, supportPercent: 6 },
   Pitch: { iPercent: 84, supportPercent: 10 },
   Yaw: { iPercent: 81, supportPercent: 20 }
 };
@@ -2546,10 +2556,7 @@ const confidenceLevel =
       // the aligned measurement — the axes' I-share distributions
       // differ too much for one global bar.
       const bars =
-        COMMAND_BALANCE_BARS[axisResult.axis] ?? {
-          iPercent: 92,
-          supportPercent: 8
-        };
+        COMMAND_BALANCE_BARS[axisResult.axis] ?? COMMAND_BALANCE_BARS.Roll;
 
       const iRemainsDominantDuringCommands =
         axisResult.iPercent >= bars.iPercent;
@@ -3468,7 +3475,7 @@ const trimmedMaximumRingingCrossingCount =
         medianRingingCrossingCount
       ) &&
         medianRingingCrossingCount >=
-          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 30)
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 40)
       ? `Review ${axisResult.axis} for repeated post-command ringing. Confirm the pattern with another log before changing PID or filter values.`
       : `No repeated sustained-ringing pattern was identified for ${axisResult.axis}.`;
       const ringingStatus =
@@ -3479,7 +3486,7 @@ const trimmedMaximumRingingCrossingCount =
         medianRingingCrossingCount
       ) &&
         medianRingingCrossingCount >=
-          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 30)
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 40)
       ? "Review"
       : "Clear";
   return [
