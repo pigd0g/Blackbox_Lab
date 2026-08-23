@@ -60,8 +60,13 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     return null;
   }
 
-  // Name the peak if it matches a rotor frequency.
+  // Name the peak if it matches a rotor frequency — and carry the
+  // matching wrench-in-hand action separately: the Verdict explains
+  // with `source`, Try This First commands with `sourceAction`, and
+  // neither repeats the other.
   let source = "an unidentified source";
+  let sourceAction =
+    "Check the rotating parts for balance and play at the next bench session.";
 
   if (headspeedRpm && headspeedRpm > 300) {
     const oneRev = headspeedRpm / 60;
@@ -69,12 +74,16 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
 
     if (Math.abs(ratio - 1) < 0.15) {
       source = "the MAIN ROTOR turning once per revolution, usually blade balance or head damping";
+      sourceAction = "Balance and track the main blades, and check the head damping.";
     } else if (Math.abs(ratio - 2) < 0.2) {
       source = "twice-per-revolution of the main rotor, often blade tracking or head play";
+      sourceAction = "Check the blade tracking and the head for play.";
     } else if (ratio > 3.5 && ratio < 6.5) {
       source = "the TAIL rotor region: check tail blades, belt/shaft and bearings";
+      sourceAction = "Check the tail blades, the belt or shaft tension, and the tail bearings.";
     } else if (ratio > 6.5) {
       source = "a high-frequency source: motor, pinion or bearing territory";
+      sourceAction = "Check the motor mount, the pinion mesh and the bearings.";
     }
   }
 
@@ -162,6 +171,7 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     // panel) can speak about the same peak without parsing prose.
     peak: {
       hz: Math.round(peakHz),
+      sourceAction,
       magnitude: Math.round(peakMagnitude * 10) / 10,
       source,
       reductionPercent: Number.isFinite(reductionPercent)
@@ -309,24 +319,6 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
     };
   }
 
-  // The card and the PID Lab must tell the same story: when the
-  // Lab's own status says "Review", the Home card cannot say
-  // "crisp" — whatever the score. One source of truth.
-  if (overallStatus === "Review") {
-    return {
-      key: "tuning",
-      title: "Tuning",
-      status: "watch",
-      headline: `Tracking score ${score}/100: items to review${demandSuffix}`,
-      detail:
-        "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
-      action:
-        "Open the PID Lab and read its review items: they say exactly where to look.",
-      screen: "pid",
-      evidence: "PID Lab findings"
-    };
-  }
-
   // The score measures tracking and only tracking — it CAN be high
   // while the airframe shakes, because the filtered gyro still
   // follows the stick. But a tune read through an open vibration
@@ -344,6 +336,24 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
         "The response follows the sticks, but a strong vibration is open on this flight — the tuning instruments are read through it, and no tuning change is earned until the mechanical source is fixed.",
       action:
         "Fix the vibration first (see the Vibration card), fly again, and read this score fresh on that flight.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
+  }
+
+  // The card and the PID Lab must tell the same story: when the
+  // Lab's own status says "Review", the Home card cannot say
+  // "crisp" — whatever the score. One source of truth.
+  if (overallStatus === "Review") {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: `Tracking score ${score}/100: items to review${demandSuffix}`,
+      detail:
+        "The response follows the sticks, but the PID Lab flags findings worth reading before calling this tune done.",
+      action:
+        "Open the PID Lab and read its review items: they say exactly where to look.",
       screen: "pid",
       evidence: "PID Lab findings"
     };

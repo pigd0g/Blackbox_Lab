@@ -3135,12 +3135,12 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "Tuning",
     pidRec?.text ??
       (nonCleanEvents > 0
-        ? `Of ${events.total} commands, ${eventBits}. That rate is inside the fleet's normal range, so no tuning change is earned from this flight alone.\n\nWhat flips this into advice is repetition: fly the same moves again, and if the ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, the card below will name the knob.`
+        ? `Nothing to change yet. Fly the same moves again: if the same ${events.worst?.axis ? events.worst.axis.toLowerCase() + " " : ""}events keep coming back, this card will name the knob.`
         : behaviorReviews > 0
-          ? `Nothing to change yet: every measured command tracked inside the fleet's normal range, but ${behaviorReviews} response behavior${behaviorReviews === 1 ? "" : "s"} (bounce-back, settling or ringing) ${behaviorReviews === 1 ? "is" : "are"} flagged for confirmation in the findings below.\n\nFly the same maneuvers again: if the pattern returns, it has earned a closer look.`
+          ? "Fly the same maneuvers again: if the pattern returns, it has earned a closer look. Change nothing yet."
           : gentleDemand
-            ? "Nothing stands out at this flight's gentle demand. For directional tuning advice, fly deliberate stick steps: clear inputs, held briefly. Then read this page again."
-            : "Nothing to change from this flight: every measured command tracked inside the fleet's normal range. After any change, fly the same moves and let Compare Flights be the judge."),
+            ? "Fly deliberate stick steps — clear inputs, held briefly — then read this page again. Gentle flying cannot earn tuning advice."
+            : "Nothing to change."),
     statusTone(cardStatus("tuning"))
   );
 
@@ -3178,21 +3178,26 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     } else if (governor.capability === "full") {
       governorText = `The ${dipRpm} rpm dip happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no matching load demand. That is governor-tune territory. One dip is not a pattern: fly the same load again, and if it repeats, the What To Try Next card below will carry the gated advice.`;
     } else {
-      // Headspeed-only log: without a governor target, stability is
-      // visible but tuning attribution is not — the wording must not
-      // outrun the capability the quality gate declared.
-      governorText = `The ${dipRpm} rpm short-term swing happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no obvious matching load demand. Without a logged governor target this log can judge stability, not governor tuning.\n\nRepeat the same maneuver, and if the swing keeps returning, that pattern is the signal worth acting on.`;
+      // Headspeed-only log: the Verdict already explains that hold
+      // is judged against the rotor's own trend — this card only
+      // says what to do about the swing.
+      governorText =
+        "Repeat the same maneuver on the next flight. If the swing keeps returning at the same moment of the maneuver, that pattern is the signal worth acting on; a one-off is conditions.";
     }
   } else if (governor && governor.hasRotorSpeedData !== false) {
-    governorText =
-      "Nothing to change: the governor is holding. Keep logging flights; the Health Record turns them into trends.";
+    governorText = "Nothing to change.";
   }
 
+  // No capability append here: on THIS page the Verdict already
+  // explains what a target-less log can and cannot judge — Home's
+  // "Not measured" group carries the enable-it advice.
   add(
     "governorFirstStep",
     "governor",
     "Rotor speed",
-    withGap(governorText, "rotor"),
+    governor && governor.hasRotorSpeedData === false
+      ? cardGap("rotor")
+      : governorText,
     governor && governor.hasRotorSpeedData !== false ? governorTone : "info"
   );
 
@@ -3208,24 +3213,25 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   );
   const peak = vibrationCard?.peak ?? null;
 
+  // The Verdict explains the peak; this card only commands. The
+  // action names the parts to touch (peak.sourceAction), never
+  // repeats the frequency story, and never points at another block.
   let filterText = null;
 
   if (vibrationCard?.status === "attention" && peak) {
-    filterText = `Address the mechanical source first: the ${peak.hz} Hz peak points at ${peak.identified ? peak.source : "a physical source"}. Filters can only hide it from the gyro: they never remove the shake from the airframe.\n\nThe Filter Advisor below carries the exact frequencies.`;
+    filterText = `${peak.sourceAction ?? "Check the rotating parts for balance and play."} Then fly again and re-read this page. Change no filter setting for this — filters only hide it from the gyro.`;
   } else if (peak?.managed && peak.magnitude > 3) {
-    filterText = `Filtering is containing the ${peak.hz} Hz shake${Number.isFinite(peak.reductionPercent) ? ` (${peak.reductionPercent}% suppressed, nothing meaningful reaching the control loop)` : ""}. But the vibration itself is mechanical: ${peak.identified ? peak.source : "a physical source worth locating"}.\n\nA bench check when convenient is the real fix; across flights, a growing raw peak is the signal to act.`;
+    filterText = `Nothing to change now. ${peak.sourceAction ?? "Check the rotating parts for balance and play."} A bench job for when it is convenient — across flights, a growing raw peak is the signal to act.`;
   } else if (topAdvisor?.priority === "filters") {
     filterText =
-      "Turn the RPM filter loose on this: the biggest peaks follow rotor speed, which is exactly what it exists for. The Filter Advisor below lists the peaks and the setting to review.";
+      "Enable the RPM filter (harmonic notches keyed to headspeed) in the Configurator's filter page, and check it covers the listed harmonics. Then fly again.";
   } else if (topAdvisor) {
-    filterText =
-      "Vibration is present but well managed: no change recommended. Keep an eye on the trend across flights; a growing peak is the real signal.";
+    filterText = "Nothing to change.";
   } else if (dataset?.spectra?.length) {
-    filterText =
-      "No filter change indicated: the noise picture is clean at this log's resolution.";
+    filterText = "Nothing to change.";
   } else {
     filterText =
-      "This flight never held steady long enough for a noise reading, so no filter advice can be earned from it. A longer stretch of steady flight gives the spectrum its window; on a multi-flight log, try a longer flight from the picker.";
+      "Fly a longer steady stretch and open that log: the spectrum needs a steady window. On a multi-flight file, pick a longer flight.";
   }
 
   add(
@@ -3246,12 +3252,12 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     withGap(
       escLab && escLab.status !== "insufficient"
         ? escLab.status === "attention"
-          ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed. The highest-load moments below name exactly when the system ran out."
+          ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed — one of the three, then fly the same load again."
           : escLab.status === "watch"
-            ? "Fine for now: remember this margin before asking the machine for more headspeed or pitch."
-            : "Nothing to change: healthy headroom throughout the flight."
+            ? "Nothing to change now: just remember this margin before asking the machine for more headspeed or pitch."
+            : "Nothing to change."
         : escLab
-          ? "Output headroom could not be judged: no steady section of this flight was long enough to measure it."
+          ? "Fly a longer steady stretch: output headroom is measured over steady flight, and this log had none long enough."
           : null,
       "power"
     ),
@@ -3271,14 +3277,12 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     withGap(
       batteryLab && batteryLab.status !== "insufficient"
         ? batteryLab.status === "attention"
-          ? "Review pack condition, connectors and load before another hard flight. The voltage and current charts below show the worst dip in context."
+          ? "Check the pack and its connectors before another hard flight, and log the next flights: one dip is a moment, a repeating dip is a pack."
           : batteryLab.status === "watch"
-            ? "Compare the voltage dip with current demand below, and keep logging: the Health Record turns single dips into a trend you can trust."
-            : "Nothing to change for the pack: it held up well."
+            ? "Nothing to change yet: keep logging flights — repetition is what turns one dip into a verdict."
+            : "Nothing to change."
         : batteryLab
-          ? batteryLab.hasRotorSpeedData === false
-            ? "The pack could not be judged from this flight: pack condition is read over a steady-load section, which is found from rotor speed — and this log records none. The Voltage Over the Flight chart still shows the pack directly."
-            : "The pack could not be judged from this flight: no steady section was long enough. Do not judge the pack from this flight alone."
+          ? "Do not judge the pack from this flight: it offered no steady-load section to read it from."
           : null,
       "battery"
     ),
@@ -3291,20 +3295,20 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   // ---- Signal ----
   const signalLab = dataset?.signalLab;
 
+  // Present-but-partial link telemetry is already explained by this
+  // page's verdict; the gap advice only fills in when the lab could
+  // not run at all.
   add(
     "signalFirstStep",
     "signal",
     "Signal",
-    withGap(
-      signalLab
-        ? signalLab.status === "attention"
-          ? "Check receiver antenna placement, orientation and condition before the next flight. The events below name each moment the link struggled."
-          : signalLab.status === "watch"
-            ? "Glance at the dip moments below: repeated dips in the same flight orientation point at antenna placement or shading."
-            : "Nothing to change: the link held all flight."
-        : null,
-      "signal"
-    ),
+    signalLab
+      ? signalLab.status === "attention"
+        ? "Check the receiver antenna placement, orientation and condition before the next flight."
+        : signalLab.status === "watch"
+          ? "Nothing to change yet: if dips keep landing in the same flight orientation across logs, reposition the antennas."
+          : "Nothing to change."
+      : cardGap("signal"),
     signalLab ? statusTone(cardStatus("signal") ?? signalLab.status) : "info"
   );
   noteGap("signal", "signal", "Signal");
@@ -3316,18 +3320,15 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "becFirstStep",
     "bec",
     "BEC output",
-    withGap(
-      becLab
-        ? becLab.status === "attention"
-          ? "Work through the BEC output path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
-          : becLab.status === "watch"
-            ? becLab.implausibleBrownout
-              ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement, not the power, is the suspect."
-              : "Keep an eye on the dip moments below: with power, repetition is what matters."
-            : "Nothing to change: BEC output is solid — receiver and servos are fed steadily."
-        : null,
-      "bec"
-    ),
+    becLab
+      ? becLab.status === "attention"
+        ? "Work through the BEC output path on the bench: the BEC's voltage setting and current capability, then the wiring and connectors."
+        : becLab.status === "watch"
+          ? becLab.implausibleBrownout
+            ? "Inspect the voltage-measurement path — the sensor's wiring and connector — before touching the BEC."
+            : "Nothing to change yet: keep logging — with power, repetition is what matters."
+          : "Nothing to change."
+      : cardGap("bec"),
     becLab ? statusTone(cardStatus("bec") ?? becLab.status) : "info"
   );
   noteGap("bec", "bec", "BEC output");
