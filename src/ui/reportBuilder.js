@@ -142,8 +142,9 @@ function buildRecommendationsHtml(recommendations) {
 
 // The rotor's event story beside the labs: excursion summary and
 // the precomp balance reads, when the flight could measure them.
-function buildRotorBehaviourHtml(governorEvents, precomp) {
+function buildRotorBehaviourHtml(governorEvents, precomp, flightEventsSentence = null) {
   const lines = [
+    flightEventsSentence ?? null,
     governorEvents?.summary?.sentence ?? null,
     precomp?.governor?.story ?? null,
     precomp?.tail?.story ?? null
@@ -153,13 +154,106 @@ function buildRotorBehaviourHtml(governorEvents, precomp) {
     return "";
   }
 
-  return `<h2>Headspeed Events &amp; Precomp</h2>
+  return `<h2>Flight Events, Headspeed Events &amp; Precomp</h2>
   ${lines
     .map(
       (line) =>
         `<p class="summary" style="margin-bottom:10px;">${escapeHtml(line)}</p>`
     )
     .join("")}`;
+}
+
+// Home's "What To Do First", verbatim: the actionable rows in
+// severity order, then what this log could not measure. The
+// report's reader gets the same to-do list the pilot saw.
+const TONE_COLORS = {
+  attention: STATUS.attention,
+  watch: STATUS.watch,
+  clear: STATUS.good,
+  info: STATUS.unavailable
+};
+
+function buildFirstStepsHtml(firstSteps) {
+  const rows = firstSteps?.entries ?? [];
+  const gaps = firstSteps?.gapEntries ?? [];
+  if (rows.length === 0 && gaps.length === 0) {
+    return "";
+  }
+
+  const actionable = rows.filter(
+    (entry) => entry.tone === "attention" || entry.tone === "watch"
+  );
+
+  const rowHtml = (entry) => {
+    const tone = TONE_COLORS[entry.tone] ?? TONE_COLORS.info;
+    return `
+      <div class="verdict" style="border-left-color:${tone.color};background:${tone.soft};">
+        <div class="verdict-top"><span class="verdict-title">${escapeHtml(entry.title)}</span></div>
+        <div class="verdict-detail" style="white-space:pre-line;">${escapeHtml(entry.text)}</div>
+      </div>`;
+  };
+
+  return `<h2>What To Do First</h2>
+  <p class="summary">Everything this flight asks of you, in the order to attend to it.</p>
+  ${
+    actionable.length > 0
+      ? actionable.map(rowHtml).join("")
+      : `<p class="summary" style="color:${STATUS.good.color};">Nothing needs your attention: this flight is healthy.</p>`
+  }
+  ${
+    gaps.length > 0
+      ? `<h3 class="sub-heading">Not measured on this flight</h3>${gaps.map(rowHtml).join("")}`
+      : ""
+  }`;
+}
+
+// The change pack as the Home card shows it: the earned changes
+// (setting, direction, why, verified by), what waits, the evidence
+// flights wanted — or the sentence that says why nothing is earned.
+function buildPackHtml(pack) {
+  if (!pack) {
+    return "";
+  }
+
+  const members = (pack.members ?? [])
+    .map((member) => {
+      const change = Number.isFinite(member.to)
+        ? `${member.from} \u2192 ${member.to}`
+        : `one ${member.magnitudeClass ?? ""} ${member.direction ?? ""}`.trim();
+      return `
+      <div class="verdict" style="border-left-color:#4f7dc4;background:#f2f6fc;">
+        <div class="verdict-headline"><code>${escapeHtml(member.setting)}</code> ${escapeHtml(change)}</div>
+        ${member.meaning ? `<div class="verdict-detail">${escapeHtml(member.meaning)}</div>` : ""}
+        ${member.finding ? `<div class="verdict-detail">Why: ${escapeHtml(member.finding)}</div>` : ""}
+        <div class="verdict-detail">Verified by: ${escapeHtml(member.instrument ?? "its lab")}${
+          member.expectedResult ? ` \u00b7 expect: ${escapeHtml(member.expectedResult)}` : ""
+        }</div>
+        ${member.note ? `<div class="verdict-detail">${escapeHtml(member.note)}</div>` : ""}
+      </div>`;
+    })
+    .join("");
+
+  const queued = (pack.queued ?? [])
+    .map(
+      (entry) =>
+        `<div class="verdict-detail"><code>${escapeHtml(entry.family ?? "")}</code> \u2014 ${escapeHtml(entry.reason ?? "")}</div>`
+    )
+    .join("");
+
+  const prescriptions = (pack.prescriptions ?? [])
+    .map((text) => `<li>${escapeHtml(text)}</li>`)
+    .join("");
+
+  return `<h2>This Flight's Change Pack</h2>
+  <p class="summary">${escapeHtml(pack.intro ?? "")}</p>
+  ${members}
+  ${pack.headspeedNote ? `<p class="verdict-detail">${escapeHtml(pack.headspeedNote)}</p>` : ""}
+  ${queued ? `<h3 class="sub-heading">Waiting for the next pack</h3>${queued}` : ""}
+  ${
+    prescriptions
+      ? `<h3 class="sub-heading">Evidence flights wanted</h3><ul class="report-list">${prescriptions}</ul>`
+      : ""
+  }`;
 }
 
 export function buildReportHtml({
@@ -173,7 +267,10 @@ export function buildReportHtml({
   quality = null,
   recommendations = null,
   governorEvents = null,
-  precomp = null
+  precomp = null,
+  firstSteps = null,
+  pack = null,
+  flightEventsSentence = null
 }) {
   const date = new Date().toLocaleString();
 
@@ -210,7 +307,7 @@ export function buildReportHtml({
         <div class="verdict-detail">${escapeHtml(card.detail)}</div>
         ${
           card.gap && card.status !== "unavailable"
-            ? `<div class="verdict-detail" style="color:#7c8da1;"><b>Not measured:</b> ${escapeHtml(card.gapAction ?? card.gap)}</div>`
+            ? `<div class="verdict-detail" style="color:#7c8da1;"><b>Not measured:</b> ${escapeHtml(card.gapShort ?? card.gap)}${card.gapAction ? ` \u2014 ${escapeHtml(card.gapAction)}` : ""}</div>`
             : ""
         }
         ${
@@ -223,8 +320,22 @@ export function buildReportHtml({
     .join("");
 
   const labsHtml = (labs ?? [])
-    .filter((lab) => lab && lab.analysis)
+    .filter((lab) => lab && (lab.analysis || lab.absent))
     .map((lab) => {
+      // A lab that could not run says so, in the words its page
+      // shows — the report's reader must not mistake a missing
+      // block for a clean one.
+      if (!lab.analysis) {
+        return `
+      <div class="lab">
+        <div class="lab-head">
+          <span class="lab-name">${escapeHtml(lab.title)}</span>
+          <span class="lab-status" style="color:${STATUS.unavailable.color};">${STATUS.unavailable.word}</span>
+        </div>
+        <p class="lab-story" style="border-left-color:${STATUS.unavailable.color};color:#5d6d7e;">${escapeHtml(lab.absent)}</p>
+      </div>`;
+      }
+
       const status = STATUS[lab.analysis.status] ?? STATUS.insufficient;
 
       // A lab that could only run a partial analysis must not wear
@@ -244,14 +355,18 @@ export function buildReportHtml({
       const statusColor =
         capability === "full" ? status.color : "#7c8da1";
 
-      const tiles = lab.analysis.metrics
-        .map(
-          (metric) => `
-          <div class="tile">
+      // Numbers sit in tiles; sentences (advisor lines, the top
+      // recommendation) take the full row — a paragraph squeezed
+      // into a tile reads as a column of words.
+      const tiles = (lab.analysis.metrics ?? [])
+        .map((metric) => {
+          const wide = String(metric.value ?? "").length > 90;
+          return `
+          <div class="tile${wide ? " tile-wide" : ""}">
             <div class="tile-label">${escapeHtml(metric.label)}</div>
-            <div class="tile-value">${escapeHtml(metric.value)}</div>
-          </div>`
-        )
+            <div class="tile-value${wide ? " tile-text" : ""}">${escapeHtml(metric.value)}</div>
+          </div>`;
+        })
         .join("");
 
       return `
@@ -349,6 +464,8 @@ export function buildReportHtml({
   .tile { background: #f4f7fb; border: 1px solid #e3e8ef; border-radius: 9px; padding: 9px 12px; }
   .tile-label { font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: #71839a; }
   .tile-value { font-weight: 650; margin-top: 2px; font-size: 15.5px; }
+  .tile-wide { grid-column: 1 / -1; }
+  .tile-text { font-weight: 400; font-size: 14.5px; color: #2c3e50; line-height: 1.5; }
 
   .basis {
     background: #ffffff; border: 1px solid #e3e8ef; border-radius: 12px;
@@ -373,10 +490,30 @@ export function buildReportHtml({
     margin-top: 40px; padding-top: 14px; border-top: 1px solid #d7dee8;
     color: #7c8da1; font-size: 13px;
   }
+  .sub-heading {
+    font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: #7c8da1; margin: 18px 4px 6px 4px;
+  }
+  .report-list { margin: 4px 0 0 22px; padding: 0; color: #2c3e50; }
+  .report-list li { margin: 4px 0; }
+  code { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 0.92em; }
+
+  /* Paper: the PDF export and any browser print share this. */
+  @page { size: A4; margin: 12mm 11mm; }
   @media print {
-    body { background: #ffffff; }
-    .masthead, .chart-panel { box-shadow: none; }
-    .verdict, .lab, .chart-panel { break-inside: avoid; }
+    body { background: #ffffff; font-size: 12.5px; }
+    .page { max-width: none; padding: 0; }
+    .masthead, .chart-panel, .verdict, .lab, .basis { box-shadow: none; }
+    .masthead { border-radius: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .summary { font-size: 14px; }
+    .verdict-headline { font-size: 14.5px; }
+    .verdict-detail, .verdict-action, .basis-note { font-size: 12px; }
+    .lab-name { font-size: 14px; }
+    .tile-value { font-size: 12.5px; }
+    h2 { font-size: 13px; margin-top: 22px; break-after: avoid; }
+    .sub-heading { break-after: avoid; }
+    .verdict, .lab, .chart-panel, .basis-row, .tile { break-inside: avoid; }
+    .chart-panel img { max-height: 110mm; object-fit: contain; }
   }
 </style>
 </head>
@@ -392,13 +529,17 @@ export function buildReportHtml({
   <p class="summary">${escapeHtml(verdict?.summary ?? "")}</p>
   ${cardsHtml}
 
+  ${buildFirstStepsHtml(firstSteps)}
+
+  ${buildPackHtml(pack)}
+
   ${buildRecommendationsHtml(recommendations)}
 
   ${buildQualityHtml(quality)}
 
   ${labsHtml ? `<h2>Lab Details</h2>${labsHtml}` : ""}
 
-  ${buildRotorBehaviourHtml(governorEvents, precomp)}
+  ${buildRotorBehaviourHtml(governorEvents, precomp, flightEventsSentence)}
 
   ${chartsHtml ? `<h2>The Evidence</h2>${chartsHtml}` : ""}
 

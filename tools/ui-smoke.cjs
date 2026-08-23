@@ -23,7 +23,12 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("css brace balance ok");
 
-  const app = await _electron.launch({ args: ["."], cwd: process.cwd() });
+  const pdfDirectory = require("node:path").resolve("smoke-shots");
+  const app = await _electron.launch({
+    args: ["."],
+    cwd: process.cwd(),
+    env: { ...process.env, BLACKBOX_LAB_SMOKE_PDF_DIR: pdfDirectory }
+  });
   const window = await app.firstWindow();
 
   const errors = [];
@@ -889,6 +894,32 @@ const { mkdirSync } = require("node:fs");
   await window.click("#sidebarAdvancedToggle"); // restore
   console.log("advanced switch ok: toggled to", advAfter.body, "and back");
   await window.screenshot({ path: "smoke-shots/11-sidebar-advanced.png" });
+
+  // ---- the PDF report: built through the real main-process path ----
+  await window.click('.nav-button[data-target="reports"]');
+  await window.waitForTimeout(300);
+  const fsMod = require("node:fs");
+  for (const stale of fsMod.readdirSync(pdfDirectory)) {
+    if (/^blackbox-lab-report-.*\.pdf$/.test(stale)) fsMod.unlinkSync(require("node:path").join(pdfDirectory, stale));
+  }
+  await window.click("#buildReportButton");
+  await window.waitForFunction(
+    () => /Report saved|could not|not saved/.test(document.getElementById("reportStatus")?.textContent ?? ""),
+    null,
+    { timeout: 60000 }
+  );
+  const reportState = await window.evaluate(() => document.getElementById("reportStatus")?.textContent ?? "");
+  const pdfName = fsMod.readdirSync(pdfDirectory).find((name) => /^blackbox-lab-report-.*\.pdf$/.test(name));
+  if (!/Report saved/.test(reportState) || !pdfName) {
+    throw new Error("PDF report did not save: " + reportState);
+  }
+  const pdfBytes = fsMod.readFileSync(require("node:path").join(pdfDirectory, pdfName));
+  const pdfHead = pdfBytes.subarray(0, 5).toString("latin1");
+  const pdfPages = (pdfBytes.toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+  if (pdfHead !== "%PDF-" || pdfBytes.length < 50_000 || pdfPages < 2) {
+    throw new Error(`PDF report malformed: head=${pdfHead} bytes=${pdfBytes.length} pages=${pdfPages}`);
+  }
+  console.log(`pdf report ok: ${pdfName} | ${Math.round(pdfBytes.length / 1024)} KB | ${pdfPages} pages`);
 
   // ---- error-report dialog: the global net actually catches ----
   // A deliberate unhandled throw must raise the dialog with the

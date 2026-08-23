@@ -2836,6 +2836,14 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   card.classList.toggle("pack-empty", !show);
   if (!show) {
     el("packIntro").textContent = packEmptyStory(pack, context);
+    currentPackReport = {
+      intro: el("packIntro").textContent,
+      members: [],
+      queued: [],
+      prescriptions: [],
+      headspeedNote: null,
+      empty: true
+    };
     el("packMembers").innerHTML = "";
     el("packHeadspeedNote").hidden = true;
     el("packSnippetFold").hidden = true;
@@ -2914,6 +2922,33 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       .join("");
   }
 
+  // The report carries this card as shown: intro, members with
+  // their why/verified-by, what waits, the evidence flights wanted.
+  currentPackReport = {
+    intro: el("packIntro").textContent,
+    members: pack.members.map((member) => ({
+      setting: member.setting,
+      from: member.from,
+      to: member.to,
+      magnitudeClass: member.magnitudeClass,
+      direction: member.direction,
+      meaning: member.card?.meaning ?? null,
+      finding: member.finding ?? null,
+      instrument: member.instrument ?? null,
+      expectedResult: member.expectedResult ?? null,
+      note: member.freshnessNote ?? member.numericNote ?? null
+    })),
+    queued: pack.queued.map((entry) => ({
+      family: entry.rec?.suggestion?.family ?? "",
+      reason: entry.reason
+    })),
+    prescriptions: [...pack.prescriptions],
+    headspeedNote: pack.requiresHeadspeedHold
+      ? el("packHeadspeedNote")?.textContent?.trim() ?? null
+      : null,
+    empty: false
+  };
+
   const prescriptions = el("packPrescriptions");
   prescriptions.hidden = pack.prescriptions.length === 0;
   if (pack.prescriptions.length > 0) {
@@ -2939,6 +2974,9 @@ function listWords(items) {
   if (items.length <= 1) return items.join("");
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+// The change pack as last rendered, for the exported report.
+let currentPackReport = null;
 
 // Why this flight earned no change — in the evidence's own terms.
 function packEmptyStory(pack, context) {
@@ -3319,7 +3357,13 @@ const FIRST_STEP_LAB_ORDER = [
   "bec"
 ];
 
+// What Home shows as the to-do list — kept so the exported report
+// carries the same list, verbatim.
+let currentFirstSteps = { entries: [], gapEntries: [] };
+
 function renderHomeFirstSteps(entries, gapEntries = []) {
+  currentFirstSteps = { entries: [...entries], gapEntries: [...gapEntries] };
+
   const card = el("firstStepsCard");
   const list = el("firstStepsList");
 
@@ -5804,6 +5848,16 @@ function analyzeFlight(flightIndex) {
 // shapes of their own — these adapters translate them so the report
 // tells the same story as the app: score, confidence, Review
 // conditions and the gated top recommendation all survive export.
+// The lab page leads with the same sentence Home's card carries
+// (renderLabVerdictStories); the report's lab block leads with it
+// too, then the analysis summary follows — one story, two surfaces.
+function verdictStoryFor(key) {
+  const card = currentDataset?.verdict?.cards?.find(
+    (entry) => entry.key === key
+  );
+  return card ? `${card.headline}. ${card.detail}` : null;
+}
+
 function pidLabForReport(analysis) {
   if (!analysis || !Array.isArray(analysis.summary)) return null;
 
@@ -5872,7 +5926,7 @@ function pidLabForReport(analysis) {
         : analysis.overallStatus === "Review"
           ? "watch"
           : "insufficient",
-    story: [analysis.summary.join(" "), behaviorStory]
+    story: [verdictStoryFor("tuning"), analysis.summary.join(" "), behaviorStory]
       .filter(Boolean)
       .join(" "),
     metrics: [
@@ -5915,10 +5969,36 @@ function pidLabForReport(analysis) {
   };
 }
 
-function filterLabForReport(analysis) {
+function filterLabForReport(analysis, advice = null) {
   if (!analysis) return null;
 
   const recommendations = analysis.recommendations ?? [];
+
+  // The Filter Advisor is what the Filter Lab page leads with: the
+  // peaks, their likely source, and the do-this-first / filters /
+  // worth-knowing lines. The report's Filter Lab carries the same.
+  const advisorMetrics = (advice?.recommendations ?? []).slice(0, 4).map(
+    (recommendation) => ({
+      label:
+        recommendation.priority === "first"
+          ? "Do this first"
+          : recommendation.priority === "filters"
+            ? "Filters"
+            : "Worth knowing",
+      value: recommendation.text
+    })
+  );
+  const advisorRows = (advice?.rows ?? []).slice(0, 4).map((row) => ({
+    label: `Peak ${row.hz} Hz`,
+    value:
+      `${row.source} \u00b7 raw ${row.magnitude}` +
+      (row.filteredMagnitude !== null && row.filteredMagnitude !== undefined
+        ? ` \u2192 filtered ${row.filteredMagnitude}`
+        : "") +
+      (row.reductionPercent !== null && row.reductionPercent !== undefined
+        ? ` (${row.reductionPercent}% reduction)`
+        : "")
+  }));
 
   return {
     status: !Number.isFinite(analysis.score)
@@ -5926,9 +6006,13 @@ function filterLabForReport(analysis) {
       : analysis.severity === "info"
         ? "good"
         : "watch",
-    story:
+    story: [
+      verdictStoryFor("vibration"),
       (analysis.summaryFindings ?? []).join(" ") ||
-      String(analysis.status ?? ""),
+        String(analysis.status ?? "")
+    ]
+      .filter(Boolean)
+      .join(" "),
     metrics: [
       Number.isFinite(analysis.score) && {
         label: "Filter score",
@@ -5939,6 +6023,8 @@ function filterLabForReport(analysis) {
         value: `${analysis.confidence.label} (${analysis.confidence.score}/100)`
       },
       { label: "Status", value: String(analysis.status ?? "—") },
+      ...advisorRows,
+      ...advisorMetrics,
       recommendations.length > 0 && {
         label: "Key recommendation",
         value:
@@ -5971,14 +6057,44 @@ buildReportButton.addEventListener("click", () => {
     recommendations: currentRecommendations,
     governorEvents: currentDataset.governorEvents,
     precomp: currentDataset.precomp,
+    firstSteps: currentFirstSteps,
+    pack: currentPackReport,
+    flightEventsSentence:
+      currentDataset.flightEvents?.summary?.sentence ?? null,
     labs: [
-      { title: "Filter Lab", analysis: filterLabForReport(currentFilterAnalysisResult) },
+      {
+        title: "Filter Lab",
+        analysis: filterLabForReport(
+          currentFilterAnalysisResult,
+          currentDataset.filterAdvice
+        )
+      },
       { title: "PID Lab", analysis: pidLabForReport(currentPidAnalysisResult) },
-      { title: "Governor Lab", analysis: currentDataset.labs.governor },
-      { title: "ESC Lab", analysis: currentDataset.labs.esc },
-      { title: "Battery Lab", analysis: currentDataset.labs.battery },
-      { title: "Signal Lab", analysis: currentDataset.signalLab },
-      { title: "BEC Lab", analysis: currentDataset.becLab }
+      {
+        title: "Governor Lab",
+        analysis: currentDataset.labs.governor,
+        absent: el("governorStory")?.textContent?.trim() ?? null
+      },
+      {
+        title: "ESC Lab",
+        analysis: currentDataset.labs.esc,
+        absent: el("escStory")?.textContent?.trim() ?? null
+      },
+      {
+        title: "Battery Lab",
+        analysis: currentDataset.labs.battery,
+        absent: el("batteryStory")?.textContent?.trim() ?? null
+      },
+      {
+        title: "Signal Lab",
+        analysis: currentDataset.signalLab,
+        absent: el("signalStory")?.textContent?.trim() ?? null
+      },
+      {
+        title: "BEC Lab",
+        analysis: currentDataset.becLab,
+        absent: el("becStory")?.textContent?.trim() ?? null
+      }
     ],
     chartElements: [
       { title: "Noise Spectrum", element: chartSpectrum },
@@ -5994,6 +6110,46 @@ buildReportButton.addEventListener("click", () => {
 
   const baseName = (summaryFileName.textContent || "flight")
     .replace(/\.[^.]+$/, "");
+
+  // Desktop: a PDF through Chromium's own renderer — identical on
+  // every machine, one file to share. Outside Electron (the web
+  // spike) the self-contained HTML download stays.
+  if (window.blackboxLab?.exportReportPdf) {
+    buildReportButton.disabled = true;
+    reportStatus.textContent = "Rendering the PDF\u2026";
+    window.blackboxLab
+      .exportReportPdf(html, `blackbox-lab-report-${baseName}.pdf`)
+      .then((result) => {
+        if (result?.ok) {
+          reportStatus.textContent = "";
+          const text = document.createTextNode(`Report saved: ${result.path} `);
+          const reveal = document.createElement("button");
+          reveal.type = "button";
+          reveal.className = "ghost";
+          reveal.textContent = "Show in folder";
+          reveal.addEventListener("click", () => {
+            window.blackboxLab.revealPath?.(result.path);
+          });
+          reportStatus.appendChild(text);
+          reportStatus.appendChild(reveal);
+        } else if (result?.canceled) {
+          reportStatus.textContent = "Report not saved.";
+        } else {
+          reportStatus.textContent =
+            `The PDF could not be written${result?.error ? `: ${result.error}` : ""}. Saving the HTML version instead.`;
+          downloadReport(html, `blackbox-lab-report-${baseName}.html`);
+        }
+      })
+      .catch(() => {
+        reportStatus.textContent =
+          "The PDF could not be written. Saving the HTML version instead.";
+        downloadReport(html, `blackbox-lab-report-${baseName}.html`);
+      })
+      .finally(() => {
+        buildReportButton.disabled = false;
+      });
+    return;
+  }
 
   downloadReport(html, `blackbox-lab-report-${baseName}.html`);
   reportStatus.textContent =
