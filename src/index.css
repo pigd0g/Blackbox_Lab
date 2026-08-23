@@ -1870,7 +1870,70 @@ section[data-screen="history"] .flight-picker .secondary-button {
 }
 
 .replay-fields-hint {
-  margin: -6px 0 12px;
+  margin: 0 0 10px;
+}
+
+.replay-field-browser {
+  margin: -4px 0 16px;
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+.replay-field-browser > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: var(--font-ui);
+  user-select: none;
+}
+.replay-field-browser[open] > summary {
+  margin-bottom: 8px;
+}
+.replay-field-group {
+  margin: 10px 0 4px;
+}
+.replay-field-group h5 {
+  margin: 0 0 6px;
+  font-size: var(--font-small);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.replay-field-group .chart-hint {
+  margin: -2px 0 6px;
+}
+.replay-field-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.replay-field-chip {
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  padding: 3px 10px;
+  font-size: var(--font-small);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.replay-field-chip code {
+  color: var(--ink-muted);
+  font-size: var(--font-micro);
+}
+.replay-field-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(111, 178, 255, 0.12);
+}
+.replay-field-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.replay-field-empty {
+  color: var(--ink-muted);
+  font-style: italic;
+  font-size: var(--font-small);
 }
 
 .replay-add-btn {

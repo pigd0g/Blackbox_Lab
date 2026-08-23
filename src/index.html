@@ -659,7 +659,10 @@
           <p>This page plays the flight back like a video edit:
             stack the charts you want to study, then run the
             playhead through all of them at once while the sticks
-            show the pilot's hands.</p>
+            show the pilot's hands. Beyond the presets, <strong>every
+            field the log recorded</strong> — PID terms, mixer,
+            servos, governor, ESC, debug — can join the timeline from
+            the field browser below the stack controls.</p>
           <details>
             <summary>What am I looking at?</summary>
             <p>Add or remove graphs to build your own working view.
@@ -709,13 +712,20 @@
         <section class="card">
           <div class="replay-stack-controls" id="replayStackControls">
             <label for="replayAddGraph" class="replay-add-label">Add graph</label>
-            <input type="search" id="replayFieldSearch" class="replay-field-search"
-              placeholder="Search logged fields — e.g. yaw ff, servo, govP"
-              aria-label="Search logged fields" hidden />
             <select id="replayAddGraph"></select>
             <button id="replayAddButton" class="replay-add-btn">+ Add</button>
           </div>
-          <p class="chart-hint replay-fields-hint">Presets first, then every field this log recorded, grouped. Friendly names are shown beside the original Rotorflight field name; fields absent from this log are not offered.</p>
+          <!-- Every logged field, visible as a browser — not buried
+               in the dropdown. Grouped by Rotorflight family, searchable,
+               one click adds a field to the stack. -->
+          <details class="replay-field-browser" id="replayFieldBrowser" hidden>
+            <summary id="replayFieldBrowserSummary">All logged fields</summary>
+            <p class="chart-hint replay-fields-hint">Every field this log recorded, grouped by family. Friendly names beside the original Rotorflight field name; fields absent from this log are not offered. Click a field to add it to the stack.</p>
+            <input type="search" id="replayFieldSearch" class="replay-field-search"
+              placeholder="Search fields — e.g. yaw ff, servo, govP, debug"
+              aria-label="Search logged fields" />
+            <div id="replayFieldGroups"></div>
+          </details>
           <div id="replayGraphStack"></div>
         </section>
 

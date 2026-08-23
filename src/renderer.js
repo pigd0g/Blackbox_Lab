@@ -646,11 +646,93 @@ function renderReplayAddMenu(addSelect, layout, fieldGroups) {
   const addButton = el("replayAddButton");
   if (addButton) addButton.disabled = empty;
 
-  const search = el("replayFieldSearch");
-  if (search) {
-    search.hidden = fieldGroups.length === 0;
+  renderReplayFieldBrowser(layout, fieldGroups);
+}
+
+// The field browser: every group the log carries, every field a
+// chip — alias first, original name always beside it. One click
+// stacks it. Fields already stacked stay visible but disabled, so
+// the browser also reads as an inventory of the log.
+function renderReplayFieldBrowser(layout, fieldGroups) {
+  const browser = el("replayFieldBrowser");
+  const groupsHost = el("replayFieldGroups");
+  const summary = el("replayFieldBrowserSummary");
+  if (!browser || !groupsHost) return;
+
+  const totalFields = fieldGroups.reduce(
+    (sum, group) => sum + group.fields.length,
+    0
+  );
+  browser.hidden = totalFields === 0;
+  if (totalFields === 0) return;
+
+  if (summary) {
+    summary.textContent =
+      `All logged fields — ${totalFields} field${totalFields === 1 ? "" : "s"} in ` +
+      `${fieldGroups.length} group${fieldGroups.length === 1 ? "" : "s"}, any of them one click from the timeline`;
+  }
+
+  groupsHost.innerHTML = "";
+  let shown = 0;
+
+  for (const group of fieldGroups) {
+    const matching = group.fields.filter((entry) =>
+      fieldMatchesSearch(entry, replayFieldSearchQuery)
+    );
+    if (matching.length === 0) continue;
+
+    const section = document.createElement("div");
+    section.className = "replay-field-group";
+    const heading = document.createElement("h5");
+    heading.textContent = group.label;
+    section.appendChild(heading);
+    if (group.note) {
+      const note = document.createElement("p");
+      note.className = "chart-hint";
+      note.textContent = group.note;
+      section.appendChild(note);
+    }
+
+    const chips = document.createElement("div");
+    chips.className = "replay-field-chips";
+    for (const entry of matching) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "replay-field-chip";
+      chip.dataset.fieldKey = entry.key;
+      chip.title = entry.alias ? `${entry.alias} (${entry.name})` : entry.name;
+      const inStack = layout.includes(entry.key);
+      chip.disabled = inStack;
+      chip.innerHTML = entry.alias
+        ? `${escapeHtml(entry.alias)} <code>${escapeHtml(entry.name)}</code>`
+        : `<code>${escapeHtml(entry.name)}</code>`;
+      if (inStack) chip.title += " — already in the stack";
+      chips.appendChild(chip);
+      shown += 1;
+    }
+    section.appendChild(chips);
+    groupsHost.appendChild(section);
+  }
+
+  if (shown === 0) {
+    groupsHost.innerHTML =
+      '<p class="replay-field-empty">No logged field matches that search.</p>';
   }
 }
+
+el("replayFieldGroups")?.addEventListener("click", (event) => {
+  const chip = event.target.closest(".replay-field-chip");
+  if (!chip || chip.disabled || !chip.dataset.fieldKey) return;
+  const layout = loadReplayLayout();
+  if (layout.includes(chip.dataset.fieldKey)) return;
+  layout.push(chip.dataset.fieldKey);
+  saveReplayLayout(layout);
+  renderReplayStack(currentDataset);
+  replay.playheads = [];
+  // The browser stays open: the pilot is building a view.
+  const browser = el("replayFieldBrowser");
+  if (browser) browser.open = true;
+});
 
 el("replayFieldSearch")?.addEventListener("input", (event) => {
   replayFieldSearchQuery = event.target.value ?? "";

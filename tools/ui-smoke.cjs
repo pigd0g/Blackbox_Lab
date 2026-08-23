@@ -272,19 +272,45 @@ const { mkdirSync } = require("node:fs");
   if (fieldRow.rows !== rowsBefore + 1 || !fieldRow.canvas || !/axisP\[0\]/.test(fieldRow.heading)) {
     throw new Error("raw field did not stack: " + JSON.stringify(fieldRow));
   }
+  // The field browser: visible, grouped, one click per field.
+  const browserState = await window.evaluate(() => {
+    const browser = document.getElementById("replayFieldBrowser");
+    return {
+      visible: browser ? browser.offsetParent !== null : null,
+      summary: document.getElementById("replayFieldBrowserSummary")?.textContent ?? "",
+      groups: document.querySelectorAll("#replayFieldGroups .replay-field-group").length,
+      chips: document.querySelectorAll("#replayFieldGroups .replay-field-chip").length,
+      axisPDisabled: document.querySelector('.replay-field-chip[data-field-key="field:axisP[0]"]')?.disabled
+    };
+  });
+  if (!browserState.visible || browserState.groups < 3 || browserState.chips < 10 || browserState.axisPDisabled !== true) {
+    throw new Error("replay field browser missing or wrong: " + JSON.stringify(browserState));
+  }
+  await window.click("#replayFieldBrowserSummary");
+  await window.waitForTimeout(200);
   await window.fill("#replayFieldSearch", "yaw gyro");
   await window.waitForTimeout(200);
-  const searched = await window.evaluate(() => {
-    const select = document.getElementById("replayAddGraph");
-    return [...select.options].map((o) => o.value);
-  });
-  if (!searched.includes("field:gyroADC[2]") || searched.some((v) => v === "field:axisP[1]")) {
-    throw new Error("field search did not narrow the menu: " + JSON.stringify(searched));
+  const searched = await window.evaluate(() => ({
+    options: [...document.getElementById("replayAddGraph").options].map((o) => o.value),
+    chips: [...document.querySelectorAll("#replayFieldGroups .replay-field-chip")].map((c) => c.dataset.fieldKey)
+  }));
+  if (!searched.options.includes("field:gyroADC[2]") || searched.options.some((v) => v === "field:axisP[1]") ||
+      !searched.chips.includes("field:gyroADC[2]") || searched.chips.includes("field:axisP[1]")) {
+    throw new Error("field search did not narrow menu + browser: " + JSON.stringify(searched));
+  }
+  await window.click('.replay-field-chip[data-field-key="field:gyroADC[2]"]');
+  await window.waitForTimeout(400);
+  const chipAdded = await window.evaluate(() => ({
+    rows: document.querySelectorAll(".replay-graph-row").length,
+    lastHeading: [...document.querySelectorAll(".replay-graph-head span:first-child")].pop()?.textContent ?? ""
+  }));
+  if (chipAdded.rows !== rowsBefore + 2 || !/gyroADC\[2\]/.test(chipAdded.lastHeading)) {
+    throw new Error("chip click did not stack the field: " + JSON.stringify(chipAdded));
   }
   await window.fill("#replayFieldSearch", "");
   await window.waitForTimeout(200);
-  await window.screenshot({ path: "smoke-shots/17b-replay-fields.png" });
-  console.log("replay fields ok:", fieldRow.heading, "| search narrows to", searched.length, "options");
+  await window.screenshot({ path: "smoke-shots/17b-replay-fields.png", fullPage: true });
+  console.log("replay fields ok:", fieldRow.heading, "|", browserState.summary, "| chip added", chipAdded.lastHeading);
   await window.screenshot({ path: "smoke-shots/17-replay.png" });
   await window.click('.nav-button[data-target="viewer"]');
   await window.waitForTimeout(300);
