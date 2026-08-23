@@ -1,3 +1,9 @@
+import {
+  finiteColumnValues,
+  finiteValuesAtRows,
+  columnTableFor
+} from "./columnTable.js";
+
 export function getColumnValues(
   lines,
   headerIndex,
@@ -21,11 +27,7 @@ export function getColumnValues(
     return [];
   }
 
-  return lines
-    .slice(headerIndex + 1)
-    .map((line) => line.split(",")[columnIndex])
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
+  return finiteColumnValues(lines, headerIndex, columnIndex);
 }
 
 export function getColumnSamples(
@@ -52,14 +54,18 @@ export function getColumnSamples(
   }
 
   const samples = [];
+  const column = columnTableFor(lines, headerIndex)?.column(columnIndex);
+
+  if (!column) {
+    return samples;
+  }
 
   for (
     let rowIndex = headerIndex + 1;
     rowIndex < lines.length;
     rowIndex += 1
   ) {
-    const cells = lines[rowIndex].split(",");
-    const value = Number(cells[columnIndex]);
+    const value = column[rowIndex];
 
     if (Number.isFinite(value)) {
       samples.push({
@@ -155,21 +161,6 @@ export function getColumnValuesByRowIndexes(
     return [];
   }
 
-  return rowIndexes
-    .map((rowIndex) => {
-      const line = lines[rowIndex];
-
-      if (!line) {
-        return null;
-      }
-
-      const cells = line.split(",");
-      const value = Number(cells[columnIndex]);
-
-      return Number.isFinite(value)
-        ? value
-        : null;
-    })
-    .filter((value) => Number.isFinite(value));
+  return finiteValuesAtRows(lines, headerIndex, columnIndex, rowIndexes);
 }
   

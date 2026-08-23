@@ -2,6 +2,11 @@
 // BLACKBOX LAB - FILTER ANALYSIS
 // ====================================================
 import {
+  columnTableFor,
+  alignedColumnValues,
+  finiteValuesAtRows
+} from "./columnTable.js";
+import {
   detectStableFlightPhase
 } from "./flightPhase.js";
 
@@ -175,14 +180,18 @@ function extractNumericColumnValues(
   }
 
   const values = [];
+  const column = columnTableFor(lines, headerIndex)?.column(columnIndex);
+
+  if (!column) {
+    return values;
+  }
 
   for (
     let rowIndex = headerIndex + 1;
     rowIndex < lines.length;
     rowIndex += sampleStep
   ) {
-    const cells = lines[rowIndex].split(",");
-    const value = Number(cells[columnIndex]);
+    const value = column[rowIndex];
 
     if (Number.isFinite(value)) {
       values.push(value);
@@ -233,17 +242,15 @@ function estimateSampleRate(lines, headerIndex) {
     headerIndex + 5001
   );
 
+  const timeColumn =
+    columnTableFor(lines, headerIndex)?.column(timeColumnIndex) ?? null;
+
   for (
     let rowIndex = headerIndex + 1;
-    rowIndex < lastRow;
+    timeColumn && rowIndex < lastRow;
     rowIndex += 1
   ) {
-    const cells = lines[rowIndex].split(",");
-    const timeValue = Number(
-  cells[timeColumnIndex]
-    ?.trim()
-    .replace(/^"|"$/g, "")
-);
+    const timeValue = timeColumn[rowIndex];
 
     if (Number.isFinite(timeValue)) {
       timeValues.push(timeValue);
@@ -334,18 +341,15 @@ function extractContiguousNumericWindow(
     firstDataRow + windowSize
   );
 
+  const windowColumn =
+    columnTableFor(lines, headerIndex)?.column(columnIndex) ?? null;
+
   for (
     let rowIndex = firstDataRow;
-    rowIndex < lastDataRow;
+    windowColumn && rowIndex < lastDataRow;
     rowIndex += 1
   ) {
-    const cells = lines[rowIndex].split(",");
-
-    const value = Number(
-      cells[columnIndex]
-        ?.trim()
-        .replace(/^"|"$/g, "")
-    );
+    const value = windowColumn[rowIndex];
 
     if (!Number.isFinite(value)) {
       return [];
@@ -396,33 +400,8 @@ function extractAlignedNumericColumn(
     };
   }
 
-  const values = [];
+  const values = alignedColumnValues(lines, headerIndex, columnIndex);
 
-  for (
-    let rowIndex = headerIndex + 1;
-    rowIndex < lines.length;
-    rowIndex += 1
-  ) {
-    const cells = lines[rowIndex].split(",");
-
-    const rawValue =
-  cells[columnIndex]
-    ?.trim()
-    .replace(/^"|"$/g, "") ?? "";
-
-if (rawValue === "") {
-  values.push(null);
-  continue;
-}
-
-const value = Number(rawValue);
-
-values.push(
-  Number.isFinite(value)
-    ? value
-    : null
-);
-  }
   return {
     columnName: headers[columnIndex],
     values
@@ -959,20 +938,7 @@ const headspeedProfiles =
     return [];
   }
 
-  return sampleIndexes
-    .map((rowIndex) => {
-      const line = lines[rowIndex];
-
-      if (!line) {
-        return null;
-      }
-
-      const cells = line.split(",");
-      const value = Number(cells[columnIndex]);
-
-      return Number.isFinite(value) ? value : null;
-    })
-    .filter((value) => value !== null);
+  return finiteValuesAtRows(lines, headerIndex, columnIndex, sampleIndexes);
 }
 
  function buildProfileMechanicalFinding({

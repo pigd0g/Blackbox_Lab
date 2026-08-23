@@ -21,6 +21,8 @@
 //
 // ======================================================
 
+import { columnTableFor } from "./columnTable.js";
+
 export const PID_PROFILE_COLUMN = "pidProfile";
 
 /**
@@ -56,14 +58,20 @@ export function buildProfileSegments({
   }
 
   const segments = [];
+  const profileColumn =
+    columnTableFor(lines, telemetryHeaderIndex)?.column(columnIndex) ??
+    null;
+
+  if (!profileColumn) {
+    return [];
+  }
 
   for (
     let rowIndex = telemetryHeaderIndex + 1;
     rowIndex < lines.length;
     rowIndex += 1
   ) {
-    const raw = lines[rowIndex].split(",")[columnIndex];
-    const value = Number(raw);
+    const value = profileColumn[rowIndex];
 
     if (!Number.isFinite(value)) {
       continue;

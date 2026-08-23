@@ -86,6 +86,11 @@ function noteAction(action) {
 }
 import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
 import {
+  columnTableFor,
+  finiteColumnValues,
+  alignedColumnValues as alignedColumnValuesFromTable
+} from "./analysis/columnTable.js";
+import {
   groupLogFields,
   fieldNameFromKey,
   fieldMatchesSearch,
@@ -1532,27 +1537,43 @@ function averageOf(values) {
 // Parse every data row exactly once. On big logs (100k+
 // frames) splitting the lines per column read costs seconds;
 // this table makes each column access instant.
+// Per-column finite values by (normalized) header name, read from
+// the shared column table — one parse for the engine, the labs and
+// this dataset. Same contents as the old per-row split loop: every
+// finite cell in row order, blanks (Number("") = 0) included.
 function buildColumnTable(lines, headerIndex) {
- const names = lines[headerIndex]
-  .split(",")
-  .map((name) =>
-    name
-      .trim()
-      .replace(/^"|"$/g, "")
-  );
-  const table = new Map(names.map((name) => [name, []]));
-  const columns = names.map((name) => table.get(name));
+  const names = lines[headerIndex]
+    .split(",")
+    .map((name) =>
+      name
+        .trim()
+        .replace(/^"|"$/g, "")
+    );
+  const table = new Map();
+  const indexesByName = new Map();
+  names.forEach((name, index) => {
+    if (!indexesByName.has(name)) indexesByName.set(name, []);
+    indexesByName.get(name).push(index);
+  });
 
-  for (let row = headerIndex + 1; row < lines.length; row += 1) {
-    const parts = lines[row].split(",");
-
-    for (let i = 0; i < columns.length; i += 1) {
-      const value = Number(parts[i]);
-
-      if (Number.isFinite(value)) {
-        columns[i].push(value);
+  for (const [name, indexes] of indexesByName) {
+    if (indexes.length === 1) {
+      table.set(name, finiteColumnValues(lines, headerIndex, indexes[0]));
+      continue;
+    }
+    // A duplicated header name (never in Rotorflight logs, possible
+    // in a hand-edited CSV): the old loop pushed every duplicate's
+    // finite cells into one array, row by row — kept verbatim.
+    const columnTable = columnTableFor(lines, headerIndex);
+    const columns = indexes.map((index) => columnTable.column(index));
+    const merged = [];
+    for (let row = headerIndex + 1; row < lines.length; row += 1) {
+      for (const column of columns) {
+        const value = column[row];
+        if (Number.isFinite(value)) merged.push(value);
       }
     }
+    table.set(name, merged);
   }
 
   return table;
@@ -1593,35 +1614,9 @@ function buildDataset(lines, pidAnalysis) {
     return [];
   }
 
-  const values = [];
-
-  for (
-    let rowIndex = headerIndex + 1;
-    rowIndex < lines.length;
-    rowIndex += 1
-  ) {
-    const cells = lines[rowIndex].split(",");
-
-    const rawValue =
-      cells[columnIndex]
-        ?.trim()
-        .replace(/^"|"$/g, "") ?? "";
-
-    if (rawValue === "") {
-      values.push(null);
-      continue;
-    }
-
-    const value = Number(rawValue);
-
-    values.push(
-      Number.isFinite(value)
-        ? value
-        : null
-    );
-  }
-
-  return values;
+  // One value per row, null where the cell was blank or not numeric
+  // — from the shared table, not another pass over the text.
+  return alignedColumnValuesFromTable(lines, headerIndex, columnIndex);
 };
   const firstColumn = (patterns) => {
     const matches = findColumns(headerLine, patterns);
