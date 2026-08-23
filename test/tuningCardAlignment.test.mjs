@@ -104,3 +104,92 @@ test("a high score at Medium confidence with no vibration stays crisp", () => {
   assert.equal(card.status, "good");
   assert.match(card.headline, /crisp/);
 });
+
+// ------------------------------------------------------
+// Capability gaps: a missing sensor is a finding on the card
+// that would have measured it; a missing lab is a greyed card.
+// ------------------------------------------------------
+const CHIPS = (overrides = {}) => [
+  { name: "Vibration & filters", level: "full", note: "ok" },
+  { name: "Governor", level: "full", note: "ok" },
+  { name: "Battery & ESC", level: "full", note: "ok" },
+  { name: "Signal & link", level: "missing", note: "No link telemetry in this log. Enable RSSI telemetry for signal analysis." },
+  { name: "BEC output", level: "missing", note: "No BEC voltage in this log." },
+  ...Object.values(overrides)
+].filter((chip) => !(chip.name in overrides) || overrides[chip.name] === chip);
+
+function verdictWith({ capabilities, labs = {}, signalLab = null, becLab = null }) {
+  return buildFlightVerdict({
+    spectra: [],
+    headspeed: null,
+    governorTarget: null,
+    vbat: null,
+    pidAnalysis: { score: 90, overallStatus: "Clear", confidence: { level: "High" } },
+    labs,
+    signalLab,
+    becLab,
+    capabilities
+  });
+}
+
+test("labs without data become greyed cards, never vanish, never color the flight", () => {
+  const verdict = verdictWith({ capabilities: CHIPS() });
+  const signal = verdict.cards.find((card) => card.key === "signal");
+  const bec = verdict.cards.find((card) => card.key === "bec");
+  assert.equal(signal.status, "unavailable");
+  assert.equal(signal.statusLabel, "not logged");
+  assert.match(signal.gapAction, /Enable RSSI telemetry/);
+  assert.equal(bec.status, "unavailable");
+  assert.match(bec.gapAction, /BEC voltage telemetry/);
+  assert.equal(verdict.worst, "good", "not-logged is not unhealthy");
+});
+
+test("a dead current sensor rides on the Battery and Power cards as a gap with advice", () => {
+  const capabilities = [
+    { name: "Vibration & filters", level: "full", note: "ok" },
+    { name: "Governor", level: "full", note: "ok" },
+    { name: "Battery & ESC", level: "partial", note: "Voltage only: sag is visible; consumption and internal resistance need a current sensor." },
+    { name: "Signal & link", level: "full", note: "ok" },
+    { name: "BEC output", level: "full", note: "ok" }
+  ];
+  const verdict = verdictWith({
+    capabilities,
+    labs: {
+      battery: { status: "good", minimumVoltsPerCell: 3.8 },
+      esc: { status: "good", story: "Healthy headroom." }
+    }
+  });
+  const battery = verdict.cards.find((card) => card.key === "battery");
+  const power = verdict.cards.find((card) => card.key === "power");
+  assert.equal(battery.status, "good");
+  assert.match(battery.gapShort, /current/);
+  assert.match(battery.gapAction, /current sensor's wiring and scale, or add one/);
+  assert.match(power.gapAction, /current sensor/);
+});
+
+test("without the quality gate, absent labs stay absent (older callers)", () => {
+  const verdict = verdictWith({ capabilities: null });
+  assert.ok(!verdict.cards.some((card) => card.key === "signal"));
+  assert.ok(!verdict.cards.some((card) => card.status === "unavailable"));
+});
+
+test("no headspeed: the rotor card is greyed and power/battery name rotor speed as the blocker", () => {
+  const capabilities = [
+    { name: "Vibration & filters", level: "full", note: "ok" },
+    { name: "Governor", level: "missing", note: "No headspeed in this log. Enable RPM telemetry to unlock governor analysis." },
+    { name: "Battery & ESC", level: "partial", note: "Voltage only." },
+    { name: "Signal & link", level: "full", note: "ok" },
+    { name: "BEC output", level: "full", note: "ok" }
+  ];
+  const verdict = verdictWith({
+    capabilities,
+    labs: { governor: { status: "insufficient", hasRotorSpeedData: false, droopRpm: NaN } }
+  });
+  const rotor = verdict.cards.find((card) => card.key === "rotor");
+  const power = verdict.cards.find((card) => card.key === "power");
+  assert.equal(rotor.status, "unavailable");
+  assert.match(rotor.gapAction, /RPM telemetry/);
+  assert.equal(power.status, "unavailable");
+  assert.equal(power.statusLabel, "not measurable");
+  assert.match(power.gapAction, /No headspeed logged/);
+});

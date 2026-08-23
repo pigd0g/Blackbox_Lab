@@ -2134,6 +2134,31 @@ if (sampleRate && hasSpectrumRuns) {
       : null
   });
 
+  // What this log can and cannot tell — decided ONCE, here, and
+  // read by the verdict cards, the first steps and the quality
+  // chips alike. A missing or dead channel is a fact every surface
+  // states; none of them re-derives it.
+  const columnPresence = {
+    hasUnfilteredGyro: unfilteredColumns.length > 0,
+    hasFilteredGyro: filteredColumns.length > 0,
+    hasHeadspeed: columnCarriesData(headspeed),
+    hasGovernorTarget: columnCarriesData(governorTarget),
+    hasVbat: columnCarriesData(vbat) || columnCarriesData(escVoltage),
+    hasAmperage:
+      columnCarriesData(amperage) || columnCarriesData(escCurrent),
+    // The labs already decided what their telemetry supports —
+    // the chips repeat that decision, never re-derive it.
+    hasRssi: signalLab?.capability === "full",
+    hasLinkFlags: Boolean(signalLab),
+    hasVbec: Boolean(becLab)
+  };
+
+  const quality = assessLogQuality({
+    sampleRateHz: sampleRate,
+    durationSeconds: timeSeconds[timeSeconds.length - 1],
+    ...columnPresence
+  });
+
   const verdict = buildFlightVerdict({
   spectra,
   headspeed,
@@ -2144,7 +2169,8 @@ if (sampleRate && hasSpectrumRuns) {
   anchorHeadspeedRpm: governedHeadspeed,
   filterAdvice,
   signalLab,
-  becLab
+  becLab,
+  capabilities: quality.capabilities
 });
 
   // Evidence that zooms to the moment: attach a focus
@@ -2197,19 +2223,8 @@ if (sampleRate && hasSpectrumRuns) {
     // analysis, title a chart "vs Target", or mark a craft
     // electric. 16 % of contributed flights carry at least one
     // such dead column.
-    columnPresence: {
-      hasUnfilteredGyro: unfilteredColumns.length > 0,
-      hasFilteredGyro: filteredColumns.length > 0,
-      hasHeadspeed: columnCarriesData(headspeed),
-      hasGovernorTarget: columnCarriesData(governorTarget),
-      hasVbat: columnCarriesData(vbat),
-      hasAmperage: columnCarriesData(amperage),
-      // The labs already decided what their telemetry supports —
-      // the chips repeat that decision, never re-derive it.
-      hasRssi: signalLab?.capability === "full",
-      hasLinkFlags: Boolean(signalLab),
-      hasVbec: Boolean(becLab)
-    },
+    columnPresence,
+    quality,
     headerLine,
     timeSeconds,
     columnValues,
@@ -2687,7 +2702,9 @@ function statusTone(status) {
     ? "attention"
     : status === "watch"
       ? "watch"
-      : "clear";
+      : status === "unavailable"
+        ? "info"
+        : "clear";
 }
 
 // The change pack: the earned changes this flight supports, bundled
@@ -2917,6 +2934,12 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   }
 }
 
+// "Roll, Pitch and Yaw" — never "Roll and Pitch and Yaw".
+function listWords(items) {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 // Why this flight earned no change — in the evidence's own terms.
 function packEmptyStory(pack, context) {
   const reasons = [];
@@ -2944,7 +2967,7 @@ function packEmptyStory(pack, context) {
     const parts = [];
     if (clearAxes.length > 0) {
       parts.push(
-        `${clearAxes.join(" and ")} response checks read Clear` +
+        `${listWords(clearAxes)} response checks read Clear` +
           (context.pidConfidence ? ` at ${context.pidConfidence} confidence` : "") +
           "."
       );
@@ -3013,6 +3036,25 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     if (text) {
       entries.push({ screen, title, text, tone });
     }
+  };
+
+  // ---- the capability gaps: what this log could not measure ----
+  // Every card carries its gap (the verdict decided it once); the
+  // first step on the lab page and the line on Home both read it.
+  // A missing sensor is a to-do, not a footnote.
+  const cardGap = (key) => {
+    const card = dataset?.verdict?.cards?.find((entry) => entry.key === key);
+    return card?.gapAction ?? null;
+  };
+  const withGap = (text, key) => {
+    const gap = cardGap(key);
+    if (!gap) return text;
+    return text ? `${text}\n\nNot measured: ${gap}` : gap;
+  };
+  const gapEntries = [];
+  const noteGap = (key, screen, title) => {
+    const gap = cardGap(key);
+    if (gap) gapEntries.push({ screen, title, text: gap, tone: "info" });
   };
 
   // ---- PID ----
@@ -3104,7 +3146,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       // outrun the capability the quality gate declared.
       governorText = `The ${dipRpm} rpm short-term swing happened with output headroom remaining${Number.isFinite(dipOutput) ? ` (${Math.round(dipOutput)}%)` : ""} and no obvious matching load demand. Without a logged governor target this log can judge stability, not governor tuning.\n\nRepeat the same maneuver, and if the swing keeps returning, that pattern is the signal worth acting on.`;
     }
-  } else if (governor) {
+  } else if (governor && governor.hasRotorSpeedData !== false) {
     governorText =
       "Nothing to change: the governor is holding. Keep logging flights; the Health Record turns them into trends.";
   }
@@ -3113,8 +3155,8 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "governorFirstStep",
     "governor",
     "Rotor speed",
-    governorText,
-    governorTone
+    withGap(governorText, "rotor"),
+    governor && governor.hasRotorSpeedData !== false ? governorTone : "info"
   );
 
   // ---- Filter: speak about THE peak the verdict named ----
@@ -3164,15 +3206,23 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "escFirstStep",
     "esc",
     "Power & ESC",
-    escLab
-      ? escLab.status === "attention"
-        ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed. The highest-load moments below name exactly when the system ran out."
-        : escLab.status === "watch"
-          ? "Fine for now: remember this margin before asking the machine for more headspeed or pitch."
-          : "Nothing to change: healthy headroom throughout the flight."
-      : null,
-    statusTone(cardStatus("power") ?? escLab?.status)
+    withGap(
+      escLab && escLab.status !== "insufficient"
+        ? escLab.status === "attention"
+          ? "Adjust the gearing/Kv to match your target headspeed, take some pitch out, or lower the headspeed. The highest-load moments below name exactly when the system ran out."
+          : escLab.status === "watch"
+            ? "Fine for now: remember this margin before asking the machine for more headspeed or pitch."
+            : "Nothing to change: healthy headroom throughout the flight."
+        : escLab
+          ? "Output headroom could not be judged: no steady section of this flight was long enough to measure it."
+          : null,
+      "power"
+    ),
+    escLab && escLab.status !== "insufficient"
+      ? statusTone(cardStatus("power") ?? escLab.status)
+      : "info"
   );
+  noteGap("power", "esc", "Power & ESC");
 
   // ---- Battery ----
   const batteryLab = dataset?.labs?.battery;
@@ -3181,65 +3231,76 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "batteryFirstStep",
     "battery",
     "Battery",
-    batteryLab
-      ? batteryLab.status === "attention"
-        ? "Review pack condition, connectors and load before another hard flight. The voltage and current charts below show the worst dip in context."
-        : batteryLab.status === "watch"
-          ? "Compare the voltage dip with current demand below, and keep logging: the Health Record turns single dips into a trend you can trust."
-          : "Nothing to change: the pack held up well."
-      : null,
-    statusTone(cardStatus("battery") ?? batteryLab?.status)
+    withGap(
+      batteryLab && batteryLab.status !== "insufficient"
+        ? batteryLab.status === "attention"
+          ? "Review pack condition, connectors and load before another hard flight. The voltage and current charts below show the worst dip in context."
+          : batteryLab.status === "watch"
+            ? "Compare the voltage dip with current demand below, and keep logging: the Health Record turns single dips into a trend you can trust."
+            : "Nothing to change for the pack: it held up well."
+        : batteryLab
+          ? batteryLab.hasRotorSpeedData === false
+            ? "The pack could not be judged from this flight: pack condition is read over a steady-load section, which is found from rotor speed — and this log records none. The Voltage Over the Flight chart still shows the pack directly."
+            : "The pack could not be judged from this flight: no steady section was long enough. Do not judge the pack from this flight alone."
+          : null,
+      "battery"
+    ),
+    batteryLab && batteryLab.status !== "insufficient"
+      ? statusTone(cardStatus("battery") ?? batteryLab.status)
+      : "info"
   );
+  noteGap("battery", "battery", "Battery");
 
   // ---- Signal ----
   const signalLab = dataset?.signalLab;
 
-  if (signalLab) {
-    add(
-      "signalFirstStep",
-      "signal",
-      "Signal",
-      signalLab.status === "attention"
-        ? "Check receiver antenna placement, orientation and condition before the next flight. The events below name each moment the link struggled."
-        : signalLab.status === "watch"
-          ? "Glance at the dip moments below: repeated dips in the same flight orientation point at antenna placement or shading."
-          : "Nothing to change: the link held all flight.",
-      statusTone(cardStatus("signal") ?? signalLab.status)
-    );
-  } else {
-    setFirstStep(
-      "signalFirstStep",
-      "Enable RSSI telemetry on the receiver and re-log. Then this page can watch the link for you.",
-      "info"
-    );
-  }
+  add(
+    "signalFirstStep",
+    "signal",
+    "Signal",
+    withGap(
+      signalLab
+        ? signalLab.status === "attention"
+          ? "Check receiver antenna placement, orientation and condition before the next flight. The events below name each moment the link struggled."
+          : signalLab.status === "watch"
+            ? "Glance at the dip moments below: repeated dips in the same flight orientation point at antenna placement or shading."
+            : "Nothing to change: the link held all flight."
+        : null,
+      "signal"
+    ),
+    signalLab ? statusTone(cardStatus("signal") ?? signalLab.status) : "info"
+  );
+  noteGap("signal", "signal", "Signal");
 
   // ---- BEC ----
   const becLab = dataset?.becLab;
 
-  if (becLab) {
-    add(
-      "becFirstStep",
-      "bec",
-      "BEC output",
-      becLab.status === "attention"
-        ? "Work through the BEC output path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
-        : becLab.status === "watch"
-          ? becLab.implausibleBrownout
-            ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement, not the power, is the suspect."
-            : "Keep an eye on the dip moments below: with power, repetition is what matters."
-          : "Nothing to change: BEC output is solid — receiver and servos are fed steadily.",
-      statusTone(cardStatus("bec") ?? becLab.status)
-    );
-  } else {
-    setFirstStep(
-      "becFirstStep",
-      "Enable BEC voltage telemetry and re-log. Then this page can watch your BEC output for you.",
-      "info"
-    );
-  }
+  add(
+    "becFirstStep",
+    "bec",
+    "BEC output",
+    withGap(
+      becLab
+        ? becLab.status === "attention"
+          ? "Work through the BEC output path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
+          : becLab.status === "watch"
+            ? becLab.implausibleBrownout
+              ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement, not the power, is the suspect."
+              : "Keep an eye on the dip moments below: with power, repetition is what matters."
+            : "Nothing to change: BEC output is solid — receiver and servos are fed steadily."
+        : null,
+      "bec"
+    ),
+    becLab ? statusTone(cardStatus("bec") ?? becLab.status) : "info"
+  );
+  noteGap("bec", "bec", "BEC output");
 
-  renderHomeFirstSteps(entries);
+  // Rotor speed and vibration gaps ride along the same way (their
+  // first-step texts above already speak to the partial case).
+  noteGap("rotor", "governor", "Rotor speed");
+  noteGap("vibration", "filter", "Vibration");
+
+  renderHomeFirstSteps(entries, gapEntries);
 }
 
 // ---- Home: the aggregated to-do list, severity first ----
@@ -3258,13 +3319,13 @@ const FIRST_STEP_LAB_ORDER = [
   "bec"
 ];
 
-function renderHomeFirstSteps(entries) {
+function renderHomeFirstSteps(entries, gapEntries = []) {
   const card = el("firstStepsCard");
   const list = el("firstStepsList");
 
   if (!card || !list) return;
 
-  if (!entries.length) {
+  if (!entries.length && !gapEntries.length) {
     card.hidden = true;
     return;
   }
@@ -3290,7 +3351,6 @@ function renderHomeFirstSteps(entries) {
     line.textContent =
       "Nothing needs your attention: this flight is healthy. The Labs carry the details.";
     list.appendChild(line);
-    return;
   }
 
   for (const entry of actionable) {
@@ -3302,6 +3362,39 @@ function renderHomeFirstSteps(entries) {
       navigation.showScreen(entry.screen);
     });
     list.appendChild(row);
+  }
+
+  // What this log could not measure — the sensor to check, the
+  // telemetry to enable. Quiet, below the to-dos, never hidden:
+  // a missing current sensor is as real a finding as a sag.
+  if (gapEntries.length > 0) {
+    const heading = document.createElement("p");
+    heading.className = "first-steps-gap-heading";
+    heading.textContent = "Not measured on this flight";
+    list.appendChild(heading);
+
+    // One sensor, one line: the current gap speaks for Battery
+    // AND Power & ESC — the titles merge, the advice is said once.
+    const merged = [];
+    for (const entry of gapEntries) {
+      const same = merged.find((item) => item.text === entry.text);
+      if (same) {
+        same.title = `${same.title} · ${entry.title}`;
+      } else {
+        merged.push({ ...entry });
+      }
+    }
+
+    for (const entry of merged) {
+      const row = document.createElement("button");
+      row.className = "first-steps-row first-steps-gap";
+      row.dataset.tone = "info";
+      row.innerHTML = `<span class="status-dot"></span><strong>${entry.title}</strong><span>${entry.text}</span>`;
+      row.addEventListener("click", () => {
+        navigation.showScreen(entry.screen);
+      });
+      list.appendChild(row);
+    }
   }
 }
 
@@ -3882,13 +3975,21 @@ function renderVerdict(dataset) {
     tile.className = `verdict-tile status-${card.status}`;
     tile.title = `${card.detail}${card.action ? ` What to do: ${card.action}` : ""}`;
 
+    // A partial log carries its gap on the card that would have
+    // measured it; an unavailable card IS the gap, greyed.
+    const gapLine =
+      card.gap && card.status !== "unavailable"
+        ? `<div class="verdict-tile-gap" title="${escapeHtml(card.gapAction ?? card.gap)}">Not measured: ${escapeHtml(card.gapShort ?? card.gap)}</div>`
+        : "";
+
     tile.innerHTML = `
       <div class="verdict-item-top">
         <span class="status-dot"></span>
         <span class="verdict-item-title">${card.statusLabel ? `${card.title} · ${card.statusLabel}` : card.title}</span>
       </div>
       <div class="verdict-tile-headline">${card.headline}</div>
-      <div class="verdict-tile-evidence">Show me → ${card.evidence}</div>
+      ${gapLine}
+      <div class="verdict-tile-evidence">${card.status === "unavailable" ? "How to log it → " : "Show me → "}${card.evidence}</div>
     `;
 
     tile.addEventListener("click", () => {

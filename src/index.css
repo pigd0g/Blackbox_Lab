@@ -1411,6 +1411,33 @@ body:not(.log-loaded) .loaded-only { display: none; }
   border-color: rgba(255, 138, 107, 0.38);
 }
 
+/* Not logged: the card stays, greyed — absence is shown where
+   the measurement would have been, never hidden. */
+.verdict-tile.status-unavailable {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-soft);
+  opacity: 0.72;
+}
+.verdict-tile.status-unavailable .status-dot {
+  background: var(--ink-muted);
+}
+.verdict-tile.status-unavailable .verdict-item-title,
+.verdict-tile.status-unavailable .verdict-tile-headline {
+  color: var(--ink-muted);
+}
+.verdict-tile.status-unavailable:hover {
+  opacity: 1;
+}
+
+.verdict-tile-gap {
+  color: var(--ink-muted);
+  font-size: var(--font-small);
+  line-height: 1.4;
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+
 .verdict-tile .verdict-item-top {
   margin-bottom: 4px;
 }
@@ -2036,6 +2063,7 @@ section[data-screen="history"] .flight-picker .secondary-button {
 .first-step[data-tone="attention"] .first-step-text { border-left-color: var(--attention); }
 .first-step[data-tone="watch"] .first-step-text { border-left-color: var(--watch); }
 .first-step[data-tone="clear"] .first-step-text { border-left-color: var(--good); }
+.first-step[data-tone="info"] .first-step-text { border-left-color: var(--ink-muted); }
 
 .first-step-label {
   color: #2565b0;
@@ -2138,6 +2166,24 @@ body.log-loaded .loaded-log-field .file-status {
   color: var(--good);
   font-size: var(--font-body);
   margin: 4px 0 0 0;
+}
+
+.first-steps-gap-heading {
+  color: var(--ink-muted);
+  font-size: var(--font-small);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 14px 0 4px;
+}
+.first-steps-row.first-steps-gap {
+  border-style: dashed;
+  background: transparent;
+}
+.first-steps-row.first-steps-gap .status-dot {
+  background: var(--ink-muted);
+}
+.first-steps-row.first-steps-gap strong {
+  color: var(--ink-soft);
 }
 
 /* ---- change pack card ---- */

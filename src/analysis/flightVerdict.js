@@ -491,7 +491,18 @@ function rotorSpeedVerdictFromLab(governorLab) {
     return {
       key: "rotor",
       title: "Rotor Speed",
-      status: "watch",
+      // Not logged is not unhealthy: a model without an RPM sensor
+      // gets the greyed card, not a yellow one.
+      status:
+        governorLab.hasRotorSpeedData === false &&
+        governorLab.movedDuringRecording !== false
+          ? "unavailable"
+          : "watch",
+      statusLabel:
+        governorLab.hasRotorSpeedData === false &&
+        governorLab.movedDuringRecording !== false
+          ? "not logged"
+          : null,
       headline:
         governorLab.movedDuringRecording === false
           ? "No flight found in this recording"
@@ -617,7 +628,10 @@ function batteryVerdictFromLab(batteryLab) {
     return {
       key: "battery",
       title: "Battery",
-      status: "watch",
+      status:
+        batteryLab.hasRotorSpeedData === false ? "unavailable" : "watch",
+      statusLabel:
+        batteryLab.hasRotorSpeedData === false ? "not measurable" : null,
       headline:
         batteryLab.hasRotorSpeedData === false
           ? "Battery assessment needs rotor-speed data"
@@ -779,6 +793,182 @@ function becVerdict(becLab) {
   };
 }
 
+// ------------------------------------------------------
+// Capability gaps — what this log could NOT measure, on the
+// card that would have measured it.
+// ------------------------------------------------------
+//
+// The quality gate decides what the log supports; these cards
+// repeat that decision where the pilot actually looks. A lab
+// with no data is not a card that vanishes: it is a greyed card
+// saying what was not logged and how to log it. A lab with
+// partial data keeps its verdict and carries the gap beside it
+// ("current not measured") — a missing sensor is a finding.
+// ------------------------------------------------------
+
+// Which quality chip speaks for which card.
+const CARD_CAPABILITY = {
+  vibration: "Vibration & filters",
+  rotor: "Governor",
+  power: "Battery & ESC",
+  battery: "Battery & ESC",
+  signal: "Signal & link",
+  bec: "BEC output"
+};
+
+const UNAVAILABLE_CARDS = {
+  vibration: {
+    title: "Vibration",
+    headline: "No noise reading from this flight",
+    screen: "filter",
+    evidence: "Filter Lab",
+    fallbackNote:
+      "The flight never held steady long enough for a spectrum, or the log carries no gyro data."
+  },
+  rotor: {
+    title: "Rotor Speed",
+    headline: "Headspeed not logged",
+    screen: "governor",
+    evidence: "Governor Lab"
+  },
+  power: {
+    title: "Power & ESC",
+    headline: "Motor output not measurable",
+    screen: "esc",
+    evidence: "ESC Lab",
+    fallbackNote:
+      "Output headroom needs motor or ESC-throttle output and rotor speed in the log."
+  },
+  battery: {
+    title: "Battery",
+    headline: "Voltage not logged",
+    screen: "battery",
+    evidence: "Battery Lab"
+  },
+  signal: {
+    title: "Signal",
+    headline: "Link telemetry not logged",
+    screen: "signal",
+    evidence: "Signal Lab"
+  },
+  bec: {
+    title: "BEC Output",
+    headline: "BEC voltage not logged",
+    screen: "bec",
+    evidence: "BEC Lab"
+  }
+};
+
+// What to DO about a gap — the sensor to check or the telemetry
+// to enable. Stated once here; the card, the lab page's first
+// step and Home's "not measured" list all read it.
+export function gapAdvice(key, capability) {
+  const level = capability?.level ?? "missing";
+  switch (key) {
+    case "battery":
+    case "power":
+      return level === "missing"
+        ? "No voltage telemetry logged. Enable pack or ESC voltage telemetry so the pack and the power system can be judged."
+        : "Current was not measured: the channel is absent or read zero all flight. Check the current sensor's wiring and scale, or add one — consumption, internal resistance and power figures need it.";
+    case "rotor":
+      return level === "missing"
+        ? "No headspeed logged. Enable RPM telemetry to unlock governor and headspeed analysis."
+        : "No governor target logged: stability is judged against the rotor's own trend. Droop against target needs the target in the log.";
+    case "signal":
+      return level === "missing"
+        ? "No link telemetry logged. Enable RSSI telemetry on the receiver; then the link is watched for you."
+        : "Receiver flags only: enable signal-strength (RSSI) telemetry for the full link picture.";
+    case "bec":
+      return "No BEC voltage logged. Enable BEC voltage telemetry to watch the power your receiver and servos run on.";
+    case "vibration":
+      return capability?.note ??
+        "No noise reading: fly a longer steady stretch, or log the gyro at a healthy rate.";
+    default:
+      return capability?.note ?? null;
+  }
+}
+
+// The short form for the card face: WHAT is missing, in three
+// words; the advice above says what to do about it.
+export function gapShort(key, capability) {
+  const level = capability?.level ?? "missing";
+  switch (key) {
+    case "battery":
+    case "power":
+      return level === "missing"
+        ? "voltage"
+        : "current (no usable sensor reading)";
+    case "rotor":
+      return level === "missing" ? "headspeed" : "governor target";
+    case "signal":
+      return level === "missing"
+        ? "link telemetry"
+        : "signal strength (receiver flags only)";
+    case "bec":
+      return "BEC voltage";
+    case "vibration":
+      return level === "missing" ? "gyro noise" : "full noise picture";
+    default:
+      return null;
+  }
+}
+
+function capabilityFor(capabilities, key) {
+  const name = CARD_CAPABILITY[key];
+  return (
+    (capabilities ?? []).find((entry) => entry.name === name) ?? null
+  );
+}
+
+function unavailableCard(key, capability, { rotorMissing = false } = {}) {
+  const spec = UNAVAILABLE_CARDS[key];
+  if (!spec) return null;
+  // Power and battery are read over steady flight, which is found
+  // from rotor speed: with no headspeed logged THAT is the blocker,
+  // not the current sensor.
+  const rotorBlocked =
+    rotorMissing && (key === "power" || key === "battery");
+  const note = rotorBlocked
+    ? "Measured over steady flight, which is found from rotor speed — and this log records none."
+    : capability?.note ?? spec.fallbackNote ?? "Not logged.";
+  const advice = rotorBlocked
+    ? "No headspeed logged: output headroom and pack condition are read over steady flight found from rotor speed. Enable RPM telemetry to unlock them."
+    : gapAdvice(key, capability) ?? note;
+  return {
+    key,
+    title: spec.title,
+    status: "unavailable",
+    // "not logged" when the channel is absent; "no reading" when
+    // the channel exists but the flight gave nothing to measure.
+    statusLabel: rotorBlocked
+      ? "not measurable"
+      : (capability?.level ?? "missing") === "missing"
+        ? "not logged"
+        : "no reading",
+    headline: spec.headline,
+    detail: note,
+    action: advice,
+    gap: note,
+    gapAction: advice,
+    screen: spec.screen,
+    evidence: spec.evidence
+  };
+}
+
+// A present card with a partial capability carries the gap as a
+// line of its own — never inside the headline, never silently.
+function withCapabilityGap(card, capability) {
+  if (!card) return null;
+  if (!capability || capability.level === "full") return card;
+  if (card.status === "unavailable") return card;
+  return {
+    ...card,
+    gap: capability.note,
+    gapShort: gapShort(card.key, capability),
+    gapAction: gapAdvice(card.key, capability)
+  };
+}
+
 export function buildFlightVerdict({
   spectra,
   headspeed,
@@ -789,7 +979,8 @@ export function buildFlightVerdict({
   anchorHeadspeedRpm,
   filterAdvice = null,
   signalLab = null,
-  becLab = null
+  becLab = null,
+  capabilities = null
 }) {
   // Peak naming needs the rotor speed the machine flew at. The
   // caller passes the stable-flight mean when one exists; the
@@ -809,18 +1000,49 @@ export function buildFlightVerdict({
     pidAnalysis
   );
 
+  // Every card slot is filled: a lab that measured speaks its
+  // verdict (with its capability gap beside it when the log was
+  // only partly there); a lab that could not measure says so, in
+  // grey, on the same card — when capabilities are known. Without
+  // the quality gate (older callers, tests) absent labs stay
+  // absent, as before.
+  const rotorMissing =
+    capabilityFor(capabilities, "rotor")?.level === "missing";
+
+  const slot = (key, card) => {
+    const capability = capabilityFor(capabilities, key);
+    if (card) {
+      // A lab-born unavailable card (no RPM sensor, no steady
+      // section) still states its gap for Home's list.
+      if (card.status === "unavailable" && capabilities) {
+        const filled = unavailableCard(key, capability, { rotorMissing });
+        return {
+          ...card,
+          gap: card.gap ?? filled?.gap ?? null,
+          gapAction: card.gapAction ?? filled?.gapAction ?? card.action ?? null
+        };
+      }
+      return withCapabilityGap(card, capability);
+    }
+    return capabilities
+      ? unavailableCard(key, capability, { rotorMissing })
+      : null;
+  };
+
   const cards = [
-  vibration,
-  rotorSpeedVerdictFromLab(labs?.governor),
+  slot("vibration", vibration),
+  slot("rotor", rotorSpeedVerdictFromLab(labs?.governor)),
   tuningVerdict(pidAnalysis, {
     vibrationConcern: vibration?.status === "attention"
   }),
-  powerVerdictFromLab(labs?.esc),
-  batteryVerdictFromLab(labs?.battery),
-  signalVerdict(signalLab),
-  becVerdict(becLab)
+  slot("power", powerVerdictFromLab(labs?.esc)),
+  slot("battery", batteryVerdictFromLab(labs?.battery)),
+  slot("signal", signalVerdict(signalLab)),
+  slot("bec", becVerdict(becLab))
 ].filter(Boolean);
 
+  // Unavailable cards never color the flight: not-logged is not
+  // unhealthy.
   const worst = cards.some((card) => card.status === "attention")
     ? "attention"
     : cards.some((card) => card.status === "watch")
