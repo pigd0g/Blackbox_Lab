@@ -336,8 +336,8 @@
           </div>
         </section>
 
-        <section class="card loaded-only">
-          <h3>Flight Summary</h3>
+        <details class="card advanced-block loaded-only" id="flightSummaryCard">
+          <summary>Flight Summary</summary>
           <div class="summary-grid">
             <div>
               <span class="label">File Name</span>
@@ -354,7 +354,7 @@
               <strong id="summaryStatus">Waiting for log</strong>
             </div>
           </div>
-        </section>
+        </details>
 
         <details class="card advanced-block loaded-only">
           <summary>Advanced: telemetry columns &amp; raw data</summary>
@@ -798,14 +798,14 @@
           </div>
         </section>
 
-        <section class="card" id="filterAdvisorCard" hidden>
-          <h3>Filter Advisor</h3>
+        <details class="card advanced-block" id="filterAdvisorCard" hidden>
+          <summary>Filter Advisor: the peaks and the settings</summary>
           <p class="lab-story" id="filterAdvisorStory"></p>
           <div class="table-scroll advanced-only">
             <table class="history-table" id="filterAdvisorTable"></table>
           </div>
           <div id="filterAdvisorRecommendations"></div>
-        </section>
+        </details>
 
         <p class="peek-advanced-row">
           <button class="peek-advanced-link">Show the advanced data behind this page</button>
@@ -976,11 +976,11 @@
           <div id="pidNextList"></div>
         </section>
 
-        <section class="card" id="servoLimitCard" hidden>
-          <h3>Servo Travel Check</h3>
+        <details class="card advanced-block" id="servoLimitCard" hidden>
+          <summary>Servo Travel Check</summary>
           <p class="chart-hint" id="servoLimitSummary"></p>
           <div id="servoLimitTable"></div>
-        </section>
+        </details>
 
         <section class="card" id="pidLabSection">
           <details class="drilldown">
@@ -1074,7 +1074,7 @@
         </div>
 
         <section class="card">
-          <div class="metric-grid" id="governorMetrics"></div>
+          <div class="metric-grid advanced-only" id="governorMetrics"></div>
 
           <details class="advanced-block" id="governorTechnicalCard" hidden>
             <summary>Technical Governor Analysis: for when you want the numbers</summary>
@@ -1094,8 +1094,8 @@
             permanent.</span>
         </p>
 
-        <section class="card" id="governorEventsCard" hidden>
-          <h3>Headspeed Events</h3>
+        <details class="card advanced-block" id="governorEventsCard" hidden>
+          <summary>Headspeed Events: every excursion, on a timeline</summary>
           <p class="lab-story" id="governorEventsSummary"></p>
           <div id="governorEventsList"></div>
           <div id="governorEventDetail" hidden>
@@ -1112,7 +1112,7 @@
             <div class="chart-container" id="governorEventChartRpm"></div>
             <div class="chart-container" id="governorEventChartDrive"></div>
           </div>
-        </section>
+        </details>
 
         <section class="card" id="governorNextCard" hidden>
           <h3>What To Try Next</h3>
@@ -1238,7 +1238,7 @@
         </div>
 
         <section class="card">
-          <div class="metric-grid" id="escMetrics"></div>
+          <div class="metric-grid advanced-only" id="escMetrics"></div>
         </section>
 
         <p class="peek-advanced-row">
@@ -1353,7 +1353,7 @@
         </div>
 
         <section class="card">
-          <div class="metric-grid" id="batteryMetrics"></div>
+          <div class="metric-grid advanced-only" id="batteryMetrics"></div>
           <p class="chart-hint">
             Electrical values are estimated from logged raw data.
             Treat them as a story, not a lab instrument.
@@ -1413,13 +1413,13 @@ current demand; the steady downward slope is normal discharge.
         </div>
 
         <section class="card">
-          <div class="metric-grid" id="signalMetrics"></div>
+          <div class="metric-grid advanced-only" id="signalMetrics"></div>
         </section>
 
-        <section class="card" id="signalEventsCard" hidden>
-          <h3>Link Events</h3>
+        <details class="card advanced-block" id="signalEventsCard" hidden>
+          <summary>Signal events: each moment the link struggled</summary>
           <div id="signalEventsTable"></div>
-        </section>
+        </details>
 
         <section class="card" id="signalChartCard" hidden>
           <h3>Signal Over the Flight</h3>
@@ -1473,13 +1473,13 @@ current demand; the steady downward slope is normal discharge.
         </div>
 
         <section class="card">
-          <div class="metric-grid" id="becMetrics"></div>
+          <div class="metric-grid advanced-only" id="becMetrics"></div>
         </section>
 
-        <section class="card" id="becEventsCard" hidden>
-          <h3>Voltage Events</h3>
+        <details class="card advanced-block" id="becEventsCard" hidden>
+          <summary>BEC voltage events: each dip, with its servo context</summary>
           <div id="becEventsTable"></div>
-        </section>
+        </details>
 
         <section class="card" id="becChartCard" hidden>
           <h3>BEC Voltage Over the Flight</h3>

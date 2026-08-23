@@ -672,10 +672,13 @@ const { mkdirSync } = require("node:fs");
   await window.click('.nav-button[data-target="governor"]');
   await window.waitForTimeout(300);
   const beginnerState = await gateProbe();
-  // Metric grids are beginner content again (owner round 3);
-  // evidence views and findings stay advanced.
+  // Owner ruling 2026-08-24 (supersedes round 3): beginner pages show
+  // the bare minimum — verdict, Try This First, the key chart. Metric
+  // grids are numbers territory again; evidence views and findings
+  // stay advanced.
   if (
-    !beginnerState.governorMetrics ||
+    beginnerState.governorMetrics ||
+    beginnerState.escMetrics ||
     beginnerState.droopContext ||
     beginnerState.pidFindings
   ) {

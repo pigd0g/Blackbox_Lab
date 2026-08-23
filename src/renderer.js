@@ -2591,6 +2591,13 @@ function renderGovernorEvents(dataset) {
 
   card.hidden = false;
   summary.textContent = governorEvents.summary.sentence;
+
+  // Folded for beginners (the verdict already carries the summary
+  // sentence); excursions found — or advanced mode — open it.
+  card.open =
+    (governorEvents.summary.totalFound ?? governorEvents.summary.total ?? 0) > 0 ||
+    document.body.classList.contains("advanced-mode");
+
   list.innerHTML = "";
   list.className = "events-timeline";
 
@@ -3493,6 +3500,9 @@ function renderSignalLab(dataset) {
       eventsCard.hidden = true;
     } else {
       eventsCard.hidden = false;
+    eventsCard.open =
+      lab.status === "attention" ||
+      document.body.classList.contains("advanced-mode");
       renderEventTable(
         eventsTable,
         ["When", "What", "Duration", "Detail"],
@@ -3564,6 +3574,9 @@ function renderBecLab(dataset) {
       eventsCard.hidden = true;
     } else {
       eventsCard.hidden = false;
+    eventsCard.open =
+      lab.status === "attention" ||
+      document.body.classList.contains("advanced-mode");
       renderEventTable(
         eventsTable,
         ["When", "Lowest", "Depth", "Duration", "Servo context"],
@@ -3635,6 +3648,12 @@ function renderServoLimits(servoLimits) {
 
   card.hidden = false;
   summary.textContent = servoLimits.summary;
+
+  // A clean check stays a folded handle; a detected limit opens
+  // itself — a finding must never hide behind its own fold.
+  card.open =
+    servoLimits.status === "detected" ||
+    document.body.classList.contains("advanced-mode");
 
   if (servoLimits.status !== "detected") {
     table.innerHTML = "";
@@ -5337,6 +5356,17 @@ function renderFilterAdvisor(dataset) {
 
   filterAdvisorCard.hidden = false;
   filterAdvisorStory.textContent = advice.story;
+
+  // Folded for beginners — unless the TOP action is a filter
+  // setting (the RPM-filter case): then the harmonic list is the
+  // action's own detail and opens itself.
+  const topRecommendation =
+    (advice.recommendations ?? []).find(
+      (recommendation) => recommendation.priority === "first"
+    ) ?? (advice.recommendations ?? [])[0];
+  filterAdvisorCard.open =
+    topRecommendation?.priority === "filters" ||
+    document.body.classList.contains("advanced-mode");
 
   if (advice.rows.length > 0) {
     filterAdvisorTable.innerHTML = `
