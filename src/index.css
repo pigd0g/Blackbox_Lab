@@ -584,6 +584,17 @@ details.advanced-block {
   display: block;
 }
 
+/* A fold that follows other card content keeps its distance —
+   the merged folds otherwise sit flush against the grid above. */
+.card > * + details.advanced-block,
+.card > * + details.drilldown {
+  margin-top: 18px;
+}
+details.advanced-block > summary + .chart-hint {
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
 details.advanced-block > summary {
   color: var(--accent);
   cursor: pointer;
