@@ -275,6 +275,7 @@ export function renderTimeSeriesChart(element, options) {
     yLabel = "",
     xLabel = "Flight time (s)",
     markers = [],
+    bands = [],
     linkGroup = null,
     formatX = null
   } = options;
@@ -302,6 +303,43 @@ export function renderTimeSeriesChart(element, options) {
       },
       hooks: {
         draw: [
+          // Shaded x-ranges behind the traces: the stretch of
+          // time a measurement was taken from, so a marker is
+          // never read without the window it belongs to.
+          (u) => {
+            if (!bands.length) {
+              return;
+            }
+
+            const ctx = u.ctx;
+            ctx.save();
+            ctx.font = "12px sans-serif";
+            ctx.textAlign = "left";
+
+            for (const band of bands) {
+              const left = Math.max(
+                u.valToPos(band.min, "x", true),
+                u.bbox.left
+              );
+              const right = Math.min(
+                u.valToPos(band.max, "x", true),
+                u.bbox.left + u.bbox.width
+              );
+              if (!(right > left)) continue;
+              ctx.fillStyle = band.color ?? "rgba(120, 170, 255, 0.10)";
+              ctx.fillRect(left, u.bbox.top, right - left, u.bbox.height);
+              if (band.label) {
+                ctx.fillStyle = "rgba(220, 232, 255, 0.75)";
+                ctx.fillText(
+                  band.label,
+                  left + 4,
+                  u.bbox.top + u.bbox.height - 6
+                );
+              }
+            }
+
+            ctx.restore();
+          },
           // Small dots on each visible series' min and max —
           // they move with the zoom window.
           (u) => {

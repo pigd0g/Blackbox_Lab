@@ -3461,7 +3461,11 @@ function showEventDetail(event) {
   // The magnitude is the setpoint STEP, not the absolute rate — a
   // pirouette already running at 200°/s can step by 23°/s, and the
   // chart plots the absolute target. The words must match the chart.
-  const asked = `At ${event.t.toFixed(1)} s the ${event.axis.toLowerCase()} setpoint ${event.direction === -1 ? "stepped down" : "stepped up"} by ${event.magnitude ?? "?"}°/s.`;
+  const asked =
+    `At ${event.t.toFixed(1)} s the ${event.axis.toLowerCase()} setpoint ${event.direction === -1 ? "stepped down" : "stepped up"} by ${event.magnitude ?? "?"}°/s` +
+    (Number.isFinite(event.tEnd) && event.tEnd - event.t > 0.15
+      ? ` — one stick movement that kept going until the target held at ${event.tEnd.toFixed(1)} s; the response is measured from that hold, inside the shaded window.`
+      : ".");
   explain.textContent =
     event.verdict === "overshoot"
       ? `${asked} The response went ${event.overshoot_ds ?? "?"}°/s PAST the target (${event.overshoot_percent}% of the step) before coming back: visible below as the gyro line crossing beyond the setpoint line. Occasional overshoot on hard inputs is normal; a pattern of it is tune feedback.`
@@ -3481,7 +3485,27 @@ function showEventDetail(event) {
   const column = (base) =>
     new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
 
+  // The command's whole story on one frame (#32): where the stick
+  // started moving, where the target HELD (the response is measured
+  // from there), the stretch that was scored as this command's
+  // answer, and the peak found inside it. A marker outside its
+  // window is unreadable; the window makes it evidence.
   const markers = [{ x: event.t, label: "command" }];
+  const bands = [];
+  const heldLater =
+    Number.isFinite(event.tEnd) && event.tEnd - event.t > 0.15;
+
+  if (heldLater) {
+    markers.push({ x: event.tEnd, label: "target held" });
+  }
+
+  if (Number.isFinite(event.tEnd) && Number.isFinite(event.tMeasureEnd)) {
+    bands.push({
+      min: event.tEnd,
+      max: event.tMeasureEnd,
+      label: "measured response"
+    });
+  }
 
   if (
     Number.isFinite(event.tResponsePeak) &&
@@ -3500,7 +3524,8 @@ function showEventDetail(event) {
     "deg/s",
     {
       height: 240,
-      markers
+      markers,
+      bands
     }
   );
 
@@ -3771,7 +3796,8 @@ function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
     series,
     yLabel,
     height: options.height ?? 220,
-    markers: options.markers ?? []
+    markers: options.markers ?? [],
+    bands: options.bands ?? []
   });
 }
 

@@ -176,6 +176,15 @@ export function buildFlightEvents({
           responseEndRow === null
             ? null
             : toSeconds(timeSeconds, responseEndRow),
+        // Where this command's measurement stopped: the response
+        // window runs from the hold until the next material
+        // setpoint change or the window limit. Drawn on the event
+        // chart so the pilot sees exactly which stretch of the
+        // response was scored as THIS command's answer (#32).
+        tMeasureEnd:
+          commandEndRow !== null && Number.isFinite(windowMs)
+            ? toSeconds(timeSeconds, commandEndRow) + windowMs / 1000
+            : null,
         sample: datasetRow,
         axis: raw.axis,
         kind: "command",
@@ -282,6 +291,7 @@ export function eventChartWindow(event, paddingSeconds = 1.5) {
   const candidates = [
     event.t,
     Number.isFinite(event.tEnd) ? event.tEnd : null,
+    Number.isFinite(event.tMeasureEnd) ? event.tMeasureEnd : null,
     Number.isFinite(event.tResponsePeak) ? event.tResponsePeak : null,
     Number.isFinite(event.settling_ms)
       ? event.t + event.settling_ms / 1000

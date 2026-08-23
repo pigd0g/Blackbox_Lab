@@ -857,7 +857,9 @@ if (
   // own rise.
   sampleIndex = Math.max(
     sampleIndex,
-    commandEndSampleIndex
+    targetStabilized
+      ? commandEndSampleIndex + commandChangeWindowSamples - 1
+      : commandEndSampleIndex
   );
   continue;
 }
@@ -1404,10 +1406,19 @@ responsePeakSampleIndex,
 
 // One stick movement is one event: the scan resumes after the
 // command finished settling, so a long continuous input cannot
-// re-trigger every few tenths along its own rise.
+// re-trigger every few tenths along its own rise. A HELD target is
+// the new baseline, so the scan resumes at the end of the hold the
+// lookahead proved (one change-window long): resuming AT the hold
+// compared the first held sample against the ramp's last 0.2 s and
+// re-triggered a ghost event on the tail of every ramp longer than
+// the event spacing — the same response measured twice, the second
+// time against a fraction of the real step (#32). A movement that
+// never held resumes where it stopped, as before.
 sampleIndex = Math.max(
   sampleIndex,
-  commandEndSampleIndex
+  targetStabilized
+    ? commandEndSampleIndex + commandChangeWindowSamples - 1
+    : commandEndSampleIndex
 );
       }
     }
