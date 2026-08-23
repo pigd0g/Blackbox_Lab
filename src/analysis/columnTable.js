@@ -73,6 +73,33 @@ function buildTable(lines, headerIndex) {
   };
 }
 
+// A producer that already holds the numbers (the BBL → CSV adapter)
+// registers the table it built while writing the lines, so nobody
+// has to parse the text it just produced. The registered columns
+// must equal what parsing would give: Number(String(v)) is v for
+// every finite double, -0 normalized to 0 (String(-0) is "0"),
+// absent slots 0 and listed as blank (join renders them "").
+export function registerColumnTable(lines, headerIndex, { headerCells, columns, empties }) {
+  if (!Array.isArray(lines) || !Number.isInteger(headerIndex)) return null;
+  const width = headerCells.length;
+  const table = {
+    headerIndex,
+    width,
+    rowCount: lines.length,
+    rawHeaders: headerCells,
+    column: (columnIndex) =>
+      columnIndex >= 0 && columnIndex < width ? columns[columnIndex] : null,
+    emptyRows: (columnIndex) => empties[columnIndex] ?? null
+  };
+  let byHeader = TABLES.get(lines);
+  if (!byHeader) {
+    byHeader = new Map();
+    TABLES.set(lines, byHeader);
+  }
+  byHeader.set(headerIndex, table);
+  return table;
+}
+
 // The table for these lines under this header row. The first call
 // pays for the parse; every later call, from any module, is a
 // lookup.

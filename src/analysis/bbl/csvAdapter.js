@@ -13,6 +13,8 @@
 //
 // ======================================================
 
+import { registerColumnTable } from "../columnTable.js";
+
 // Rotorflight adjustment function id for the PID profile
 // (fc/rc_adjustments.h: ADJUSTMENT_PID_PROFILE = 2).
 const PID_PROFILE_ADJUSTMENT = 2;
@@ -83,7 +85,21 @@ export function decodedFlightToCsvLines(flight) {
     columnNames.push("pidProfile");
   }
 
+  const headerIndex = lines.length;
   lines.push(columnNames.join(","));
+
+  // The column table, filled from the typed frame values as the rows
+  // are written — the analysis reads these numbers; the text is the
+  // same numbers rendered. Metadata rows above the header stay NaN.
+  const rowCount = headerIndex + 1 + flight.mainFrames.length;
+  const width = columnNames.length;
+  const columns = new Array(width);
+  for (let c = 0; c < width; c += 1) {
+    const column = new Float64Array(rowCount);
+    column.fill(Number.NaN, 0, headerIndex + 1);
+    columns[c] = column;
+  }
+  const empties = new Array(width).fill(null);
 
   // ---- data rows with slow values carried forward ----
   const slowCurrent = new Array(slowNames.length).fill(0);
@@ -142,8 +158,28 @@ export function decodedFlightToCsvLines(flight) {
       row[cursor + slowCurrent.length] = activeProfile;
     }
 
+    const lineIndex = lines.length;
+    for (let c = 0; c < width; c += 1) {
+      const value = row[c];
+      if (value === undefined || value === null) {
+        // join() renders a hole as "" — Number("") is 0, and the
+        // aligned readers see a blank.
+        columns[c][lineIndex] = 0;
+        (empties[c] ??= []).push(lineIndex);
+      } else {
+        const number = typeof value === "number" ? value : Number(String(value));
+        columns[c][lineIndex] = number === 0 ? 0 : number;
+      }
+    }
+
     lines.push(row.join(","));
   }
+
+  registerColumnTable(lines, headerIndex, {
+    headerCells: columnNames.map((name) => String(name)),
+    columns,
+    empties
+  });
 
   return lines;
 }
