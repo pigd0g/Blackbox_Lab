@@ -698,9 +698,13 @@
         <section class="card">
           <div class="replay-stack-controls" id="replayStackControls">
             <label for="replayAddGraph" class="replay-add-label">Add graph</label>
+            <input type="search" id="replayFieldSearch" class="replay-field-search"
+              placeholder="Search logged fields — e.g. yaw ff, servo, govP"
+              aria-label="Search logged fields" hidden />
             <select id="replayAddGraph"></select>
             <button id="replayAddButton" class="replay-add-btn">+ Add</button>
           </div>
+          <p class="chart-hint replay-fields-hint">Presets first, then every field this log recorded, grouped. Friendly names are shown beside the original Rotorflight field name; fields absent from this log are not offered.</p>
           <div id="replayGraphStack"></div>
         </section>
 

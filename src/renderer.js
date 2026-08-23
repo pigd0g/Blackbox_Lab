@@ -86,6 +86,13 @@ function noteAction(action) {
 }
 import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
 import {
+  groupLogFields,
+  fieldNameFromKey,
+  fieldMatchesSearch,
+  fieldHeading,
+  describeField
+} from "./ui/replayFields.js";
+import {
   readPilotInput,
   createStickDisplay,
   getStickMode,
@@ -457,8 +464,10 @@ function loadReplayLayout() {
     // sticks-only view, the classic video-overlay composition.
     // Only a record that never existed gets the default.
     if (Array.isArray(stored)) {
-      return stored.filter((key) =>
-        REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key)
+      return stored.filter(
+        (key) =>
+          REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key) ||
+          fieldNameFromKey(key) !== null
       );
     }
   } catch {
@@ -496,21 +505,47 @@ function renderReplayStack(dataset) {
       '<p class="chart-empty">Sticks-only view: no graphs stacked. The playhead, sticks and readouts still run above; add a graph anytime.</p>';
   }
 
+  // The header fields this log carries, grouped — read from the
+  // log itself, so a field absent from this flight is never offered
+  // and a future firmware field needs no UI change (#63).
+  const fieldGroups = groupLogFields(replayHeaderNames(dataset));
+  const fieldByKey = new Map();
+  for (const group of fieldGroups) {
+    for (const entry of group.fields) fieldByKey.set(entry.key, entry);
+  }
+
   for (const key of layout) {
     const preset = REPLAY_GRAPH_PRESETS.find((entry) => entry.key === key);
-    if (!preset) continue;
+    const fieldName = fieldNameFromKey(key);
 
-    const series = preset.series(dataset);
+    if (!preset && fieldName === null) continue;
+
+    const fieldEntry = fieldName !== null
+      ? fieldByKey.get(key) ?? {
+          name: fieldName,
+          key,
+          alias: describeField(fieldName).alias,
+          unit: describeField(fieldName).unit
+        }
+      : null;
+
+    const series = preset
+      ? preset.series(dataset)
+      : fieldSeries(dataset, fieldEntry);
+
+    const heading = preset
+      ? preset.label
+      : fieldHeading(fieldEntry);
 
     const row = document.createElement("div");
     row.className = "replay-graph-row";
     row.innerHTML = `
       <div class="replay-graph-head">
-        <span>${preset.label}</span>
+        <span>${escapeHtml(heading)}</span>
         <span class="replay-graph-tools">
-          <button data-stack-move="-1" data-stack-key="${key}" title="Move up">▲</button>
-          <button data-stack-move="1" data-stack-key="${key}" title="Move down">▼</button>
-          <button data-stack-remove="${key}" title="Remove">✕</button>
+          <button data-stack-move="-1" data-stack-key="${escapeHtml(key)}" title="Move up">▲</button>
+          <button data-stack-move="1" data-stack-key="${escapeHtml(key)}" title="Move down">▼</button>
+          <button data-stack-remove="${escapeHtml(key)}" title="Remove">✕</button>
         </span>
       </div>
       <div class="chart-container"></div>
@@ -520,35 +555,113 @@ function renderReplayStack(dataset) {
     const container = row.querySelector(".chart-container");
 
     if (series.length === 0) {
-      container.innerHTML =
-        '<p class="chart-empty">This log has no data for this chart.</p>';
+      container.innerHTML = preset
+        ? '<p class="chart-empty">This log has no data for this chart.</p>'
+        : `<p class="chart-empty">This log does not carry <code>${escapeHtml(fieldName)}</code>.</p>`;
       continue;
     }
 
     renderTimeSeriesChart(container, {
       timeSeconds: decimate(dataset.timeSeconds),
       series,
-      yLabel: preset.yLabel,
+      yLabel: preset ? preset.yLabel : fieldEntry.unit,
       height: 170,
       linkGroup: "replayStack"
     });
   }
 
-  // The add-menu offers what is not already in the stack.
+  // The add-menu offers what is not already in the stack: the
+  // presets first, then every logged field by group. The search
+  // box narrows the field groups; the original field name is always
+  // part of the option text.
   if (addSelect) {
-    addSelect.innerHTML = "";
-    for (const preset of REPLAY_GRAPH_PRESETS) {
-      if (layout.includes(preset.key)) continue;
-      const option = document.createElement("option");
-      option.value = preset.key;
-      option.textContent = preset.label;
-      addSelect.appendChild(option);
-    }
-    addSelect.disabled = addSelect.options.length === 0;
-    const addButton = el("replayAddButton");
-    if (addButton) addButton.disabled = addSelect.options.length === 0;
+    renderReplayAddMenu(addSelect, layout, fieldGroups);
   }
 }
+
+// Header names of the loaded log, for the field catalog.
+function replayHeaderNames(dataset) {
+  if (!dataset?.headerLine) return [];
+  return String(dataset.headerLine)
+    .split(",")
+    .map((name) => name.trim().replace(/^"|"$/g, ""));
+}
+
+// One logged field as one series, raw logged values — the field's
+// identity is the point; conversions belong to the presets.
+function fieldSeries(dataset, fieldEntry) {
+  if (!fieldEntry) return [];
+  const column = dataset.findColumnsIn([
+    new RegExp(`^${fieldEntry.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+  ])[0];
+  if (!column) return [];
+  const values = dataset.columnValues(column);
+  if (!values.some((value) => Number.isFinite(value))) return [];
+  return [
+    {
+      label: column,
+      values: decimate(values),
+      color: CHART_COLORS[0]
+    }
+  ];
+}
+
+let replayFieldSearchQuery = "";
+
+function renderReplayAddMenu(addSelect, layout, fieldGroups) {
+  addSelect.innerHTML = "";
+
+  const presetGroup = document.createElement("optgroup");
+  presetGroup.label = "Presets";
+  for (const preset of REPLAY_GRAPH_PRESETS) {
+    if (layout.includes(preset.key)) continue;
+    const option = document.createElement("option");
+    option.value = preset.key;
+    option.textContent = preset.label;
+    presetGroup.appendChild(option);
+  }
+  if (presetGroup.children.length > 0 && !replayFieldSearchQuery.trim()) {
+    addSelect.appendChild(presetGroup);
+  }
+
+  for (const group of fieldGroups) {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.label;
+    for (const entry of group.fields) {
+      if (layout.includes(entry.key)) continue;
+      if (!fieldMatchesSearch(entry, replayFieldSearchQuery)) continue;
+      const option = document.createElement("option");
+      option.value = entry.key;
+      option.textContent = entry.alias
+        ? `${entry.alias}  (${entry.name})`
+        : entry.name;
+      if (group.note) option.title = group.note;
+      optgroup.appendChild(option);
+    }
+    if (optgroup.children.length > 0) addSelect.appendChild(optgroup);
+  }
+
+  const empty = addSelect.options.length === 0;
+  addSelect.disabled = empty;
+  const addButton = el("replayAddButton");
+  if (addButton) addButton.disabled = empty;
+
+  const search = el("replayFieldSearch");
+  if (search) {
+    search.hidden = fieldGroups.length === 0;
+  }
+}
+
+el("replayFieldSearch")?.addEventListener("input", (event) => {
+  replayFieldSearchQuery = event.target.value ?? "";
+  const addSelect = el("replayAddGraph");
+  if (!addSelect) return;
+  renderReplayAddMenu(
+    addSelect,
+    loadReplayLayout(),
+    groupLogFields(replayHeaderNames(currentDataset))
+  );
+});
 
 el("replayAddButton")?.addEventListener("click", () => {
   const addSelect = el("replayAddGraph");

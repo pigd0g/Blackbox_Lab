@@ -1848,6 +1848,20 @@ section[data-screen="history"] .flight-picker .secondary-button {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 4px 8px;
+  max-width: 360px;
+}
+
+.replay-field-search {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  min-width: 220px;
+}
+
+.replay-fields-hint {
+  margin: -6px 0 12px;
 }
 
 .replay-add-btn {

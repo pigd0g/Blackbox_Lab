@@ -240,6 +240,51 @@ const { mkdirSync } = require("node:fs");
       "replay transport misbehaved: " + JSON.stringify(replayState)
     );
   }
+  // All logged fields (#63): the add-menu lists the log's own
+  // header fields by group beside the presets; adding a raw field
+  // stacks it as its own synchronized chart with the original field
+  // name in the heading; the search box narrows the menu.
+  const fieldMenu = await window.evaluate(() => {
+    const select = document.getElementById("replayAddGraph");
+    const groups = [...select.querySelectorAll("optgroup")].map((g) => g.label);
+    const option = [...select.options].find((o) => o.value === "field:axisP[0]");
+    return { groups, hasAxisP: Boolean(option), text: option?.textContent ?? null };
+  });
+  if (!fieldMenu.groups.includes("Presets") || !fieldMenu.groups.includes("PID terms") || !fieldMenu.hasAxisP) {
+    throw new Error("replay field menu incomplete: " + JSON.stringify(fieldMenu));
+  }
+  if (!/axisP\[0\]/.test(fieldMenu.text)) {
+    throw new Error("field option hides the original name: " + fieldMenu.text);
+  }
+  const rowsBefore = stackState.rows;
+  await window.selectOption("#replayAddGraph", "field:axisP[0]");
+  await window.click("#replayAddButton");
+  await window.waitForTimeout(400);
+  const fieldRow = await window.evaluate(() => {
+    const rows = [...document.querySelectorAll(".replay-graph-row")];
+    const last = rows[rows.length - 1];
+    return {
+      rows: rows.length,
+      heading: last?.querySelector(".replay-graph-head span")?.textContent ?? "",
+      canvas: Boolean(last?.querySelector("canvas"))
+    };
+  });
+  if (fieldRow.rows !== rowsBefore + 1 || !fieldRow.canvas || !/axisP\[0\]/.test(fieldRow.heading)) {
+    throw new Error("raw field did not stack: " + JSON.stringify(fieldRow));
+  }
+  await window.fill("#replayFieldSearch", "yaw gyro");
+  await window.waitForTimeout(200);
+  const searched = await window.evaluate(() => {
+    const select = document.getElementById("replayAddGraph");
+    return [...select.options].map((o) => o.value);
+  });
+  if (!searched.includes("field:gyroADC[2]") || searched.some((v) => v === "field:axisP[1]")) {
+    throw new Error("field search did not narrow the menu: " + JSON.stringify(searched));
+  }
+  await window.fill("#replayFieldSearch", "");
+  await window.waitForTimeout(200);
+  await window.screenshot({ path: "smoke-shots/17b-replay-fields.png" });
+  console.log("replay fields ok:", fieldRow.heading, "| search narrows to", searched.length, "options");
   await window.screenshot({ path: "smoke-shots/17-replay.png" });
   await window.click('.nav-button[data-target="viewer"]');
   await window.waitForTimeout(300);
