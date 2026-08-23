@@ -137,7 +137,7 @@ function buildRecommendationsHtml(recommendations) {
 
   return `<h2>What To Try Next</h2>
   <p class="summary">One change at a time, then fly the same moves again: the numbers each card names are the judge.</p>
-  ${blocks}`;
+  <div class="card-grid">${blocks}</div>`;
 }
 
 // The rotor's event story beside the labs: excursion summary and
@@ -197,12 +197,12 @@ function buildFirstStepsHtml(firstSteps) {
   <p class="summary">Everything this flight asks of you, in the order to attend to it.</p>
   ${
     actionable.length > 0
-      ? actionable.map(rowHtml).join("")
+      ? `<div class="card-grid">${actionable.map(rowHtml).join("")}</div>`
       : `<p class="summary" style="color:${STATUS.good.color};">Nothing needs your attention: this flight is healthy.</p>`
   }
   ${
     gaps.length > 0
-      ? `<h3 class="sub-heading">Not measured on this flight</h3>${gaps.map(rowHtml).join("")}`
+      ? `<h3 class="sub-heading">Not measured on this flight</h3><div class="card-grid">${gaps.map(rowHtml).join("")}</div>`
       : ""
   }`;
 }
@@ -246,7 +246,7 @@ function buildPackHtml(pack) {
 
   return `<h2>This Flight's Change Pack</h2>
   <p class="summary">${escapeHtml(pack.intro ?? "")}</p>
-  ${members}
+  ${members ? `<div class="card-grid">${members}</div>` : ""}
   ${pack.headspeedNote ? `<p class="verdict-detail">${escapeHtml(pack.headspeedNote)}</p>` : ""}
   ${queued ? `<h3 class="sub-heading">Waiting for the next pack</h3>${queued}` : ""}
   ${
@@ -319,9 +319,7 @@ export function buildReportHtml({
     })
     .join("");
 
-  const labsHtml = (labs ?? [])
-    .filter((lab) => lab && (lab.analysis || lab.absent))
-    .map((lab) => {
+  const labBlock = (lab) => {
       // A lab that could not run says so, in the words its page
       // shows — the report's reader must not mistake a missing
       // block for a clean one.
@@ -370,7 +368,7 @@ export function buildReportHtml({
         .join("");
 
       return `
-      <div class="lab">
+      <div class="lab${lab.wide ? " lab-wide" : ""}">
         <div class="lab-head">
           <span class="lab-name">${escapeHtml(lab.title)}</span>
           <span class="lab-status" style="color:${statusColor};">${escapeHtml(statusWord)}</span>
@@ -378,8 +376,22 @@ export function buildReportHtml({
         <p class="lab-story" style="border-left-color:${statusColor};">${escapeHtml(lab.analysis.story)}</p>
         <div class="tiles">${tiles}</div>
       </div>`;
-    })
+  };
+
+  // The two long-form labs (Filter, PID) read full-width and may
+  // flow across a page break; the compact labs sit two abreast.
+  const presentLabs = (labs ?? []).filter(
+    (lab) => lab && (lab.analysis || lab.absent)
+  );
+  const wideLabsHtml = presentLabs
+    .filter((lab) => lab.wide)
+    .map(labBlock)
     .join("");
+  const gridLabsHtml = presentLabs
+    .filter((lab) => !lab.wide)
+    .map(labBlock)
+    .join("");
+  const labsHtml = wideLabsHtml + gridLabsHtml;
 
   const chartsHtml = (chartElements ?? [])
     .map((entry) => {
@@ -387,7 +399,7 @@ export function buildReportHtml({
 
       return image
         ? `
-        <div class="chart-panel">
+        <div class="chart-panel${entry.wide ? " chart-wide" : ""}">
           <div class="chart-title">${escapeHtml(entry.title)}</div>
           <img src="${image}" alt="${escapeHtml(entry.title)}" />
         </div>`
@@ -498,22 +510,68 @@ export function buildReportHtml({
   .report-list li { margin: 4px 0; }
   code { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 0.92em; }
 
-  /* Paper: the PDF export and any browser print share this. */
-  @page { size: A4; margin: 12mm 11mm; }
+  /* Paper: the PDF export and any browser print share this. A4 is
+     a narrower, denser medium than a screen: the report folds into
+     the same organized columns the app uses, at document type sizes,
+     so a flight fits a few pages instead of a scroll. */
+  .card-grid { display: block; }
+  @page { size: A4; margin: 10mm 9mm 11mm 9mm; }
   @media print {
-    body { background: #ffffff; font-size: 12.5px; }
+    body { background: #ffffff; font-size: 10.4px; line-height: 1.38; }
     .page { max-width: none; padding: 0; }
-    .masthead, .chart-panel, .verdict, .lab, .basis { box-shadow: none; }
-    .masthead { border-radius: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .summary { font-size: 14px; }
-    .verdict-headline { font-size: 14.5px; }
-    .verdict-detail, .verdict-action, .basis-note { font-size: 12px; }
-    .lab-name { font-size: 14px; }
-    .tile-value { font-size: 12.5px; }
-    h2 { font-size: 13px; margin-top: 22px; break-after: avoid; }
-    .sub-heading { break-after: avoid; }
-    .verdict, .lab, .chart-panel, .basis-row, .tile { break-inside: avoid; }
-    .chart-panel img { max-height: 110mm; object-fit: contain; }
+    .masthead { padding: 11px 15px; border-radius: 8px; box-shadow: none;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .masthead h1 { font-size: 16px; }
+    .masthead .sub { font-size: 9.5px; margin-top: 1px; }
+    .meta { grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+    .meta-label { font-size: 7.5px; letter-spacing: 0.8px; }
+    .meta-value { font-size: 10.5px; margin-top: 1px; }
+
+    h2 { font-size: 9.5px; letter-spacing: 1.3px; margin: 13px 2px 5px 2px; break-after: avoid; }
+    .sub-heading { font-size: 8.5px; letter-spacing: 1px; margin: 8px 2px 4px 2px; break-after: avoid; }
+    .summary { font-size: 10.8px; margin: 0 2px 6px 2px; }
+
+    .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: stretch; }
+    .card-grid > * { margin: 0; }
+
+    .verdict { padding: 7px 9px; border-radius: 6px; border-left-width: 4px; box-shadow: none; }
+    .verdict-title { font-size: 9.8px; }
+    .verdict-status { font-size: 7.5px; letter-spacing: 0.7px; }
+    .verdict-headline { font-size: 10.6px; margin-top: 2px; line-height: 1.3; }
+    .verdict-detail { font-size: 9px; margin-top: 2px; line-height: 1.36; }
+    .verdict-action { font-size: 8.8px; margin-top: 5px; padding: 4px 7px; border-radius: 5px; }
+
+    .lab { padding: 8px 10px; border-radius: 6px; box-shadow: none; }
+    .lab-wide { margin: 0 0 6px 0; break-inside: auto; }
+    .lab-wide .tiles { grid-template-columns: repeat(4, 1fr); }
+    .lab-wide .tile-wide { grid-column: 1 / -1; }
+    .lab-name { font-size: 11px; }
+    .lab-status { font-size: 7.5px; letter-spacing: 0.7px; }
+    .lab-story { font-size: 9px; margin: 5px 0 6px 0; padding-left: 8px; border-left-width: 2px; line-height: 1.36; }
+    .tiles { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .tile { padding: 4px 7px; border-radius: 5px; }
+    .tile-label { font-size: 7.2px; letter-spacing: 0.5px; }
+    .tile-value { font-size: 9.4px; margin-top: 1px; }
+    .tile-text { font-size: 8.6px; line-height: 1.38; }
+
+    .basis { padding: 2px 10px 6px 10px; border-radius: 6px; box-shadow: none; }
+    .basis-row { padding: 5px 0; }
+    .basis-name { font-size: 9.8px; }
+    .basis-level { font-size: 7.5px; letter-spacing: 0.7px; }
+    .basis-note { font-size: 8.8px; margin-top: 2px; }
+
+    .chart-grid { align-items: start; }
+    .chart-panel { padding: 7px 7px 4px 7px; border-radius: 8px; box-shadow: none; }
+    .chart-wide { grid-column: 1 / -1; }
+    .chart-title { font-size: 9px; margin: 0 2px 5px 2px; }
+    .chart-panel img { max-height: 62mm; object-fit: contain; }
+    .chart-wide img { max-height: 80mm; }
+
+    .report-list { font-size: 9.4px; margin-left: 18px; }
+    .report-list li { margin: 2px 0; }
+    .footer { font-size: 8.4px; margin-top: 16px; padding-top: 8px; }
+
+    .verdict, .lab:not(.lab-wide), .chart-panel, .tile, .basis-row { break-inside: avoid; }
   }
 </style>
 </head>
@@ -527,7 +585,7 @@ export function buildReportHtml({
 
   <h2>Verdict</h2>
   <p class="summary">${escapeHtml(verdict?.summary ?? "")}</p>
-  ${cardsHtml}
+  <div class="card-grid verdict-grid">${cardsHtml}</div>
 
   ${buildFirstStepsHtml(firstSteps)}
 
@@ -537,11 +595,11 @@ export function buildReportHtml({
 
   ${buildQualityHtml(quality)}
 
-  ${labsHtml ? `<h2>Lab Details</h2>${labsHtml}` : ""}
+  ${labsHtml ? `<h2>Lab Details</h2>${wideLabsHtml}<div class="card-grid lab-grid">${gridLabsHtml}</div>` : ""}
 
   ${buildRotorBehaviourHtml(governorEvents, precomp, flightEventsSentence)}
 
-  ${chartsHtml ? `<h2>The Evidence</h2>${chartsHtml}` : ""}
+  ${chartsHtml ? `<h2>The Evidence</h2><div class="card-grid chart-grid">${chartsHtml}</div>` : ""}
 
   <div class="footer">
     Generated by Blackbox Lab: free Rotorflight log analysis, a passion project by Daniel Sink.

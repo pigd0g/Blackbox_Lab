@@ -6064,12 +6064,13 @@ buildReportButton.addEventListener("click", () => {
     labs: [
       {
         title: "Filter Lab",
+        wide: true,
         analysis: filterLabForReport(
           currentFilterAnalysisResult,
           currentDataset.filterAdvice
         )
       },
-      { title: "PID Lab", analysis: pidLabForReport(currentPidAnalysisResult) },
+      { title: "PID Lab", wide: true, analysis: pidLabForReport(currentPidAnalysisResult) },
       {
         title: "Governor Lab",
         analysis: currentDataset.labs.governor,
@@ -6097,7 +6098,7 @@ buildReportButton.addEventListener("click", () => {
       }
     ],
     chartElements: [
-      { title: "Noise Spectrum", element: chartSpectrum },
+      { title: "Noise Spectrum", element: chartSpectrum, wide: true },
       { title: "Gyro", element: chartGyro },
       { title: "Roll: Target vs Gyro", element: chartTracking },
       { title: "Pitch: Target vs Gyro", element: chartTrackingPitch },
