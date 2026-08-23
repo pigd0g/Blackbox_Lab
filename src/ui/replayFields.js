@@ -326,7 +326,10 @@ export function fieldMatchesSearch(entry, query) {
   if (!needle) return true;
   const haystack = [entry.name, entry.alias ?? "", entry.groupLabel ?? ""]
     .join(" ")
-    .toLowerCase();
+    .toLowerCase()
+    // The shorthand tuners actually type.
+    .replace(/feedforward/g, "feedforward ff")
+    .replace(/governor/g, "governor gov");
   return needle.split(/\s+/).every((word) => haystack.includes(word));
 }
 
