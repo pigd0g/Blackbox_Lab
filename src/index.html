@@ -153,15 +153,6 @@
           <p class="welcome-drop-hint">…or drag a <strong>.bbl</strong>
             file anywhere onto this window</p>
           <p class="welcome-status" id="welcomeStatus"></p>
-          <details class="fold academy-shelf" id="academyShelf">
-            <summary>Diagnosis Academy — practice on a flight with a known problem</summary>
-            <p class="chart-hint">
-              Six flights, each hiding exactly one real problem.
-              Load one, explore the labs, form your diagnosis —
-              then reveal the answer and compare reasoning.
-            </p>
-            <div id="academyList"></div>
-          </details>
           <div class="welcome-steps">
             <div class="welcome-step">
               <span class="welcome-step-num">1</span>
@@ -178,6 +169,17 @@
               <strong>Fix what matters</strong>
               <span>one change per flight, then compare</span>
             </div>
+            <!-- The fourth item: quiet, full width, unfolds. The
+                 Academy is a practice room, not the front door. -->
+            <details class="welcome-academy" id="academyShelf">
+              <summary>
+                <span class="welcome-academy-or">Or:</span>
+                load one of the practice flights from the
+                <strong>Diagnosis Academy</strong>
+                <span class="welcome-academy-sub">six flights, each hiding exactly one real problem — find it, then reveal the answer</span>
+              </summary>
+              <div class="academy-list" data-academy-list></div>
+            </details>
           </div>
         </section>
 
@@ -194,7 +196,8 @@
               Copy the paired CLI dump
             </button>
           </p>
-          <button type="button" class="secondary-button" id="academyRevealButton">
+          <button type="button" class="secondary-button" id="academyRevealButton"
+            aria-expanded="false" aria-controls="academyReveal">
             Reveal the diagnosis
           </button>
           <div id="academyReveal" hidden>
@@ -203,6 +206,10 @@
             <h4>The fix</h4>
             <p id="academyRevealFix"></p>
           </div>
+          <details class="fold academy-shelf" id="academyNextShelf">
+            <summary>Try another Academy flight</summary>
+            <div class="academy-list" data-academy-list></div>
+          </details>
         </section>
 
         <section class="card" id="verdictCard" hidden>
@@ -310,6 +317,10 @@
               Open Blackbox Log
             </button>
           </div>
+          <details class="fold academy-shelf" id="academyShelfLoaded">
+            <summary>Diagnosis Academy — practice on a flight with a known problem</summary>
+            <div class="academy-list" data-academy-list></div>
+          </details>
 
 <div class="loaded-log-field" id="loadedLogField">
                       <div class="file-status" id="fileStatus">

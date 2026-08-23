@@ -6805,7 +6805,6 @@ const academyRevealChain = el("academyRevealChain");
 const academyRevealFix = el("academyRevealFix");
 const academyDumpRow = el("academyDumpRow");
 const academyDumpCopyButton = el("academyDumpCopyButton");
-const academyList = el("academyList");
 
 let activeAcademyEntry = null;
 
@@ -6816,14 +6815,17 @@ function setAcademyEntry(entry) {
 
   if (!entry) {
     academyCard.hidden = true;
+    renderAcademyLists();
     return;
   }
 
   academyCardTitle.textContent = entry.title;
   academyCardBrief.textContent = entry.brief;
-  academyReveal.hidden = true;
-  academyRevealButton.hidden = false;
+  setAcademyRevealOpen(false);
   academyDumpRow.hidden = !entry.dumpFile;
+  const nextShelf = el("academyNextShelf");
+  if (nextShelf) nextShelf.open = false;
+  renderAcademyLists();
 
   academyRevealChain.textContent = "";
   for (const step of entry.reveal.diagnosis) {
@@ -6836,13 +6838,28 @@ function setAcademyEntry(entry) {
   academyCard.hidden = false;
 }
 
+// The reveal is a toggle: read the answer, fold it away, form the
+// next thought, open it again — the button always says what it
+// will do next.
+function setAcademyRevealOpen(open) {
+  if (!academyReveal || !academyRevealButton) return;
+  academyReveal.hidden = !open;
+  academyRevealButton.hidden = false;
+  academyRevealButton.textContent = open
+    ? "Hide the diagnosis"
+    : "Reveal the diagnosis";
+  academyRevealButton.setAttribute("aria-expanded", String(open));
+}
+
 if (academyRevealButton) {
   academyRevealButton.addEventListener("click", () => {
-    academyReveal.hidden = false;
-    academyRevealButton.hidden = true;
-    noteAction(
-      `academy reveal: ${activeAcademyEntry?.id ?? "unknown"}`
-    );
+    const opening = academyReveal.hidden;
+    setAcademyRevealOpen(opening);
+    if (opening) {
+      noteAction(
+        `academy reveal: ${activeAcademyEntry?.id ?? "unknown"}`
+      );
+    }
   });
 }
 
@@ -6890,33 +6907,52 @@ async function loadAcademyEntry(entry) {
   fileStatus.textContent = `Loaded: ${entry.title} — find the problem, then reveal.`;
 }
 
-if (academyList) {
-  for (const entry of ACADEMY_ENTRIES) {
-    const row = document.createElement("div");
-    row.className = "academy-entry";
+// The shelf lives in three places — the welcome's fourth item,
+// the Load Another Log card once a log is open, and the Academy
+// card itself ("try another") — so a practice flight is one click
+// away before AND after the first load. One renderer, every copy
+// the same; the loaded flight is marked, never offered twice.
+function renderAcademyLists() {
+  for (const container of document.querySelectorAll("[data-academy-list]")) {
+    container.innerHTML = "";
 
-    const label = document.createElement("div");
-    const title = document.createElement("strong");
-    title.textContent = entry.title;
-    const teaser = document.createElement("span");
-    teaser.className = "academy-teaser";
-    teaser.textContent = entry.teaser;
-    label.appendChild(title);
-    label.appendChild(teaser);
+    for (const entry of ACADEMY_ENTRIES) {
+      const isActive = activeAcademyEntry?.id === entry.id;
+      const row = document.createElement("div");
+      row.className = "academy-entry" + (isActive ? " is-active" : "");
 
-    const loadButton = document.createElement("button");
-    loadButton.type = "button";
-    loadButton.className = "ghost";
-    loadButton.textContent = "Load";
-    loadButton.addEventListener("click", () => {
-      loadAcademyEntry(entry);
-    });
+      const label = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = entry.title;
+      const teaser = document.createElement("span");
+      teaser.className = "academy-teaser";
+      teaser.textContent = entry.teaser;
+      label.appendChild(title);
+      label.appendChild(teaser);
+      row.appendChild(label);
 
-    row.appendChild(label);
-    row.appendChild(loadButton);
-    academyList.appendChild(row);
+      if (isActive) {
+        const tag = document.createElement("span");
+        tag.className = "academy-loaded-tag";
+        tag.textContent = "Loaded";
+        row.appendChild(tag);
+      } else {
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "secondary-button academy-load";
+        loadButton.textContent = "Load";
+        loadButton.addEventListener("click", () => {
+          loadAcademyEntry(entry);
+        });
+        row.appendChild(loadButton);
+      }
+
+      container.appendChild(row);
+    }
   }
 }
+
+renderAcademyLists();
 
 // Mirror every fileStatus message into the hero while it is
 // visible — loading feedback happens before .log-loaded flips.

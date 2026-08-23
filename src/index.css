@@ -39,6 +39,15 @@
   box-sizing: border-box;
 }
 
+/* THE RULE: hidden means hidden. Any element the renderer marks
+   [hidden] stays gone, whatever display value its own class sets —
+   an author display:block/flex silently outranks the UA's [hidden]
+   rule, which is how an empty "Waiting for the next pack" fold and
+   four earlier per-element fixes came to be. One rule, everywhere. */
+[hidden] {
+  display: none !important;
+}
+
 ::selection {
   background: rgba(111, 178, 255, 0.32);
   color: var(--ink);
@@ -2096,10 +2105,93 @@ body.log-loaded .loaded-log-field .file-status {
   white-space: pre;
 }
 
+/* ---- ghost buttons: quiet actions inside cards ---- */
+.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: var(--font-ui);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ghost:hover {
+  background: rgba(111, 178, 255, 0.12);
+  border-color: var(--accent);
+}
+.ghost:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ---- Diagnosis Academy ---- */
 .academy-shelf {
   margin-top: 14px;
   text-align: left;
+}
+.academy-shelf > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: var(--font-ui);
+  user-select: none;
+}
+.academy-shelf[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* The welcome's fourth item: spans the step grid, reads as a
+   quiet aside, unfolds into the shelf. */
+.welcome-academy {
+  grid-column: 1 / -1;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  text-align: left;
+}
+.welcome-academy > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-muted);
+  font-size: var(--font-ui);
+  user-select: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.welcome-academy > summary::-webkit-details-marker {
+  display: none;
+}
+.welcome-academy > summary::before {
+  content: "\25B8";
+  color: var(--ink-muted);
+  font-size: var(--font-small);
+  margin-right: 2px;
+}
+.welcome-academy[open] > summary::before {
+  content: "\25BE";
+}
+.welcome-academy > summary strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.welcome-academy > summary:hover strong {
+  color: var(--ink);
+}
+.welcome-academy-or {
+  color: var(--ink-muted);
+}
+.welcome-academy-sub {
+  flex-basis: 100%;
+  color: var(--ink-muted);
+  font-size: var(--font-small);
+  padding-left: 14px;
+}
+.welcome-academy[open] > summary {
+  margin-bottom: 10px;
 }
 .academy-entry {
   display: flex;
@@ -2116,6 +2208,19 @@ body.log-loaded .loaded-log-field .file-status {
   display: block;
   font-size: var(--font-ui);
   color: var(--ink);
+}
+.academy-entry.is-active {
+  border-color: var(--warm);
+}
+.academy-entry .academy-load {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 8px 16px;
+}
+.academy-entry .academy-loaded-tag {
+  color: var(--warm);
+  font-size: var(--font-small);
+  white-space: nowrap;
 }
 .academy-teaser {
   display: block;
