@@ -3060,20 +3060,20 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     add(
       "becFirstStep",
       "bec",
-      "Receiver power",
+      "BEC output",
       becLab.status === "attention"
-        ? "Work through the receiver power path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
+        ? "Work through the BEC output path: BEC setting and current capability, wiring, connectors. Start at the worst event below."
         : becLab.status === "watch"
           ? becLab.implausibleBrownout
             ? "Inspect the voltage-measurement path (sensor wiring and its connector): the receiver flew on through the reading, so the measurement, not the power, is the suspect."
             : "Keep an eye on the dip moments below: with power, repetition is what matters."
-          : "Nothing to change: receiver power is solid.",
+          : "Nothing to change: BEC output is solid — receiver and servos are fed steadily.",
       statusTone(cardStatus("bec") ?? becLab.status)
     );
   } else {
     setFirstStep(
       "becFirstStep",
-      "Enable BEC voltage telemetry and re-log. Then this page can watch your receiver power for you.",
+      "Enable BEC voltage telemetry and re-log. Then this page can watch your BEC output for you.",
       "info"
     );
   }
@@ -3243,7 +3243,7 @@ function renderBecLab(dataset) {
 
   if (!lab) {
     story.textContent =
-      "This log carries no usable BEC voltage telemetry, so receiver power cannot be assessed.";
+      "This log carries no usable BEC voltage telemetry, so BEC output cannot be assessed.";
     metricsElement.innerHTML = "";
     if (eventsCard) eventsCard.hidden = true;
     if (chartCard) chartCard.hidden = true;

@@ -147,13 +147,13 @@ export function assessLogQuality({
   // ---- receiver power ----
   if (hasVbec) {
     capabilities.push({
-      name: "Receiver power (BEC)",
+      name: "BEC output",
       level: "full",
       note: "BEC voltage present: receiver-power stability, dips and their servo context are measurable."
     });
   } else {
     capabilities.push({
-      name: "Receiver power (BEC)",
+      name: "BEC output",
       level: "missing",
       note: "No BEC voltage in this log. Enable BEC voltage telemetry for receiver-power analysis."
     });

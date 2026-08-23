@@ -717,16 +717,16 @@ function becVerdict(becLab) {
 
   return {
     key: "bec",
-    title: "Receiver Power",
+    title: "BEC Output",
     status,
     headline:
       status === "attention"
-        ? "Receiver power needs attention"
+        ? "BEC output needs attention"
         : status === "watch"
           ? becLab.implausibleBrownout
             ? "Voltage reading worth checking"
-            : "Receiver voltage dipped"
-          : "Receiver power rock steady",
+            : "BEC voltage dipped"
+          : "BEC output rock steady",
     detail: becLab.story,
     action:
       status === "good"

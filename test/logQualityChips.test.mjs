@@ -105,7 +105,7 @@ test("signal and receiver-power chips state their telemetry honestly", () => {
     (c) => c.name === "Signal & link"
   );
   const bec = flagsOnly.capabilities.find(
-    (c) => c.name === "Receiver power (BEC)"
+    (c) => c.name === "BEC output"
   );
 
   assert.equal(signal.level, "partial");
