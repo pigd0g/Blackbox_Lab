@@ -36,7 +36,8 @@ const STATUS = {
   // A status the map has never heard of must read as unjudged,
   // never borrow "Looks good" — missing data limits the
   // conclusion, it does not upgrade it.
-  insufficient: { color: "#5d6d7e", soft: "#eef1f4", word: "Not evaluated" }
+  insufficient: { color: "#5d6d7e", soft: "#eef1f4", word: "Not evaluated" },
+  unavailable: { color: "#8a97a6", soft: "#f4f6f8", word: "Not logged" }
 };
 
 function escapeHtml(text) {
@@ -207,6 +208,11 @@ export function buildReportHtml({
         </div>
         <div class="verdict-headline">${escapeHtml(card.headline)}</div>
         <div class="verdict-detail">${escapeHtml(card.detail)}</div>
+        ${
+          card.gap && card.status !== "unavailable"
+            ? `<div class="verdict-detail" style="color:#7c8da1;"><b>Not measured:</b> ${escapeHtml(card.gapAction ?? card.gap)}</div>`
+            : ""
+        }
         ${
           card.action
             ? `<div class="verdict-action"><b>What to do:</b> ${escapeHtml(card.action)}</div>`
