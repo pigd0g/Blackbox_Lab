@@ -580,17 +580,23 @@ const { mkdirSync } = require("node:fs");
       exists: true,
       hidden: card.hidden,
       intro: document.getElementById("packIntro")?.textContent ?? "",
+      empty: card.classList.contains("pack-empty"),
       members: document.querySelectorAll("#packMembers .pack-member").length,
       prescriptions: document.querySelectorAll("#packPrescriptionList li").length
     };
   });
   if (!packState.exists) throw new Error("packCard missing from Home");
-  if (!packState.hidden && !packState.intro)
+  // The card is ALWAYS present once a log is open: with nothing
+  // earned it explains why, never disappears.
+  if (packState.hidden) throw new Error("packCard hidden after a load");
+  if (!packState.intro)
     throw new Error("packCard visible without an intro sentence");
+  if (packState.empty && !/No change is earned/.test(packState.intro))
+    throw new Error("empty pack card lacks its explanation: " + packState.intro);
   console.log(
     `change pack card ok: ${
-      packState.hidden
-        ? "hidden (nothing earned, nothing to confirm)"
+      packState.empty
+        ? "empty state explains itself — " + packState.intro.slice(0, 90) + "…"
         : `${packState.members} member(s), ${packState.prescriptions} prescription(s)`
     }`
   );

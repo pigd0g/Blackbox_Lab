@@ -2727,8 +2727,24 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     Boolean(pack.profiles && pack.queued.length > 0) ||
     Boolean(bannerText) ||
     dumpIsStale;
-  card.hidden = !show;
-  if (!show) return;
+
+  // Nothing earned, nothing queued, nothing to confirm: the card
+  // stays — and says why. A pilot who never sees the pack never
+  // learns it exists; a pilot who sees "nothing earned, here is
+  // what would earn it" learns how the doctrine thinks. Every
+  // reason below comes from the same evidence the engine weighed.
+  card.hidden = false;
+  card.classList.toggle("pack-empty", !show);
+  if (!show) {
+    el("packIntro").textContent = packEmptyStory(pack, context);
+    el("packMembers").innerHTML = "";
+    el("packHeadspeedNote").hidden = true;
+    el("packSnippetFold").hidden = true;
+    el("packRevertFold").hidden = true;
+    el("packQueuedFold").hidden = true;
+    el("packPrescriptions").hidden = true;
+    return;
+  }
 
   const flownProfileCount = pack.profiles?.flown?.length ?? 0;
 
@@ -2817,6 +2833,69 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       })
       .join("");
   }
+}
+
+// Why this flight earned no change — in the evidence's own terms.
+function packEmptyStory(pack, context) {
+  const reasons = [];
+
+  if (context.vibrationConcern) {
+    reasons.push(
+      "Tuning changes are held while a vibration finding is open — filters come before PIDs. Fix the mechanical source, fly again, and the tuning instruments are read fresh."
+    );
+  }
+
+  const behavior = context.responseBehavior ?? [];
+  const axisEvidence = context.axisEvidence ?? {};
+  const thinAxes = [...new Set(
+    behavior
+      .filter((check) => check.status === "Insufficient Data")
+      .map((check) => check.axis)
+  )].filter((axis) => (axisEvidence[axis] ?? 0) < 5);
+  const clearAxes = [...new Set(
+    behavior
+      .filter((check) => check.status === "Clear")
+      .map((check) => check.axis)
+  )].filter((axis) => !thinAxes.includes(axis));
+
+  if (behavior.length > 0) {
+    const parts = [];
+    if (clearAxes.length > 0) {
+      parts.push(
+        `${clearAxes.join(" and ")} response checks read Clear` +
+          (context.pidConfidence ? ` at ${context.pidConfidence} confidence` : "") +
+          "."
+      );
+    }
+    for (const axis of thinAxes) {
+      const count = axisEvidence[axis] ?? 0;
+      parts.push(
+        (count === 0
+          ? `${axis} flew no clean command at all — nothing to judge yet;`
+          : `${axis} flew only ${count} clean command${count === 1 ? "" : "s"} — too few to judge;`) +
+          ` 4–6 deliberate ${axis.toLowerCase()} stops and reversals at one headspeed would settle it.`
+      );
+    }
+    if (parts.length > 0) reasons.push(parts.join(" "));
+  } else if (context.pidStatus) {
+    reasons.push(`Tuning status: ${context.pidStatus}.`);
+  }
+
+  if (context.governorCapability && context.governorCapability !== "full") {
+    reasons.push(
+      "No usable governor target is logged, so the governor lane has nothing to weigh."
+    );
+  }
+
+  for (const blocked of pack.blocked ?? []) {
+    reasons.push(`Held back — ${blocked.finding}: ${blocked.blockedBy}.`);
+  }
+
+  return (
+    "No change is earned from this flight, and nothing is queued. " +
+    (reasons.length > 0 ? reasons.join(" ") + " " : "") +
+    "The pack fills itself in when a flight earns a change: one setting, one instrument, verified by the next log."
+  );
 }
 
 const copyPackText = (sourceId, button) => {
@@ -5409,7 +5488,17 @@ function analyzeFlight(flightIndex) {
         sourceHash: hashFlightLines(currentFlightLines),
         dateMs: resolveFlightDateMs(currentFlightLines, file.lastModified),
         isSample: file.name.startsWith("sample-"),
-        axisEvidence
+        axisEvidence,
+        // For the empty state: the evidence the engine weighed.
+        responseBehavior: pidAnalysis?.responseBehavior ?? [],
+        pidStatus: pidAnalysis?.overallStatus ?? null,
+        pidConfidence: pidAnalysis?.confidence?.level ?? null,
+        governorCapability: currentDataset?.labs?.governor?.capability ?? null,
+        vibrationConcern: Boolean(
+          currentDataset?.verdict?.cards?.some(
+            (card) => card.key === "vibration" && card.status === "attention"
+          )
+        )
       }
     );
   }

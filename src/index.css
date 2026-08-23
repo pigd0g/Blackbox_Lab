@@ -2105,6 +2105,14 @@ body.log-loaded .loaded-log-field .file-status {
   white-space: pre;
 }
 
+/* The change pack with nothing in it: present, quiet, explaining. */
+.pack-empty {
+  border-style: dashed;
+}
+.pack-empty h3 {
+  color: var(--ink-soft);
+}
+
 /* ---- ghost buttons: quiet actions inside cards ---- */
 .ghost {
   background: transparent;
