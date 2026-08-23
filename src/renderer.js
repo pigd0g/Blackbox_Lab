@@ -110,7 +110,7 @@ import {
   getCraftDump,
   saveCraftDump
 } from "./analysis/craftHistory.js";
-import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
+import { analyzeGovernorLab, describeBank } from "./analysis/governorLabAnalysis.js";
 import { ACADEMY_ENTRIES } from "./academy.js";
 import {
   detectGovernorEvents,
@@ -3907,19 +3907,7 @@ function renderGovernorTechnical(dataset) {
   for (const bank of gov.perBank ?? []) {
     rows.push({
       label: `Bank ${bank.targetRpm} rpm${bank.observed ? " (observed)" : ""}`,
-      value:
-        `avg ${bank.averageRpm} rpm · dip ${Math.round(bank.droopRpm)} rpm` +
-        (Number.isFinite(bank.droopPercent)
-          ? ` (${bank.droopPercent.toFixed(1)}%)`
-          : "") +
-        (Number.isFinite(bank.rmsError)
-          ? ` · RMS ${bank.rmsError.toFixed(1)} rpm`
-          : "") +
-        (Number.isFinite(bank.sampleCount)
-          ? ` · ${bank.sampleCount.toLocaleString()} samples${
-              bank.sampleCount < 2000 ? ", limited evidence" : ""
-            }`
-          : "")
+      value: describeBank(bank)
     });
   }
 

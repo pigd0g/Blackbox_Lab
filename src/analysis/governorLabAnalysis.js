@@ -83,6 +83,53 @@ export function computeGovernorScore({ droopPercent, rmsError }) {
 //   "full"        — target + headspeed: droop and score are real
 //   "partial"     — headspeed only: stability, never droop, no score
 //   "unavailable" — not enough telemetry to judge anything
+// Per-bank evidence, stated the way a pilot can audit it (#35):
+// how long the rotor actually flew on that bank, and how much the
+// bank's numbers can be trusted. The ladder mirrors the whole-
+// flight evidence confidence (5000 / 1500 samples); below the lower
+// rung a bank is LIMITED — shown, never ranked against a bank with
+// real flight time behind it.
+export function bankEvidence(sampleCount, sampleRate) {
+  const durationSeconds =
+    Number.isFinite(sampleRate) && sampleRate > 0
+      ? Math.round((sampleCount / sampleRate) * 10) / 10
+      : null;
+  const confidence =
+    sampleCount >= 5000
+      ? "High"
+      : sampleCount >= 1500
+        ? "Moderate"
+        : "Low";
+  return {
+    durationSeconds,
+    confidence,
+    limited: sampleCount < 1500
+  };
+}
+
+// One line per bank, shared by the Technical card and the exported
+// report so both carry the same evidence story.
+export function describeBank(bank) {
+  return (
+    `avg ${bank.averageRpm} rpm · dip ${Math.round(bank.droopRpm)} rpm` +
+    (Number.isFinite(bank.droopPercent)
+      ? ` (${bank.droopPercent.toFixed(1)}%)`
+      : "") +
+    (Number.isFinite(bank.rmsError)
+      ? ` · RMS ${bank.rmsError.toFixed(1)} rpm`
+      : "") +
+    (Number.isFinite(bank.durationSeconds)
+      ? ` · ${bank.durationSeconds} s of evidence`
+      : Number.isFinite(bank.sampleCount)
+        ? ` · ${bank.sampleCount.toLocaleString()} samples`
+        : "") +
+    (bank.confidence ? ` · ${bank.confidence} confidence` : "") +
+    (bank.limited
+      ? " — limited evidence: not compared against better-sampled banks until more time is flown at this headspeed"
+      : "")
+  );
+}
+
 export function analyzeGovernorLab({
   timeSeconds,
   headspeed,
@@ -503,7 +550,7 @@ export function analyzeGovernorLab({
         droopTimeSeconds: Number.isFinite(bank.droopTime)
           ? Math.round(bank.droopTime * 100) / 100
           : null,
-        sampleCount: bank.count
+        ...bankEvidence(bank.count, sampleRate)
       };
     });
 
@@ -622,13 +669,7 @@ export function analyzeGovernorLab({
       ...(multiBank
         ? reportableBanks.map((bank) => ({
             label: `Bank ${bank.targetRpm} rpm`,
-            value: `avg ${bank.averageRpm} rpm · dip ${Math.round(
-              bank.droopRpm
-            )} rpm${
-              Number.isFinite(bank.droopPercent)
-                ? ` (${bank.droopPercent.toFixed(1)}%)`
-                : ""
-            }`
+            value: describeBank(bank)
           }))
         : [
             {
@@ -876,7 +917,8 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
           ) / 10,
         droopTimeSeconds: Number.isFinite(bank.dipTime)
           ? Math.round(bank.dipTime * 100) / 100
-          : null
+          : null,
+        ...bankEvidence(bank.count, sampleRate)
       };
     });
 
@@ -938,6 +980,15 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
         label: "Average headspeed",
         value: `${Math.round(meanRpm)} rpm`
       },
+      // Observed banks ride along into the export on multi-bank
+      // flights (#35): the whole-flight average must not be the
+      // only governor number a report's recipient sees.
+      ...(perBank.length > 1
+        ? perBank.map((bank) => ({
+            label: `Bank ${bank.targetRpm} rpm (observed)`,
+            value: describeBank(bank)
+          }))
+        : []),
       {
         label: "Governor target",
         value: "not logged"
