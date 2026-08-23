@@ -1850,6 +1850,20 @@ const analyzeNearPeakActivity = (
   const threshold =
     maximumAbsolute * 0.98;
 
+  // The same pass also measures wider ceiling zones (95 % and 90 %
+  // of the term's own peak) — distributions for the saturation-zone
+  // calibration, not a verdict input. An I-term that rides at 93 %
+  // of its ceiling for long stretches never enters the 98 % zone;
+  // whether that is saturation is a fleet question, answered from
+  // these numbers, not hot-patched off one label.
+  const zoneThresholds = {
+    95: maximumAbsolute * 0.95,
+    90: maximumAbsolute * 0.9
+  };
+  const zoneCounts = { 95: 0, 90: 0 };
+  const zoneRuns = { 95: 0, 90: 0 };
+  const zoneLongest = { 95: 0, 90: 0 };
+
   let validSampleCount = 0;
   let nearPeakSampleCount = 0;
   let currentNearPeakRun = 0;
@@ -1861,13 +1875,15 @@ const analyzeNearPeakActivity = (
 
     if (!Number.isFinite(value)) {
       currentNearPeakRun = 0;
+      zoneRuns[95] = 0;
+      zoneRuns[90] = 0;
       continue;
     }
 
     validSampleCount += 1;
 
-    const isNearPeak =
-      Math.abs(value) >= threshold;
+    const magnitude = Math.abs(value);
+    const isNearPeak = magnitude >= threshold;
 
     if (isNearPeak) {
       nearPeakSampleCount += 1;
@@ -1879,6 +1895,16 @@ const analyzeNearPeakActivity = (
       }
     } else {
       currentNearPeakRun = 0;
+    }
+
+    for (const zone of [95, 90]) {
+      if (magnitude >= zoneThresholds[zone]) {
+        zoneCounts[zone] += 1;
+        zoneRuns[zone] += 1;
+        if (zoneRuns[zone] > zoneLongest[zone]) zoneLongest[zone] = zoneRuns[zone];
+      } else {
+        zoneRuns[zone] = 0;
+      }
     }
   }
 
@@ -1894,7 +1920,17 @@ const analyzeNearPeakActivity = (
         : null,
     longestNearPeakRun,
     longestNearPeakRunEndIndex,
-    threshold
+    threshold,
+    zones: {
+      95: {
+        percent: validSampleCount > 0 ? (zoneCounts[95] / validSampleCount) * 100 : null,
+        longestRun: zoneLongest[95]
+      },
+      90: {
+        percent: validSampleCount > 0 ? (zoneCounts[90] / validSampleCount) * 100 : null,
+        longestRun: zoneLongest[90]
+      }
+    }
   };
 };
 
@@ -2711,6 +2747,27 @@ const pidScoreExplanation = [
       isHighestTrackingErrorAxis:
         highestTrackingErrorAxis?.axis === axisResult.axis
     })
+  ),
+  // Per term, per axis: the near-peak shares and longest runs at the
+  // 98 % zone the bars use and at the wider 95 %/90 % zones — for
+  // the fleet calibration of the zone definition.
+  saturationZones: Object.fromEntries(
+    Object.entries(pidTermSaturationAssessment).map(([term, results]) => [
+      term,
+      results.map((termResult) => ({
+        axis: termResult.axis,
+        sampleCount: termResult.sampleCount ?? 0,
+        samplesPerSecond,
+        maximumAbsolute: termResult.threshold != null ? termResult.threshold / 0.98 : null,
+        share98: termResult.nearPeakPercent ?? null,
+        run98: termResult.longestNearPeakRun ?? 0,
+        share95: termResult.zones?.[95]?.percent ?? null,
+        run95: termResult.zones?.[95]?.longestRun ?? 0,
+        share90: termResult.zones?.[90]?.percent ?? null,
+        run90: termResult.zones?.[90]?.longestRun ?? 0,
+        status: termResult.status ?? null
+      }))
+    ])
   ),
   saturationReviewTermCount:
     saturationReviewTerms.length,
