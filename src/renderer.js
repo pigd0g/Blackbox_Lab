@@ -3915,6 +3915,12 @@ function showEventDetail(event) {
   // from there), the stretch that was scored as this command's
   // answer, and the peak found inside it. A marker outside its
   // window is unreadable; the window makes it evidence.
+  // The event's own window travels WITH the render (#71): card,
+  // description, chart and zoom are one act — no second handle that
+  // can go stale between them, no silent skip.
+  const window = eventChartWindow(event);
+  detail.dataset.eventId = event.id ?? "";
+
   const markers = [{ x: event.t, label: "command" }];
   const bands = [];
   const heldLater =
@@ -3950,19 +3956,10 @@ function showEventDetail(event) {
     {
       height: 240,
       markers,
-      bands
+      bands,
+      initialWindow: window
     }
   );
-
-  // Zoom only the chart that was just rendered for this event: a
-  // handle left over from an earlier selection (its canvas is no
-  // longer attached) must never receive this event's window.
-  const chart = chartElement.__blackboxLabChart;
-  const window = eventChartWindow(event);
-
-  if (chart && chart.root?.isConnected && window) {
-    chart.setScale("x", window);
-  }
 
   // The pilot's hands beside the machine's answer: replay the
   // event window once, then park at the command moment.
@@ -4234,7 +4231,8 @@ function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
     yLabel,
     height: options.height ?? 220,
     markers: options.markers ?? [],
-    bands: options.bands ?? []
+    bands: options.bands ?? [],
+    initialWindow: options.initialWindow ?? null
   });
 }
 
