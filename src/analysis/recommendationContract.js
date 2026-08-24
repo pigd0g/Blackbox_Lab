@@ -151,7 +151,18 @@ export function confirmsFromResponseBehavior(
   const confirms = [];
   const seenAxes = new Set();
 
-  for (const checkResult of responseBehavior ?? []) {
+  // An axis with several Review checks confirms its STRONGEST one
+  // (the same priority rule as everywhere: confidence, then event
+  // count) — so the pack's ask and the Technical lead name the same
+  // pattern (#62).
+  const ordered = [...(responseBehavior ?? [])].sort(
+    (a, b) =>
+      (PRIORITY_CONFIDENCE_RANK[a.confidence] ?? 4) -
+        (PRIORITY_CONFIDENCE_RANK[b.confidence] ?? 4) ||
+      (b.eventCount ?? 0) - (a.eventCount ?? 0)
+  );
+
+  for (const checkResult of ordered) {
     if (checkResult.status !== "Review") continue;
     if (coveredAxes.has(checkResult.axis)) continue;
     if (seenAxes.has(checkResult.axis)) continue;
@@ -196,6 +207,54 @@ export function confirmsFromResponseBehavior(
   }
 
   return confirms;
+}
+
+// ------------------------------------------------------
+// ONE priority rule for "what comes next" (#62)
+// ------------------------------------------------------
+//
+// Every surface that names a next action — Home's Try This First,
+// the Change Pack, the PID Lab's What To Try Next, the Technical
+// PID recommendations and the exported report — ranks by THIS rule
+// and no other, so the same flight never presents different
+// "primary" findings on different pages:
+//
+//   1. an EARNED change (a concrete setting step) before any
+//      evidence request,
+//   2. higher evidence confidence first,
+//   3. more supporting events first,
+//   4. otherwise the order the engine emitted (stable).
+const PRIORITY_CONFIDENCE_RANK = {
+  High: 0,
+  Medium: 1,
+  Low: 2,
+  Insufficient: 3
+};
+
+export function priorityRank(entry) {
+  return [
+    entry?.level === "earned" || entry?.suggestion ? 0 : 1,
+    PRIORITY_CONFIDENCE_RANK[entry?.confidence] ?? 4,
+    -(Number.isFinite(entry?.evidenceCount)
+      ? entry.evidenceCount
+      : Number.isInteger(entry?.eventCount)
+        ? entry.eventCount
+        : 0)
+  ];
+}
+
+export function rankRecommendations(entries) {
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const ra = priorityRank(a.entry);
+      const rb = priorityRank(b.entry);
+      for (let i = 0; i < ra.length; i += 1) {
+        if (ra[i] !== rb[i]) return ra[i] - rb[i];
+      }
+      return a.index - b.index;
+    })
+    .map(({ entry }) => entry);
 }
 
 // The training-data view of a verified pack member (D5):

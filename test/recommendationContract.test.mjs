@@ -143,3 +143,41 @@ test("every finalized entry carries an evidence array — renderers map without 
   const bare = finalizeRecommendation({ id: "x", lab: "pid", axis: "Roll" });
   assert.ok(Array.isArray(bare.evidence));
 });
+
+// ---- #62: ONE priority rule for every surface ----
+
+import { rankRecommendations, priorityRank } from "../src/analysis/recommendationContract.js";
+
+test("the strongest Review leads: High/9 ringing outranks Medium/4 bounce-back on every surface (#62)", () => {
+  const behavior = [
+    { axis: "Pitch", check: "bounce-back", status: "Review", confidence: "Medium", eventCount: 4, evidenceRows: [], evidence: "4 valid events" },
+    { axis: "Roll", check: "ringing", status: "Review", confidence: "High", eventCount: 9, evidenceRows: [], evidence: "9 valid events" }
+  ];
+  const confirms = confirmsFromResponseBehavior(behavior, []);
+  assert.equal(confirms[0].axis, "Roll");
+  assert.match(confirms[0].finding, /ringing/);
+  assert.equal(confirms[1].axis, "Pitch");
+
+  const ranked = rankRecommendations([...confirms].reverse());
+  assert.equal(ranked[0].axis, "Roll", "ranking is order-independent");
+});
+
+test("an axis with several Reviews confirms its strongest check, not the first-listed (#62)", () => {
+  const behavior = [
+    { axis: "Roll", check: "bounce-back", status: "Review", confidence: "Medium", eventCount: 4, evidenceRows: [] },
+    { axis: "Roll", check: "ringing", status: "Review", confidence: "High", eventCount: 9, evidenceRows: [] }
+  ];
+  const confirms = confirmsFromResponseBehavior(behavior, []);
+  assert.equal(confirms.length, 1);
+  assert.match(confirms[0].finding, /ringing/);
+});
+
+test("an earned change outranks any evidence request; confidence and events break ties", () => {
+  const entries = [
+    finalizeRecommendation({ id: "b", lab: "pid", axis: "Pitch", suggestion: null, gatedReason: "confirm", confidence: "High", evidenceCount: 9 }),
+    finalizeRecommendation({ id: "a", lab: "pid", axis: "Roll", suggestion: { family: "roll_d_gain", direction: "up", magnitudeClass: "small step" }, confidence: "Medium", evidenceCount: 3 })
+  ];
+  const ranked = rankRecommendations(entries);
+  assert.equal(ranked[0].id, "a", "earned first");
+  assert.deepEqual(priorityRank(entries[0])[0], 1);
+});

@@ -4022,11 +4022,27 @@ highestTrackingErrorAxis
     const trackingLeadAxis = trackingLead
       ? trackingLeadPattern.exec(trackingLead)[1]
       : null;
+    // The SAME priority rule every other surface uses (#62): higher
+    // confidence first, more supporting events first — so the axis
+    // Technical leads with is the axis Home and the pack selected.
+    const confidenceRank = {
+      High: 0,
+      Medium: 1,
+      Low: 2,
+      Insufficient: 3
+    };
+    const rankedReviews = [...responseReviews].sort(
+      (a, b) =>
+        (confidenceRank[a.confidence] ?? 4) -
+          (confidenceRank[b.confidence] ?? 4) ||
+        (b.eventCount ?? 0) - (a.eventCount ?? 0)
+    );
+
     const reviewAxes = [
-      ...new Set(responseReviews.map((checkResult) => checkResult.axis))
+      ...new Set(rankedReviews.map((checkResult) => checkResult.axis))
     ];
 
-    const leadLines = responseReviews.map((checkResult) => {
+    const leadLines = rankedReviews.map((checkResult) => {
       const maneuver = {
         Roll: "Repeat 4-6 deliberate roll inputs with clean stops and reversals at the same headspeed",
         Pitch: "Repeat 4-6 deliberate pitch inputs with clean stops and reversals at the same headspeed",

@@ -33,7 +33,8 @@ import { commandEvidenceConfidence } from "./pidAnalysis.js";
 import { estimateSampleRate } from "./flightPhase.js";
 import {
   finalizeRecommendations,
-  confirmsFromResponseBehavior
+  confirmsFromResponseBehavior,
+  rankRecommendations
 } from "./recommendationContract.js";
 
 export const RECOMMENDATION_GATE = {
@@ -211,6 +212,12 @@ export function buildRecommendations({
   nextSteps.pid.push(
     ...confirmsFromResponseBehavior(responseBehavior, nextSteps.pid)
   );
+
+  // One priority rule for every surface (#62): the first entry here
+  // IS the primary next action — Home, the pack, the PID Lab card,
+  // the Technical recommendations and the report all read this order.
+  nextSteps.pid = rankRecommendations(nextSteps.pid);
+  nextSteps.governor = rankRecommendations(nextSteps.governor);
 
   return nextSteps;
 }
