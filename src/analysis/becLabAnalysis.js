@@ -147,6 +147,30 @@ export function analyzeBecLab({
   const referenceVolts = toVolts(medianRaw, scale);
   const minimumVolts = toVolts(airborneRaw[0], scale);
   const maximumVolts = toVolts(airborneRaw[airborneRaw.length - 1], scale);
+
+  // The chart draws RAW samples; every number above is read from the
+  // smoothed (sustained) view of the same airborne window. The two
+  // must be auditable against each other: the briefest raw sample is
+  // computed here and STATED whenever it undercuts the sustained
+  // minimum, so "never below X" can never contradict the chart (#64).
+  let rawAirborneMinimum = Number.POSITIVE_INFINITY;
+  for (const index of airborne) {
+    const value = Number(vbec[index]);
+    if (Number.isFinite(value) && value < rawAirborneMinimum) {
+      rawAirborneMinimum = value;
+    }
+  }
+  const rawMinimumVolts = Number.isFinite(rawAirborneMinimum)
+    ? toVolts(rawAirborneMinimum, scale)
+    : null;
+  const smoothingMs = Math.round(
+    (smoothingSamples / Math.max(sampleRate, 1)) * 1000
+  );
+  const briefDipNote =
+    Number.isFinite(rawMinimumVolts) &&
+    minimumVolts - rawMinimumVolts > 0.015
+      ? ` The chart's briefest raw samples reach ${rawMinimumVolts.toFixed(2)} V; readings are judged on a ${smoothingMs} ms sustained view, and none of those brief samples lasted long enough to count as a dip.`
+      : "";
   const spreadVolts =
     toVolts(quantileRaw(0.95), scale) - toVolts(quantileRaw(0.05), scale);
 
@@ -361,7 +385,7 @@ export function analyzeBecLab({
         ? `Receiver voltage dipped ${dipCount} times this flight. Each recovered, but repetition is the pattern that matters with power. The events below name each moment; dips that return under similar load usually trace to connectors, wiring or servo load.`
         : dipCount > 0
           ? `${dipCount === 1 ? "One brief" : `${dipCount} brief`} voltage dip${dipCount === 1 ? "" : "s"}, recovered normally: ${quietDips === 0 ? "in step with servo demand, which is a power system doing its job under load." : "worth a glance at the event context below."} Nothing here suggests an unstable supply.`
-          : `BEC output held steady across the analyzed in-flight window: ${referenceVolts.toFixed(2)} V typical, never below ${minimumVolts.toFixed(2)} V, total variation ${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V. This is what a healthy BEC looks like. (Startup and shutdown samples sit outside this window: the chart may show lower readings there.)`;
+          : `BEC output held steady across the analyzed in-flight window: ${referenceVolts.toFixed(2)} V typical, lowest sustained reading ${minimumVolts.toFixed(2)} V, total variation ${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V. This is what a healthy BEC looks like.${briefDipNote} (Startup and shutdown samples sit outside this window: the chart may show lower readings there.)`;
 
   const metrics = [
     {
@@ -370,8 +394,16 @@ export function analyzeBecLab({
     },
     {
       label: "Range in flight",
-      value: `${minimumVolts.toFixed(2)} – ${maximumVolts.toFixed(2)} V`
+      value: `${minimumVolts.toFixed(2)} – ${maximumVolts.toFixed(2)} V (sustained)`
     },
+    ...(Number.isFinite(rawMinimumVolts) && minimumVolts - rawMinimumVolts > 0.015
+      ? [
+          {
+            label: "Briefest raw sample",
+            value: `${rawMinimumVolts.toFixed(2)} V — too short to count as a dip`
+          }
+        ]
+      : []),
     {
       label: "Stability (5th–95th percentile spread)",
       value: `${(spreadVolts >= 0 ? spreadVolts : 0).toFixed(2)} V`
@@ -415,6 +447,7 @@ export function analyzeBecLab({
     },
     referenceVolts,
     minimumVolts,
+    rawMinimumVolts,
     maximumVolts,
     brownoutTerritory,
     implausibleBrownout,

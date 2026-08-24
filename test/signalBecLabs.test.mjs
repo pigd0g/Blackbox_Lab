@@ -231,3 +231,31 @@ test("no overlap means no correlation claim", () => {
 
   assert.equal(correlateSignalAndPower(signal, bec), null);
 });
+
+// #64: the verdict's minimum is the SUSTAINED view; the chart draws
+// raw samples. When a brief raw sample undercuts it, the lab says so
+// — the two surfaces stay auditable against each other.
+test("a brief raw undercut is stated beside the sustained minimum (#64)", () => {
+  const sampleRate = 100;
+  const seconds = 60;
+  const n = sampleRate * seconds;
+  const timeSeconds = Array.from({ length: n }, (_, i) => i / sampleRate);
+  // steady 6.11 V (raw scale 611), with 2-sample raw spikes to 6.00 V
+  // at 20 s and 40 s — visible on a chart, too brief to sustain.
+  const vbec = Array.from({ length: n }, (_, i) => {
+    const t = i / sampleRate;
+    if ((t > 20 && t < 20.02) || (t > 40 && t < 40.02)) return 600;
+    return 611;
+  });
+  const headspeed = Array.from({ length: n }, () => 1800);
+  const lab = analyzeBecLab({ timeSeconds, vbec, headspeed, servos: [] });
+  assert.ok(lab, "lab ran");
+  assert.ok(lab.rawMinimumVolts <= 6.0, `raw min ${lab.rawMinimumVolts}`);
+  assert.ok(lab.minimumVolts > lab.rawMinimumVolts, "sustained min above raw min");
+  assert.match(lab.story, /lowest sustained reading/);
+  assert.match(lab.story, /briefest raw samples reach 6\.00 V/);
+  assert.match(lab.story, /too short|lasted long enough/);
+  const rawMetric = lab.metrics.find((m) => m.label === "Briefest raw sample");
+  assert.ok(rawMetric, "raw-sample metric present");
+  assert.match(rawMetric.value, /6\.00 V/);
+});
