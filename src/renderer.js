@@ -3371,19 +3371,8 @@ const FIRST_STEP_LAB_ORDER = [
 let currentFirstSteps = { entries: [], gapEntries: [] };
 
 function renderHomeFirstSteps(entries, gapEntries = []) {
-  currentFirstSteps = { entries: [...entries], gapEntries: [...gapEntries] };
-
   const card = el("firstStepsCard");
   const list = el("firstStepsList");
-
-  if (!card || !list) return;
-
-  if (!entries.length && !gapEntries.length) {
-    card.hidden = true;
-    return;
-  }
-
-  card.hidden = false;
 
   const rank = { attention: 0, watch: 1 };
 
@@ -3395,6 +3384,24 @@ function renderHomeFirstSteps(entries, gapEntries = []) {
         FIRST_STEP_LAB_ORDER.indexOf(a.screen) -
           FIRST_STEP_LAB_ORDER.indexOf(b.screen)
     );
+
+  // The exported report renders THIS list, already in Home's order
+  // — severity first, mechanics before tune within a severity. The
+  // report must never re-derive the order (#66: it used to show
+  // Tuning ahead of the blocking Vibration finding).
+  currentFirstSteps = {
+    entries: [...actionable],
+    gapEntries: [...gapEntries]
+  };
+
+  if (!card || !list) return;
+
+  if (!entries.length && !gapEntries.length) {
+    card.hidden = true;
+    return;
+  }
+
+  card.hidden = false;
 
   list.innerHTML = "";
 

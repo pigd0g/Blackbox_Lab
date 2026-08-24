@@ -180,6 +180,9 @@ function buildFirstStepsHtml(firstSteps) {
     return "";
   }
 
+  // Home hands these over already sorted (severity, then the
+  // mechanics-before-tune lab order) — render verbatim, never
+  // re-derive the order.
   const actionable = rows.filter(
     (entry) => entry.tone === "attention" || entry.tone === "watch"
   );

@@ -167,3 +167,20 @@ test("not-logged verdict cards and capability gaps travel with the verdict", () 
   assert.match(html, /BEC voltage not logged/);
   assert.match(html, /not logged/);
 });
+
+test("What To Do First keeps the order it was handed — the blocking finding stays first (#66)", () => {
+  const html = buildReportHtml({
+    ...BASE,
+    firstSteps: {
+      entries: [
+        { screen: "filter", title: "Vibration", text: "Balance and track the main blades.", tone: "attention" },
+        { screen: "pid", title: "Tuning", text: "Filters come before PIDs.", tone: "watch" }
+      ],
+      gapEntries: []
+    }
+  });
+  const vibration = html.indexOf("Balance and track the main blades");
+  const tuning = html.indexOf("Filters come before PIDs");
+  assert.ok(vibration >= 0 && tuning >= 0);
+  assert.ok(vibration < tuning, "vibration must precede tuning in the report");
+});
