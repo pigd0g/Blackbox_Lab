@@ -6329,10 +6329,32 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     setupDiff: diffSetups(beforeSide.setup, afterSide.setup)
   });
 
+  // The same flight on both sides is a SELF-CHECK, not a comparison
+  // (#38): say so above the verdict, and reframe the summary — a
+  // difference here would be measurement noise, never a tuning
+  // change. Identity = same start timestamp AND same duration; the
+  // file name may differ (a copy) without changing the flight.
+  const sameFlight =
+    Boolean(currentSetup?.startIso) &&
+    currentSetup?.startIso === comparisonSetup?.startIso &&
+    Math.abs(
+      (currentDataset?.timeSeconds?.at(-1) ?? 0) -
+        (comparisonDataset?.timeSeconds?.at(-1) ?? 0)
+    ) < 0.05;
+
+  if (sameFlight) {
+    result.summary =
+      "Self-check: the same flight is loaded on both sides. Every measure should read unchanged; a difference here would be measurement noise, not a tuning change. Load a different flight as the After side for a real comparison.";
+  }
+
   compareResultCard.hidden = false;
   const pairText =
     `Before: ${beforeSide.name} · After: ${afterSide.name}` +
-    (compareSwapped ? " (ordered by the logs' own start times)" : "");
+    (sameFlight
+      ? " — SAME FLIGHT ON BOTH SIDES (self-check)"
+      : compareSwapped
+        ? " (ordered by the logs' own start times)"
+        : "");
   if (comparePairInfo) {
     comparePairInfo.textContent = pairText;
   }
@@ -6409,18 +6431,24 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
 
   for (const row of result.rows) {
     const rowElement = document.createElement("div");
-    rowElement.className = `compare-row direction-${row.direction}`;
+    // A gated row shows its numbers as an observation: the footing
+    // was too weak for "improved"/"got worse" to be a judgment (#38).
+    rowElement.className = `compare-row direction-${
+      row.gated ? "observed" : row.direction
+    }`;
     rowElement.innerHTML = `
       <div class="compare-row-top">
         <span class="compare-row-title">${row.title}</span>
         <span class="compare-row-delta">${
-          row.direction === "better"
-            ? "improved"
-            : row.direction === "worse"
-              ? "got worse"
-              : row.direction === "unknown"
-                ? "not comparable"
-                : "unchanged"
+          row.gated
+            ? "observed — not comparable enough to judge"
+            : row.direction === "better"
+              ? "improved"
+              : row.direction === "worse"
+                ? "got worse"
+                : row.direction === "unknown"
+                  ? "not comparable"
+                  : "unchanged"
         }</span>
       </div>
       <div class="compare-row-sentence">${row.sentence}</div>
@@ -6429,8 +6457,11 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     compareRows.appendChild(rowElement);
   }
 
-  const beforeSpectrum = strongestSpectrumOf(currentDataset);
-  const afterSpectrum = strongestSpectrumOf(comparisonDataset);
+  // The chart follows the SAME sides the verdict just used — after a
+  // Swap, "Before" is the before side everywhere, this legend
+  // included (#38).
+  const beforeSpectrum = strongestSpectrumOf(beforeSide.dataset);
+  const afterSpectrum = strongestSpectrumOf(afterSide.dataset);
 
   if (beforeSpectrum && afterSpectrum) {
     compareChartCard.hidden = false;
@@ -6447,12 +6478,12 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     }
     renderSpectrumChart(chartCompareSpectrum, [
       {
-        label: `Before (${summaryFileName.textContent})`,
+        label: `Before (${beforeSide.name})`,
         spectrum: beforeSpectrum,
         color: CHART_COLORS[1]
       },
       {
-        label: `After (${comparisonName})`,
+        label: `After (${afterSide.name})`,
         spectrum: afterSpectrum,
         color: CHART_COLORS[0]
       }

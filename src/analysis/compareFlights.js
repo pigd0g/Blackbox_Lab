@@ -739,6 +739,18 @@ export function compareFlights(baseline, comparison, options = {}) {
                 ? "Mixed result: some things improved, others got worse. Trade-off territory."
                 : `The measurements moved in both directions, and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
 
+  // Better/worse is a JUDGMENT, and a weak footing cannot carry one
+  // (#38): when the pair is not causal, directional rows keep their
+  // numbers but are displayed as observations — the badge, the color
+  // and the report all inherit this flag.
+  if (aircraft.same && !comparability.causal) {
+    for (const row of rows) {
+      if (row.direction === "better" || row.direction === "worse") {
+        row.gated = true;
+      }
+    }
+  }
+
   // The verdict names the confidence it carries, and what lowered it,
   // in the same sentence the pilot reads first.
   const confidenceSentence =
