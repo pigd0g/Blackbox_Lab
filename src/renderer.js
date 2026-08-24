@@ -604,7 +604,11 @@ function fieldSeries(dataset, fieldEntry) {
   if (!values.some((value) => Number.isFinite(value))) return [];
   return [
     {
-      label: column,
+      // The catalog's own alias, exactly — no downstream label layer
+      // may re-guess it (servo[3] stays "Servo 4 output", never
+      // "Tail servo", in Replay).
+      label: fieldEntry.alias ?? fieldEntry.name,
+      exactLabel: true,
       values: decimate(values),
       color: CHART_COLORS[0]
     }
@@ -616,34 +620,15 @@ let replayFieldSearchQuery = "";
 function renderReplayAddMenu(addSelect, layout, fieldGroups) {
   addSelect.innerHTML = "";
 
-  const presetGroup = document.createElement("optgroup");
-  presetGroup.label = "Presets";
+  // Presets only: the dropdown stays a handful of curated views.
+  // Every logged field lives in the searchable browser below — one
+  // path for fields, not a hundred-entry menu (#63).
   for (const preset of REPLAY_GRAPH_PRESETS) {
     if (layout.includes(preset.key)) continue;
     const option = document.createElement("option");
     option.value = preset.key;
     option.textContent = preset.label;
-    presetGroup.appendChild(option);
-  }
-  if (presetGroup.children.length > 0 && !replayFieldSearchQuery.trim()) {
-    addSelect.appendChild(presetGroup);
-  }
-
-  for (const group of fieldGroups) {
-    const optgroup = document.createElement("optgroup");
-    optgroup.label = group.label;
-    for (const entry of group.fields) {
-      if (layout.includes(entry.key)) continue;
-      if (!fieldMatchesSearch(entry, replayFieldSearchQuery)) continue;
-      const option = document.createElement("option");
-      option.value = entry.key;
-      option.textContent = entry.alias
-        ? `${entry.alias}  (${entry.name})`
-        : entry.name;
-      if (group.note) option.title = group.note;
-      optgroup.appendChild(option);
-    }
-    if (optgroup.children.length > 0) addSelect.appendChild(optgroup);
+    addSelect.appendChild(option);
   }
 
   const empty = addSelect.options.length === 0;

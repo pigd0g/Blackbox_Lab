@@ -116,6 +116,9 @@ export function friendlySeriesLabel(name) {
   return name;
 }
 
+// Whole-name aliases are kept in ONE wording with the Replay field
+// catalog (src/ui/replayFields.js) — a field must never wear two
+// different names on two pages (#63).
 const WHOLE_NAME_LABELS = {
   headspeed: "Headspeed",
   govTarget: "Governor target",
@@ -126,17 +129,17 @@ const WHOLE_NAME_LABELS = {
   govP: "Governor P",
   govI: "Governor I",
   govD: "Governor D",
-  govF: "Governor FF",
+  govF: "Governor feedforward",
   govSum: "Governor sum",
   EscV: "ESC voltage",
   EscI: "ESC current",
   EscThr: "ESC throttle",
-  EscRPM: "Motor RPM (ESC)",
-  EscCap: "Consumed capacity (ESC)",
+  EscRPM: "ESC motor RPM",
+  EscCap: "ESC consumed capacity",
   EscPwm: "ESC PWM",
-  Tesc: "ESC temp",
-  Tesc2: "ESC temp 2",
-  Tmcu: "MCU temp",
+  Tesc: "ESC temperature",
+  Tesc2: "ESC 2 temperature",
+  Tmcu: "MCU temperature",
   rssi: "Link strength (RSSI)",
   Vbec: "BEC voltage",
   BecV: "BEC voltage (ESC-reported)",
@@ -288,7 +291,10 @@ export function renderTimeSeriesChart(element, options) {
   ];
 
   const seriesMeta = series.map((entry, index) => ({
-    label: friendlyLabel(entry.label),
+    // A series that states its label exactly keeps it: the Replay
+    // field charts must not have a friendly-label layer guess a
+    // servo's function back into the legend (#63).
+    label: entry.exactLabel ? entry.label : friendlyLabel(entry.label),
     color: entry.color ?? CHART_COLORS[index % CHART_COLORS.length]
   }));
 

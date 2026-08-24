@@ -249,21 +249,21 @@ const { mkdirSync } = require("node:fs");
   // header fields by group beside the presets; adding a raw field
   // stacks it as its own synchronized chart with the original field
   // name in the heading; the search box narrows the menu.
+  // The dropdown holds presets ONLY; fields live in the browser.
   const fieldMenu = await window.evaluate(() => {
     const select = document.getElementById("replayAddGraph");
-    const groups = [...select.querySelectorAll("optgroup")].map((g) => g.label);
-    const option = [...select.options].find((o) => o.value === "field:axisP[0]");
-    return { groups, hasAxisP: Boolean(option), text: option?.textContent ?? null };
+    return {
+      fieldOptions: [...select.options].filter((o) => o.value.startsWith("field:")).length,
+      presetOptions: select.options.length
+    };
   });
-  if (!fieldMenu.groups.includes("Presets") || !fieldMenu.groups.includes("PID terms") || !fieldMenu.hasAxisP) {
-    throw new Error("replay field menu incomplete: " + JSON.stringify(fieldMenu));
-  }
-  if (!/axisP\[0\]/.test(fieldMenu.text)) {
-    throw new Error("field option hides the original name: " + fieldMenu.text);
+  if (fieldMenu.fieldOptions !== 0 || fieldMenu.presetOptions < 3) {
+    throw new Error("replay dropdown should be presets-only: " + JSON.stringify(fieldMenu));
   }
   const rowsBefore = stackState.rows;
-  await window.selectOption("#replayAddGraph", "field:axisP[0]");
-  await window.click("#replayAddButton");
+  await window.click("#replayFieldBrowserSummary");
+  await window.waitForTimeout(200);
+  await window.click('.replay-field-chip[data-field-key="field:axisP[0]"]');
   await window.waitForTimeout(400);
   const fieldRow = await window.evaluate(() => {
     const rows = [...document.querySelectorAll(".replay-graph-row")];
@@ -271,12 +271,40 @@ const { mkdirSync } = require("node:fs");
     return {
       rows: rows.length,
       heading: last?.querySelector(".replay-graph-head span")?.textContent ?? "",
-      canvas: Boolean(last?.querySelector("canvas"))
+      canvas: Boolean(last?.querySelector("canvas")),
+      legend: last?.querySelector(".u-legend")?.textContent ?? ""
     };
   });
   if (fieldRow.rows !== rowsBefore + 1 || !fieldRow.canvas || !/axisP\[0\]/.test(fieldRow.heading)) {
     throw new Error("raw field did not stack: " + JSON.stringify(fieldRow));
   }
+  // Legends never re-guess a field's identity: a servo chip stacks
+  // as "Servo N output", not "Tail servo".
+  await window.fill("#replayFieldSearch", "servo");
+  await window.waitForTimeout(200);
+  const servoChip = await window.evaluate(() =>
+    [...document.querySelectorAll("#replayFieldGroups .replay-field-chip")]
+      .map((c) => c.dataset.fieldKey)
+      .find((k) => /servo\[3\]/.test(k)) ?? null
+  );
+  if (servoChip) {
+    await window.click(`.replay-field-chip[data-field-key="${servoChip.replace(/([\[\]])/g, "\\$1")}"]`);
+    await window.waitForTimeout(400);
+    const servoLegend = await window.evaluate(() => {
+      const rows = [...document.querySelectorAll(".replay-graph-row")];
+      return rows[rows.length - 1]?.querySelector(".u-legend")?.textContent ?? "";
+    });
+    if (/Tail servo/.test(servoLegend) || !/Servo 4 output/.test(servoLegend)) {
+      throw new Error("replay servo legend guessed a function: " + servoLegend);
+    }
+    await window.evaluate(() => {
+      const layout = JSON.parse(localStorage.getItem("blackboxLabReplayLayout") ?? "[]");
+      localStorage.setItem("blackboxLabReplayLayout", JSON.stringify(layout.filter((k) => k !== "field:servo[3]")));
+    });
+    console.log("replay servo legend exact ok");
+  }
+  await window.fill("#replayFieldSearch", "");
+  await window.waitForTimeout(200);
   // The field browser: visible, grouped, one click per field.
   const browserState = await window.evaluate(() => {
     const browser = document.getElementById("replayFieldBrowser");
@@ -291,17 +319,14 @@ const { mkdirSync } = require("node:fs");
   if (!browserState.visible || browserState.groups < 3 || browserState.chips < 10 || browserState.axisPDisabled !== true) {
     throw new Error("replay field browser missing or wrong: " + JSON.stringify(browserState));
   }
-  await window.click("#replayFieldBrowserSummary");
-  await window.waitForTimeout(200);
+  // (browser is already open from the chip clicks above)
   await window.fill("#replayFieldSearch", "yaw gyro");
   await window.waitForTimeout(200);
   const searched = await window.evaluate(() => ({
-    options: [...document.getElementById("replayAddGraph").options].map((o) => o.value),
     chips: [...document.querySelectorAll("#replayFieldGroups .replay-field-chip")].map((c) => c.dataset.fieldKey)
   }));
-  if (!searched.options.includes("field:gyroADC[2]") || searched.options.some((v) => v === "field:axisP[1]") ||
-      !searched.chips.includes("field:gyroADC[2]") || searched.chips.includes("field:axisP[1]")) {
-    throw new Error("field search did not narrow menu + browser: " + JSON.stringify(searched));
+  if (!searched.chips.includes("field:gyroADC[2]") || searched.chips.includes("field:axisP[1]")) {
+    throw new Error("field search did not narrow the browser: " + JSON.stringify(searched));
   }
   await window.click('.replay-field-chip[data-field-key="field:gyroADC[2]"]');
   await window.waitForTimeout(400);
