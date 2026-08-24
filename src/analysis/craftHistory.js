@@ -233,7 +233,14 @@ export function buildHistoryEntry({
       dataset.precomp?.governor?.riseDroopPercent ?? null,
     precompDropOvershootPercent:
       dataset.precomp?.governor?.dropOvershootPercent ?? null,
-    tailKickRatio: dataset.precomp?.tail?.kickRatio ?? null
+    tailKickRatio: dataset.precomp?.tail?.kickRatio ?? null,
+    // What this flight ASKED of the machine (#65): the Health Record
+    // can only call a change across flights a trend when the flights
+    // asked comparable things. Older entries lack these keys and
+    // read as "not recorded".
+    demand: dataset.pidConfidence?.demand ?? null,
+    evidence: dataset.pidConfidence?.level ?? null,
+    headspeedRpm: dataset.labs?.governor?.averageHeadspeed ?? null
   };
 }
 
@@ -293,6 +300,60 @@ const normalizeFileName = (fileName = "") =>
     .replace(/\.bbl\.csv$/, "")
     .replace(/\.bbl$/, "")
     .replace(/\.csv$/, "");
+
+// Are the stored flights comparable enough for their line to mean a
+// trend (#65)? Judged on what each flight asked of the machine:
+// demand level, headspeed, evidence strength, duration. Differences
+// are NAMED; unknowns (older entries) are stated, never assumed.
+export function assessHistoryComparability(entries) {
+  const rows = entries ?? [];
+  if (rows.length < 2) return { level: "unknown", notes: [] };
+
+  const notes = [];
+  let level = "comparable";
+  const demote = (to) => {
+    if (to === "mixed") level = "mixed";
+    else if (level === "comparable") level = "partial";
+  };
+
+  const known = (key) => rows.map((r) => r[key]).filter((v) => v !== null && v !== undefined);
+
+  const demands = [...new Set(known("demand"))];
+  if (demands.length > 1) {
+    notes.push("flight demand differs (gentle and real-input flights are mixed)");
+    demote("mixed");
+  }
+
+  const speeds = known("headspeedRpm").filter(Number.isFinite);
+  if (speeds.length >= 2) {
+    const min = Math.min(...speeds);
+    const max = Math.max(...speeds);
+    if (min > 0 && min / max < 0.95) {
+      notes.push(`headspeed differs across flights (${Math.round(min)}–${Math.round(max)} rpm)`);
+      demote("mixed");
+    }
+  }
+
+  const thin = known("evidence").filter((v) => v === "Low" || v === "Insufficient").length;
+  if (thin > 0) {
+    notes.push(`${thin} flight${thin === 1 ? " is" : "s are"} thin on clean-command evidence`);
+    demote("partial");
+  }
+
+  const durations = known("durationSeconds").filter((v) => Number.isFinite(v) && v > 0);
+  if (durations.length >= 2 && Math.min(...durations) / Math.max(...durations) < 0.4) {
+    notes.push("flight lengths are very unbalanced");
+    demote("partial");
+  }
+
+  const unrecorded = rows.filter((r) => r.demand === undefined || r.demand === null).length;
+  if (unrecorded > 0) {
+    notes.push(`${unrecorded} older flight${unrecorded === 1 ? "" : "s"} carry no comparability data`);
+    demote("partial");
+  }
+
+  return { level, notes };
+}
 
 export function recordFlight(storage, craftName, entry) {
   const history = loadHistory(storage);

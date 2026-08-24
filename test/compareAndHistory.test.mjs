@@ -381,3 +381,30 @@ test("rotor trend speaks droop only when every flight had a target", async () =>
   assert.match(rotorTrendWording([]).title, /Stability/);
   assert.doesNotMatch(rotorTrendWording([headspeedOnly]).adviceUp, /losing headroom/i);
 });
+
+// ---- #65: two flights are two facts, not a trend ----
+import { assessHistoryComparability } from "../src/analysis/craftHistory.js";
+
+test("mixed demand or headspeed across stored flights is named, and reads as mixed (#65)", () => {
+  const mixed = assessHistoryComparability([
+    { demand: "gentle", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { demand: "normal", headspeedRpm: 2400, evidence: "High", durationSeconds: 310 }
+  ]);
+  assert.equal(mixed.level, "mixed");
+  assert.ok(mixed.notes.some((n) => /flight demand differs/.test(n)));
+  assert.ok(mixed.notes.some((n) => /headspeed differs/.test(n)));
+
+  const clean = assessHistoryComparability([
+    { demand: "normal", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { demand: "normal", headspeedRpm: 2110, evidence: "Medium", durationSeconds: 290 }
+  ]);
+  assert.equal(clean.level, "comparable");
+  assert.deepEqual(clean.notes, []);
+
+  const legacy = assessHistoryComparability([
+    { demand: "normal", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { pidScore: 90 }
+  ]);
+  assert.equal(legacy.level, "partial");
+  assert.ok(legacy.notes.some((n) => /no comparability data/.test(n)));
+});

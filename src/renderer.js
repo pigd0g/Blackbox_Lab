@@ -106,6 +106,7 @@ import {
 } from "./ui/stickDisplay.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
+  assessHistoryComparability,
   loadHistory,
   recordFlight,
   buildHistoryEntry,
@@ -6638,13 +6639,42 @@ function refreshHistoryScreen(selectedCraft) {
 
     renderTimeSeriesChart(element, {
       timeSeconds: flightNumbers,
-      series: [{ label: yLabel, values }],
+      series: [
+        {
+          label: yLabel,
+          values,
+          // Below the trend threshold the dots stand alone: a
+          // connecting line between two flights already reads as a
+          // direction, and two flights cannot carry one (#65).
+          pointsOnly: entries.length < 4
+        }
+      ],
       yLabel,
       xLabel: "Flight #",
       height: 200,
       formatX: (value) => `Flight ${Math.round(value)}`
     });
   };
+
+  // What the stored flights ASKED of the machine (#65): the trend
+  // wording follows the comparability of the flights it connects.
+  const historyComparability = assessHistoryComparability(entries);
+  if (historyComparability.notes.length > 0) {
+    historyNote.textContent +=
+      historyComparability.level === "mixed"
+        ? ` These flights asked different things of the machine — ${historyComparability.notes.join("; ")}. Read the charts below as context, not as a trend.`
+        : ` Comparability caveats: ${historyComparability.notes.join("; ")}.`;
+  }
+
+  const vibrationTrendHint = el("trendVibrationHint");
+  if (vibrationTrendHint) {
+    vibrationTrendHint.textContent =
+      entries.length < 4
+        ? `Single flights, shown as dots for reference: a direction becomes meaningful after 4 comparable flights (${entries.length} so far).`
+        : historyComparability.level === "mixed"
+          ? "A rising line means something mechanical is changing — but these flights differ (see the note above), so read it as context."
+          : "A rising line means something mechanical is changing.";
+  }
 
   historyTrendCard.hidden = false;
   trendChart(chartTrendVibration, "vibrationPeak", "vibration peak");
@@ -6656,7 +6686,14 @@ function refreshHistoryScreen(selectedCraft) {
   const trendDroopTitle = el("trendDroopTitle");
   const trendDroopHint = el("trendDroopHint");
   if (trendDroopTitle) trendDroopTitle.textContent = rotorWording.title;
-  if (trendDroopHint) trendDroopHint.textContent = rotorWording.hint;
+  if (trendDroopHint) {
+    trendDroopHint.textContent =
+      entries.length < 4
+        ? `Single flights, shown as dots for reference: a direction becomes meaningful after 4 comparable flights (${entries.length} so far).`
+        : historyComparability.level === "mixed"
+          ? `${rotorWording.hint} These flights differ (see the note above): read it as context.`
+          : rotorWording.hint;
+  }
   trendChart(
     chartTrendDroop,
     "droopRpm",

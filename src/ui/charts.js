@@ -423,10 +423,15 @@ export function renderTimeSeriesChart(element, options) {
             value == null ? "--" : value.toFixed(2)
         },
         ...series.map((entry, index) => ({
-          label: friendlyLabel(entry.label),
+          label: entry.exactLabel ? entry.label : friendlyLabel(entry.label),
           stroke: entry.color ?? CHART_COLORS[index % CHART_COLORS.length],
           width: 1.4,
-          points: { show: false },
+          // pointsOnly: single measurements shown as dots with NO
+          // connecting line — two flights are two facts, not a trend
+          // (#65). The connecting stroke is what implies causality.
+          ...(entry.pointsOnly
+            ? { paths: () => null, points: { show: true, size: 8 } }
+            : { points: { show: false } }),
           value: (self, value) =>
             value == null ? "--" : String(Math.round(value * 100) / 100)
         }))
