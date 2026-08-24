@@ -280,7 +280,8 @@ export function renderTimeSeriesChart(element, options) {
     markers = [],
     bands = [],
     linkGroup = null,
-    formatX = null
+    formatX = null,
+    initialWindow = null
   } = options;
 
   destroyExistingChart(element);
@@ -441,6 +442,18 @@ export function renderTimeSeriesChart(element, options) {
     element
   );
 
+  // The initial x-window is applied HERE, on the chart just built —
+  // never by a caller through a stored handle that can go stale and
+  // fail silently, leaving a full-flight view under an event card
+  // that names one moment (#71).
+  if (
+    initialWindow &&
+    Number.isFinite(initialWindow.min) &&
+    Number.isFinite(initialWindow.max) &&
+    initialWindow.max > initialWindow.min
+  ) {
+    chart.setScale("x", { min: initialWindow.min, max: initialWindow.max });
+  }
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
   buildChartFooter(element, chart, seriesMeta, { withStats: true, formatX });

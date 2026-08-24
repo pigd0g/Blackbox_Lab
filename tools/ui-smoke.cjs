@@ -494,21 +494,34 @@ const { mkdirSync } = require("node:fs");
       explain: document
         .getElementById("pidEventExplain")
         .textContent.slice(0, 40),
-      chartScaled: Boolean(
-        chart && chart.scales.x.min != null && chart.scales.x.max > chart.scales.x.min
+      // "Scaled" means WINDOWED: tight around the selected event,
+      // not merely any finite range — a full-flight view passed the
+      // old check while #71 stared at it.
+      xMin: chart?.scales?.x?.min ?? null,
+      xMax: chart?.scales?.x?.max ?? null,
+      flightEnd: chart?.data?.[0]?.[chart.data[0].length - 1] ?? null,
+      eventT: Number(
+        (document.getElementById("pidEventExplain").textContent.match(/At ([\d.]+) s/) ?? [])[1]
       )
     };
   });
+  const windowSpan = detailState.xMax - detailState.xMin;
+  const chartWindowed =
+    Number.isFinite(windowSpan) &&
+    windowSpan > 0 &&
+    windowSpan < Math.max(20, detailState.flightEnd * 0.5) &&
+    detailState.eventT >= detailState.xMin &&
+    detailState.eventT <= detailState.xMax;
   if (
     detailState.screen !== "pid" ||
     !detailState.detailVisible ||
-    !detailState.chartScaled
+    !chartWindowed
   ) {
     throw new Error(
       "in-place event detail misbehaved: " + JSON.stringify(detailState)
     );
   }
-  console.log("event detail ok: in place, chart scaled —", detailState.explain);
+  console.log(`event detail ok: windowed ${detailState.xMin.toFixed(1)}-${detailState.xMax.toFixed(1)} s of ${detailState.flightEnd.toFixed(0)} s —`, detailState.explain);
 
   // The event's stick inset replays the pilot's hands; give the
   // one-shot replay a moment, then require a painted canvas.
