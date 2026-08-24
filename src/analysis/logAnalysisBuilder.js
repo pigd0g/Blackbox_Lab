@@ -17,6 +17,7 @@ import {
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
 import { buildProfileSegments } from "./profileSegments.js";
+import { isPlausibleFlightDate } from "./metadataReader.js";
 
 // Does this log carry a governor target, or only rotor speed?
 // Models on an ESC or external governor log the second without the
@@ -878,7 +879,11 @@ const governorLabAnalysis = analyzeGovernorLab({
       Firmware: ${firmware}<br>
       Firmware Revision: ${firmwareRevision}<br>
       Board: ${board}<br>
-      Log Start: ${logStart}<br>
+      Log Start: ${
+        isPlausibleFlightDate(Date.parse(logStart))
+          ? logStart
+          : "Not recorded (the flight controller had no clock at boot; the file date stands in where it is trustworthy)"
+      }<br>
       Telemetry Header Row: ${
         telemetryHeaderIndex >= 0
           ? telemetryHeaderIndex

@@ -35,14 +35,16 @@ export function decodedFlightToCsvLines(flight) {
     lines.push(`"${key}","${value}"`);
   }
 
-  // The analysis pipeline reads a lowercase "firmware" key.
+  // The analysis pipeline reads a lowercase "firmware" key. The
+  // revision header usually already starts with the product name
+  // ("Rotorflight 4.6.0 …") — prepending the type again printed
+  // "Rotorflight Rotorflight 4.6.0" on every summary (#68).
   if (flight.sysConfig.firmwareType) {
-    const firmware = [
-      flight.sysConfig.firmwareType,
-      flight.sysConfig.firmwareRevision
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const type = String(flight.sysConfig.firmwareType);
+    const revision = String(flight.sysConfig.firmwareRevision ?? "");
+    const firmware = revision.startsWith(type)
+      ? revision
+      : [type, revision].filter(Boolean).join(" ");
 
     lines.push(`"firmware","${firmware}"`);
   }

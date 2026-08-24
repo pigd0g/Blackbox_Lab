@@ -62,10 +62,14 @@ export function sameFlight(a, b) {
     return false;
   }
 
-  // The source bytes are the flight: equal hashes are one recording
-  // whatever it is named or dated; differing hashes are two.
-  if (a.sourceHash && b.sourceHash) {
-    return a.sourceHash === b.sourceHash;
+  // Equal hashes are one recording, whatever it is named or dated.
+  // Differing hashes are NOT proof of two flights (#70): the hash is
+  // taken over the adapter's generated lines, and a newer build that
+  // adds a column or fixes a header changes the hash of the very
+  // same flight. Identity falls through to the decode-stable shape
+  // (duration + sample count + date) instead of vetoing on it.
+  if (a.sourceHash && b.sourceHash && a.sourceHash === b.sourceHash) {
+    return true;
   }
 
   const durationA = Number(a.durationSeconds);

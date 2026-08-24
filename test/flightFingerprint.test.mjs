@@ -296,7 +296,7 @@ test("a re-analysis that learned the flight's date folds into one row", () => {
   assert.ok(isFinite(collapsed[0].flightDateMs));
 });
 
-test("the source hash is the authority in both directions", () => {
+test("the source hash confirms identity but never vetoes it (#70)", () => {
   const { sameFlight } = craftHistoryModule;
 
   // Same bytes: same flight, whatever else disagrees.
@@ -317,7 +317,32 @@ test("the source hash is the authority in both directions", () => {
     )
   );
 
-  // Different bytes: two flights, however alike their shape.
+  // Differing hashes do NOT veto: the hash covers the adapter's
+  // GENERATED lines, and a newer build changes them for the same
+  // recording (the field case: one OMP flight, two builds, two
+  // hashes, two rows). Same decode-stable shape = one flight.
+  assert.ok(
+    sameFlight(
+      {
+        fileName: "OMP_M4_380_20260816_185606.bbl",
+        sourceHash: "fnv1a-old-build",
+        durationSeconds: 371.9,
+        sampleCount: 185950,
+        flightDateMs: Date.UTC(2026, 7, 16)
+      },
+      {
+        fileName: "OMP_M4_380_20260816_185606.bbl",
+        sourceHash: "fnv1a-new-build",
+        durationSeconds: 371.9,
+        sampleCount: 185950,
+        flightDateMs: Date.UTC(2026, 7, 16)
+      }
+    ),
+    "same shape, differing generated-line hashes: one flight"
+  );
+
+  // A genuinely different recording still reads as two flights —
+  // the shape disagrees.
   assert.ok(
     !sameFlight(
       {
@@ -328,11 +353,12 @@ test("the source hash is the authority in both directions", () => {
       },
       {
         fileName: "a.bbl",
-        sourceHash: "fnv1a-def-100",
-        durationSeconds: 102.9,
-        sampleCount: 100
+        sourceHash: "fnv1a-def-200",
+        durationSeconds: 240.4,
+        sampleCount: 480
       }
-    )
+    ),
+    "different shape: two flights"
   );
 });
 
