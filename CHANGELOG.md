@@ -1,3 +1,58 @@
+## v1.6.7 — Faster, Clearer, Auditable
+
+Everything between v1.3.7 and here, in one entry — a field-feedback
+release series: every item below was shaped, retested and signed off
+by the community test round.
+
+### The big ones
+
+- **Change Packs** — each flight ends with concrete setting changes
+  (setting, direction, reason, verifying metric on the next log), or
+  the evidence flight that would earn one. Previous packs are checked
+  against the next log automatically.
+- **Replay: all logged fields** — a searchable, grouped field browser
+  stacks any recorded channel (PID terms, mixer, servos, governor,
+  ESC telemetry, debug) on the synchronized timeline; chart legends
+  keep exact field names.
+- **PDF reports** — one compact A4 file: verdict, What To Do First in
+  priority order, the Change Pack, like-for-like data, every lab and
+  the charts, worded exactly as the app.
+- **Compare Flights: like-for-like check** — flight demand, stick
+  demand per axis, maneuver coverage, headspeed, collective work,
+  length and evidence quality compared before any verdict, with the
+  verdict confidence stated; non-comparable pairs read as
+  observations, the same flight twice reads as a self-check.
+- **Roughly 4× faster log loading**, with results verified identical.
+
+### Honesty and evidence
+
+- Under-sampled headspeed banks are never rated "best" or "cleanest";
+  per-bank evidence (seconds, confidence) is shown everywhere.
+- One priority rule across Home, the pack, the labs, Technical and
+  the report: the same flight names the same primary finding on
+  every surface.
+- Missing telemetry appears as greyed "not logged" cards plus a
+  "Not measured on this flight" list naming the sensor or setting.
+- BEC verdicts speak in sustained readings and disclose brief raw
+  dips; a tracking score read through an open vibration finding, or
+  from thin evidence, is never called crisp.
+- Health Record: no trend lines under four flights, comparability
+  differences named, one flight is one row whatever build analyzed it.
+- Flight Events: one stick movement is one event; the selected
+  event's card, description and windowed chart always show the same
+  moment, with the measured-response band drawn on the chart.
+
+### Simpler by default
+
+- Lab pages open with the verdict, Try This First and the key chart;
+  tables and raw numbers live behind one "Show the advanced data"
+  button per page, and folds open themselves when they hold a
+  finding.
+- The Diagnosis Academy: six practice flights with a known planted
+  problem, reachable before and after loading a log.
+- Sidebar and report credit: a passion project by Daniel Sink and
+  Vincent Offenbeck.
+
 ## v1.3.0 — Signal Lab, BEC Lab, and the Confirm Round
 
 Built from the field's own verification pass of v1.2.0: six
