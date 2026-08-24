@@ -1313,22 +1313,50 @@ if (profileSpecificFilterAnalysis.length === 1) {
   );
 
   if (cleanProfiles.length > 0) {
-    const winner = cleanProfiles.reduce((best, current) =>
-      (current.mechanicalFinding.averageFiltered ?? Infinity) <
-      (best.mechanicalFinding.averageFiltered ?? Infinity)
-        ? current
-        : best
+    // A placing is a claim the evidence must carry (#47's doctrine,
+    // applied to this lab too): a profile whose confidence is Low —
+    // or whose sample count is dwarfed 20:1 by the best-measured
+    // bank — cannot hold the comparative title, however clean its
+    // few samples looked. It reads "Clean — limited evidence", and
+    // the title goes to the best-SUPPORTED clean profile. When every
+    // clean profile is thin, nobody is crowned.
+    const largestSampleCount = profileSpecificFilterAnalysis.reduce(
+      (max, profile) =>
+        Math.max(max, profile.mechanicalFinding?.sampleCount ?? 0),
+      0
     );
+    const carriesEvidence = (profile) =>
+      profile.mechanicalFinding?.confidence !== "Low" &&
+      (profile.mechanicalFinding?.sampleCount ?? 0) * 20 >=
+        largestSampleCount;
+
+    const eligible = cleanProfiles.filter(carriesEvidence);
+    const winner =
+      eligible.length > 0
+        ? eligible.reduce((best, current) =>
+            (current.mechanicalFinding.averageFiltered ?? Infinity) <
+            (best.mechanicalFinding.averageFiltered ?? Infinity)
+              ? current
+              : best
+          )
+        : null;
 
     for (const profile of cleanProfiles) {
       if (profile === winner) continue;
-      profile.mechanicalFinding.status = "Clean";
+      const thin = !carriesEvidence(profile);
+      profile.mechanicalFinding.status = thin
+        ? "Clean — limited evidence"
+        : "Clean";
       if (typeof profile.mechanicalFinding.summary === "string") {
-        profile.mechanicalFinding.summary =
-          profile.mechanicalFinding.summary.replace(
-            "is rated Cleanest Profile",
-            "is rated Clean"
-          );
+        profile.mechanicalFinding.summary = thin
+          ? profile.mechanicalFinding.summary.replace(
+              /is rated Cleanest Profile with \w+ confidence from [\d,]+ samples/,
+              `reads clean, but only ${profile.mechanicalFinding.sampleCount} samples were measured at this headspeed — too few to compare against the better-measured banks. Collect more flight time there`
+            )
+          : profile.mechanicalFinding.summary.replace(
+              "is rated Cleanest Profile",
+              "is rated Clean"
+            );
       }
     }
   }
