@@ -1,10 +1,11 @@
 // ======================================================
 // BLACKBOX LAB — CONTRIBUTION CONFIG
 //
-// The community ingest endpoint. Leave EMPTY to keep the
-// whole sharing feature dormant (no ask, no uploads) —
-// fill it in once the endpoint exists. Setup guide:
-// Documentation/ingest-endpoint-setup.md
+// The community ingest endpoint (a Cloudflare Worker).
+// Leave EMPTY to keep the whole sharing feature dormant
+// (no ask, no uploads) — fill it in once the endpoint
+// exists. What a contribution contains, exactly:
+// Documentation/CONTRIBUTED-DATA.md
 // ======================================================
 
 export const CONTRIBUTE_ENDPOINT =

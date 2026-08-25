@@ -202,7 +202,16 @@ export function buildContribution(flight, fileType, categories, appVersion) {
 // 1.1 = 1.0 + the events array (the flight's stick-command
 // events, verdicts included) — schema generations stay
 // distinguishable forever.
-export const CONTRIBUTION_SCHEMA_VERSION = "1.1";
+// 1.2 = 1.1 + governor excursion events, their summary, and the
+// precomp balance reads — derived mechanical metrics only, same
+// allowlist-on-write discipline as everything else here.
+//
+// Upload paths are contrib/<schema>/<content-hash>/ — the SAME
+// flight contributed under two schema generations therefore lands
+// at two keys. That is accepted: the content hash inside each
+// payload is version-independent, and corpus tooling deduplicates
+// by flight fingerprint, never by path.
+export const CONTRIBUTION_SCHEMA_VERSION = "1.2";
 
 // SHA-256 over the decoded main-frame values of THIS
 // flight — the dedup key. Hashed per flight, never per
@@ -378,7 +387,67 @@ export async function buildContributionV1(
           total: extras.flightEvents.summary.total,
           clean: extras.flightEvents.summary.clean,
           overshoot: extras.flightEvents.summary.overshoot,
-          slow: extras.flightEvents.summary.slow
+          slow: extras.flightEvents.summary.slow,
+          lagging: extras.flightEvents.summary.lagging ?? 0,
+          oscillation: extras.flightEvents.summary.oscillation ?? 0
+        }
+      : null,
+
+    // Schema 1.2: governor excursion events. Same discipline as
+    // the command events above — capped, allowlisted on write,
+    // in-app helper fields (event id, stories) stay local. The
+    // fleet's 90th percentile is 7 events per flight; 100 is a
+    // pathological-log ceiling, not a target.
+    governor_events: (extras.governorEvents?.events ?? [])
+      .slice(0, 100)
+      .map((event) => ({
+        t: event.t,
+        t_end: event.tEnd,
+        kind: event.kind,
+        cause: event.cause,
+        hunting: event.hunting === true,
+        duration_ms: event.durationMs,
+        peak_error_percent: event.peakErrorPercent,
+        peak_error_rpm: event.peakErrorRpm,
+        target_rpm: event.targetRpm,
+        output_max_percent: event.outputMaxPercent
+      })),
+    governor_events_summary: extras.governorEvents?.summary
+      ? {
+          total:
+            extras.governorEvents.summary.totalFound ??
+            extras.governorEvents.summary.total,
+          under: extras.governorEvents.summary.under,
+          over: extras.governorEvents.summary.over,
+          power_limit: extras.governorEvents.summary.powerLimit,
+          hunting: extras.governorEvents.summary.hunting
+        }
+      : null,
+
+    // Schema 1.2: the precomp balance reads — numbers and
+    // verdicts only, never the pilot-facing stories.
+    precomp: extras.precomp
+      ? {
+          governor: extras.precomp.governor
+            ? {
+                balance: extras.precomp.governor.balance,
+                rise_droop_percent:
+                  extras.precomp.governor.riseDroopPercent,
+                drop_overshoot_percent:
+                  extras.precomp.governor.dropOvershootPercent,
+                rise_count: extras.precomp.governor.riseCount,
+                drop_count: extras.precomp.governor.dropCount
+              }
+            : null,
+          tail: extras.precomp.tail
+            ? {
+                balance: extras.precomp.tail.balance,
+                kick_ratio: extras.precomp.tail.kickRatio,
+                transient_error: extras.precomp.tail.transientError,
+                consistency: extras.precomp.tail.consistency,
+                kick_count: extras.precomp.tail.kickCount
+              }
+            : null
         }
       : null
   };

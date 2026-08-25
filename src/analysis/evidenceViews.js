@@ -88,7 +88,7 @@ export function windowStats(values, startIndex, endIndex) {
 // log has it, output percent otherwise.
 export function findHighestLoadEvents(
   { timeSeconds, load },
-  { windowSeconds = 2, count = 3 } = {}
+  { windowSeconds = 2, count = 3, qualifiedMask = null } = {}
 ) {
   if (
     !Array.isArray(timeSeconds) ||
@@ -103,6 +103,14 @@ export function findHighestLoadEvents(
     timeSeconds[timeSeconds.length - 1] - timeSeconds[0];
 
   if (!(duration > windowSeconds)) {
+    return [];
+  }
+
+  // A load series that never leaves zero (a fitted-but-dead current
+  // sensor) has no highest moment: every window ties at 0 and the
+  // "winners" would just be the earliest windows — spool-up. No
+  // usable signal, no events.
+  if (!load.some((value) => Number.isFinite(value) && value > 0)) {
     return [];
   }
 
@@ -140,6 +148,19 @@ export function findHighestLoadEvents(
       continue;
     }
 
+    // Startup, spool-up and shutdown are not flight load: when the
+    // caller supplies an in-flight mask, a window must be flown
+    // almost entirely airborne to compete.
+    if (qualifiedMask) {
+      let airborne = 0;
+      for (let i = start; i < end; i += 1) {
+        if (qualifiedMask[i]) airborne += 1;
+      }
+      if (airborne < windowSamples * 0.8) {
+        continue;
+      }
+    }
+
     candidates.push({
       startIndex: start,
       endIndex: end - 1,
@@ -151,6 +172,28 @@ export function findHighestLoadEvents(
   candidates.sort(
     (first, second) => second.averageLoad - first.averageLoad
   );
+
+  // A load series that does not vary has no highest moment: when
+  // every window ties (a constant-throttle DIRECT flight logs the
+  // same output for the whole flight), ranking the ties just crowns
+  // the earliest windows. "No distinguished load event" is the
+  // honest answer, and the card's empty state says exactly that.
+  // The bar is deliberately at dead-flat only — a governor working
+  // under 3D load varies by single percent and those moments are
+  // real.
+  if (candidates.length >= 5) {
+    const bestAverage = candidates[0].averageLoad;
+    const medianAverage =
+      candidates[Math.floor(candidates.length / 2)].averageLoad;
+
+    if (
+      Number.isFinite(bestAverage) &&
+      Number.isFinite(medianAverage) &&
+      bestAverage <= medianAverage * 1.005
+    ) {
+      return [];
+    }
+  }
 
   const events = [];
 
@@ -259,7 +302,7 @@ export function explainLoadEvent({
     return {
       cause: "headroom-limit",
       sentence:
-        "Output sat at maximum for a meaningful part of this event — the power system had nothing left to give here. Consider more headroom (lower headspeed, fresher pack, or gearing) before blaming the tune."
+        "Output sat at maximum for a meaningful part of this event: the power system had nothing left to give here. Consider more headroom (lower headspeed, a fresher pack, or gearing/Kv matched to your target headspeed) before blaming the tune."
     };
   }
 
@@ -272,7 +315,7 @@ export function explainLoadEvent({
       cause: "collective-load",
       sentence: sagged
         ? "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver. The battery sag was a response to the load, not necessarily evidence of a weak pack."
-        : "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver — the power system followed the demand with voltage holding up well."
+        : "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver: the power system followed the demand with voltage holding up well."
     };
   }
 
@@ -280,14 +323,14 @@ export function explainLoadEvent({
     return {
       cause: "battery-sag",
       sentence:
-        "Pack voltage sagged noticeably during this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it."
+        "Pack voltage fell well below its level from just before this event, so the governor needed extra throttle to deliver the same power. The demand is real, but the battery is amplifying it: the table shows the exact before → during voltages."
     };
   }
 
   return {
     cause: "normal-load",
     sentence:
-      "High output with headroom to spare and steady voltage — this looks like a genuinely demanding moment handled as designed."
+      "High output with headroom to spare and steady voltage: this looks like a genuinely demanding moment handled as designed."
   };
 }
 

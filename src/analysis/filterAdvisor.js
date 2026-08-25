@@ -12,7 +12,7 @@
 //      remove (unfiltered vs filtered gyro)
 //   4. recommend, in plain language, what to change
 //
-// It never touches settings — it explains and points.
+// It never silently changes anything — it explains and points.
 //
 // ======================================================
 
@@ -120,7 +120,7 @@ function classifySource(peakHz, headspeedRpm) {
 
   if (ratio >= 6.5) {
     return {
-      source: `high frequency (~${ratio.toFixed(1)}× rotor speed) — motor/bearing territory`,
+      source: `high frequency (~${ratio.toFixed(1)}× rotor speed): motor/bearing territory`,
       rpmLinked: ratio < 15
     };
   }
@@ -128,7 +128,7 @@ function classifySource(peakHz, headspeedRpm) {
   return { source: "not rotor-linked (electrical or frame resonance)", rpmLinked: false };
 }
 
-function magnitudeNear(spectrum, hz) {
+export function magnitudeNear(spectrum, hz) {
   const { frequencies, magnitudes } = spectrum;
   let best = 0;
 
@@ -155,9 +155,10 @@ export function adviseFilters({
   if (peaks.length === 0) {
     return {
       story:
-        "No significant vibration peaks found in the UNFILTERED gyro — the raw signal is about as clean as they come. Whatever your filters are set to, they are not being challenged.",
+        "No significant vibration peaks found in the UNFILTERED gyro: the raw signal is about as clean as they come. Whatever your filters are set to, they are not being challenged.",
       rows: [],
-      recommendations: []
+      recommendations: [],
+      filteredSpectrum: filteredSpectrum ?? null
     };
   }
 
@@ -219,7 +220,7 @@ if (structuralRows.length > 0) {
 
   recommendations.push({
     priority: "first",
-    text: `Your ${strongest.hz} Hz peak (magnitude ${strongest.magnitude}) sits below ~20 Hz — inside the band the flight controller itself works in. No gyro filter can remove it without softening control response, so do not add a notch or lower a cutoff for this one. It is a mechanical story: frame and boom stiffness, landing-gear or canopy resonance, mounting and damping are the places to look.`
+    text: `Your ${strongest.hz} Hz peak (magnitude ${strongest.magnitude}) sits below ~20 Hz, inside the band the flight controller itself works in. No gyro filter can remove it without softening control response, so do not add a notch or lower a cutoff for this one. It is a mechanical story: frame and boom stiffness, landing-gear or canopy resonance, mounting and damping are the places to look.`
   });
 }
 
@@ -239,8 +240,8 @@ if (isStrongProminentPeak && !biggest.belowFilterBand) {
   recommendations.push({
     priority: biggestIsManaged ? "gentle" : "first",
     text: biggestIsManaged
-      ? `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is prominent in the raw gyro, but the filters are containing it: ${biggest.reductionPercent}% removed, ${biggest.filteredMagnitude} remaining. Vibration is present and being managed successfully — no change recommended. The physical vibration still exists in the airframe, so keep an eye on this peak's trend across flights and review mechanically if it grows.`
-      : `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first — blade balance and tracking, head damping, bearings, shafts, and mounting — then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
+      ? `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is prominent in the raw gyro, but the filters are containing it: ${biggest.reductionPercent}% removed, ${biggest.filteredMagnitude} remaining. Vibration is present and being managed successfully. No change recommended. The physical vibration still exists in the airframe, so keep an eye on this peak's trend across flights and review mechanically if it grows.`
+      : `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first: blade balance and tracking, head damping, bearings, shafts, and mounting. Then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
   });
 }
 
@@ -261,7 +262,7 @@ const rpmLinkedRows = rows.filter(
 
     recommendations.push({
       priority: "filters",
-      text: `These peaks follow rotor speed: ${list}. That is exactly what Rotorflight's RPM filter (harmonic notches keyed to headspeed) is for — it tracks the peaks as headspeed changes, where a static notch would need to be wide (and slow) to keep covering them. Check that the RPM filter is enabled and covers these harmonics in the Configurator's filter page.`
+      text: `These peaks follow rotor speed: ${list}. That is exactly what Rotorflight's RPM filter (harmonic notches keyed to headspeed) is for. It tracks the peaks as headspeed changes, where a static notch would need to be wide (and slow) to keep covering them. Check that the RPM filter is enabled and covers these harmonics in the Configurator's filter page.`
     });
   }
 
@@ -314,7 +315,7 @@ if (
   if (recommendations.length === 0) {
     recommendations.push({
       priority: "gentle",
-      text: "Peaks are modest and the filters handle them — no changes suggested. Keep this log as your baseline for future comparisons."
+      text: "Peaks are modest and the filters handle them: no changes suggested. Keep this log as your baseline for future comparisons."
     });
   }
 
@@ -322,5 +323,10 @@ if (
   ? `Found ${rows.length} vibration peak(s). The table shows each peak's likely source and how much that exact frequency peak is reduced after filtering. This does not mean the helicopter's overall vibration is reduced by the same percentage.`
   : `Found ${rows.length} vibration peak(s) in the unfiltered gyro. This log doesn't include the filtered gyro trace, so filter effectiveness cannot be measured.`;
 
-  return { story, rows, recommendations };
+  return {
+    story,
+    rows,
+    recommendations,
+    filteredSpectrum: filteredSpectrum ?? null
+  };
 }

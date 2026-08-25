@@ -14,6 +14,7 @@ import {
   detectStableFlightPhase,
   detectInFlightSamples
 } from "./flightPhase.js";
+import { chooseVoltageSource } from "./batteryLabAnalysis.js";
 
 function statsOf(values) {
   if (!Array.isArray(values) || values.length === 0) {
@@ -87,15 +88,18 @@ export function analyzeEscLab({
   headspeed,
   governorTarget
 }) {
+    // A current channel must CARRY data to be a source: an all-zero
+    // EscI falling back to an all-zero Ibat still measures nothing,
+    // and nothing must never be displayed as 0.0 A (#34).
     const selectedAmperage =
     hasUsablePositiveData(escCurrent)
       ? escCurrent
-      : amperage;
+      : hasUsablePositiveData(amperage)
+        ? amperage
+        : null;
 
-  const selectedVoltage =
-    hasUsablePositiveData(escVoltage)
-      ? escVoltage
-      : vbat;
+  const { selected: selectedVoltage, note: voltageSourceNote } =
+    chooseVoltageSource(escVoltage, vbat);
 
   const selectedOutput =
     hasUsablePositiveData(escThrottle)
@@ -384,10 +388,10 @@ export function analyzeEscLab({
             1
           )}%, leaving ${headroomPercent.toFixed(
             1
-          )}% average reserve. Review the highest-load events before changing gearing or headspeed.`
+          )}% average reserve. The highest-load events below show where that reserve went and what was asked in those moments.`
         : `ESC-reported throttle sat at or above 97% for ${flightSaturationPercent.toFixed(
             1
-          )}% of the flight. During those moments the governor had no remaining output authority — lower the headspeed, take some pitch out, or step up the power system.`;
+          )}% of the flight. During those moments the governor had no remaining output authority: the system was giving everything it had, and the flight asked for more than the gearing and headspeed can deliver.`;
 
   const metrics = [
     {
@@ -418,6 +422,13 @@ export function analyzeEscLab({
         1
       )} A (est.)`
     });
+  } else {
+    // The same capability state Home and Log Quality report: a fitted
+    // sensor with no usable data reads as unavailable, never as zero.
+    metrics.push({
+      label: "Stable current avg / peak",
+      value: "Unavailable — no usable current telemetry"
+    });
   }
 
   if (Number.isFinite(peakPower)) {
@@ -429,7 +440,9 @@ export function analyzeEscLab({
 
   return {
     status,
-    story,
+    story: voltageSourceNote
+      ? `${story} ${voltageSourceNote}`
+      : story,
     metrics,
 
     averageOutputPercent:

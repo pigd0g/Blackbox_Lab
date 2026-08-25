@@ -5,8 +5,15 @@ import {
 } from "./mathHelpers.js";
 
 import {
-  detectStableFlightPhase
+  detectStableFlightPhase,
+  buildRollingMean
 } from "./flightPhase.js";
+
+import {
+  analyzeCrossAxisIDump,
+  crossAxisFindingLines,
+  crossAxisPairStatus
+} from "./crossAxisAnalysis.js";
 function findMatchingColumns(columns, searchTerms) {
   if (!Array.isArray(columns)) {
     return [];
@@ -166,6 +173,10 @@ export const TRACKING_SCORE_TUNING = {
 
   MAX_TRACKING_DEDUCTION: 50,
 
+  // Command-balance deduction scales with severity: an axis just
+  // past its bar loses the minimum, an axis pinned at extreme
+  // I-dominance loses the full per-axis amount.
+  BALANCE_DEDUCTION_MIN: 4,
   BALANCE_DEDUCTION_PER_AXIS: 10,
   MAX_BALANCE_DEDUCTION: 25,
 
@@ -177,9 +188,77 @@ export const TRACKING_SCORE_TUNING = {
   REAL_WORLD_MARGIN: 2
 };
 
+// ------------------------------------------------------
+// Command-balance bars, per axis
+//
+// Re-anchored 2026-08-21 on the aligned measurement (the
+// command windows read the correct sample rows since the
+// saturation-scope fix), calibrated across the whole
+// contributed fleet. On true data the fleet's NORMAL state
+// is I-doing-most-of-the-work during commands (median
+// I-share: Roll 82 %, Pitch 65 %, Yaw 69 % — with per-axis
+// spreads too different for one global bar). Bars sit at
+// each axis's ~p85 I-share and ~p15 support, so the flag
+// marks the genuine tail — roughly one flight in ten
+// fleet-wide, where the previous global bars, set before
+// the alignment fix, read closer to four in ten.
+// ------------------------------------------------------
+// ------------------------------------------------------
+// Response-behavior Review bars, per axis
+//
+// Re-anchored 2026-08-21 on the whole contributed fleet:
+// the original bars sat at or below each check's fleet
+// MEDIAN (roll bounce-back's bar flagged nine qualifying
+// flights in ten), so a Review described normal flying.
+// Each bar now sits at its axis's ~p85, so a Review names
+// the genuine tail. Settling is judged in MILLISECONDS —
+// the old fixed sample count meant a different bar at
+// every logging rate. A field-expert-labeled case anchors
+// the acceptance of this round.
+// ------------------------------------------------------
+// PID-term saturation Review bars, per axis — fleet-calibrated
+// (~p85 of both dimensions jointly, roughly one flight in nine
+// fleet-wide) and stated in physical units: the run length is
+// milliseconds, not samples, so the same flight reads the same at
+// any logging rate. Calibrated on the I-term distributions; P and
+// D terms share the bars, which is conservative for them (their
+// near-peak activity runs lower by nature). One field-expert-
+// labeled soft case (ceiling-zone riding below the 98 % near-peak
+// line) deliberately remains sub-threshold — whether the ZONE
+// definition should widen is an open calibration question, not a
+// bar question.
+export const SATURATION_REVIEW_BARS = {
+  Roll: { sharePercent: 0.18, runMs: 145 },
+  Pitch: { sharePercent: 0.24, runMs: 155 },
+  Yaw: { sharePercent: 0.35, runMs: 185 }
+};
+
+// Re-read 2026-08-23 on the full contributed fleet after the
+// ramp-ghost fix changed the event population: bounce-back and
+// settling bars held their percentile (flag share 11-13 %); the
+// ringing bars had drifted to ~p79 (ghost duplicates measured from
+// the hold carried few crossings and diluted the medians) — Roll 30
+// → 40, Pitch 6 → 8 put them back at p85. Sweep + derivation:
+// egodrift tools/blackbox/bars_probe.mjs + bars_reanchor.py.
+export const RESPONSE_REVIEW_BARS = {
+  bounceBackPercent: { Roll: 54, Pitch: 27, Yaw: 21 },
+  settleMs: { Roll: 290, Pitch: 230, Yaw: 150 },
+  ringingCrossings: { Roll: 40, Pitch: 8, Yaw: 8 }
+};
+
+// Roll re-read 2026-08-23 (same round): p85 I-share 93.2 / p15
+// support 6.1 on the post-fix command windows; 92/8 had come to flag
+// one flight in five. Pitch and Yaw held (13.7 % / 14.7 %).
+export const COMMAND_BALANCE_BARS = {
+  Roll: { iPercent: 93, supportPercent: 6 },
+  Pitch: { iPercent: 84, supportPercent: 10 },
+  Yaw: { iPercent: 81, supportPercent: 20 }
+};
+
 export function computeTrackingScore({
   relativeError = null,
   commandBalanceReviewCount = 0,
+  commandBalanceSeverities = null,
   saturationReviewCount = 0
 } = {}) {
   const tuning = TRACKING_SCORE_TUNING;
@@ -196,9 +275,25 @@ export function computeTrackingScore({
       ) * tuning.MAX_TRACKING_DEDUCTION
     : 0;
 
+  // Severity-aware when severities are supplied: each flagged axis
+  // deducts between the minimum (just past its bar) and the full
+  // per-axis amount (extreme I-dominance). The count-based path
+  // stays as the fallback for callers without severities.
   const balanceDeduction = Math.min(
     tuning.MAX_BALANCE_DEDUCTION,
-    commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
+    Array.isArray(commandBalanceSeverities)
+      ? commandBalanceSeverities.reduce(
+          (sum, severity) =>
+            sum +
+            Math.round(
+              tuning.BALANCE_DEDUCTION_MIN +
+                (tuning.BALANCE_DEDUCTION_PER_AXIS -
+                  tuning.BALANCE_DEDUCTION_MIN) *
+                  Math.min(1, Math.max(0, severity))
+            ),
+          0
+        )
+      : commandBalanceReviewCount * tuning.BALANCE_DEDUCTION_PER_AXIS
   );
 
   const saturationDeduction = Math.min(
@@ -385,6 +480,18 @@ const eventWindowSamples = (seconds, minimumSamples) =>
 
 const commandChangeWindowSamples = eventWindowSamples(0.2, 5);
 const commandStableWindowSamples = eventWindowSamples(0.2, 5);
+
+// The smallest setpoint step (deg/s, unrounded) that counts as a
+// deliberate stick command. Below this bar a "command" is hover
+// correction or stick noise: scoring one produces events like a
+// 16 deg/s nudge reported as several hundred percent overshoot,
+// because the denominator is noise-sized.
+const meaningfulCommandMinimum = 20;
+
+// Response measurements run on a ~25 ms rolling mean of the
+// response window (raw gyro noise breaks consecutive-sample
+// settle detection and fakes single-sample "peaks").
+const responseSmoothingSamples = eventWindowSamples(0.025, 3);
 const commandEndLookaheadSamples = eventWindowSamples(3, 60);
 const responseWindowLimitSamples = eventWindowSamples(2, 40);
 const minimumEventSpacingSamples = eventWindowSamples(0.5, 10);
@@ -657,6 +764,22 @@ let commandEndSampleIndex =
 let stableSampleCount = 0;
 const requiredStableSamples = commandStableWindowSamples;
 
+// A step response can only be measured against a target that
+// actually holds still: when the lookahead never finds the
+// command settling, the pilot was still moving the stick and
+// the "event" is continuous flying, not a step.
+let targetStabilized = false;
+
+// One command moves one way. A long sustained ramp (a full
+// pirouette input building over a second) is still one command
+// — but once the setpoint materially REVERSES before ever
+// holding, the pilot has started a new movement, and gluing
+// both into one event would anchor the measurement on a target
+// from seconds later. The event terminates at the reversal;
+// the scan re-triggers on the movement that follows.
+const commandNetDirection = Math.sign(commandChange);
+let counterMovement = 0;
+
 // Both look-aheads stop at the segment edge: past it the
 // compacted array jumps to a different moment of the flight,
 // and a window that crosses that seam would read two distant
@@ -679,10 +802,28 @@ for (
     stableSampleCount += 1;
   } else {
     stableSampleCount = 0;
+
+    if (
+      lookAheadChange * commandNetDirection < 0
+    ) {
+      counterMovement += Math.abs(lookAheadChange);
+    }
   }
 
   commandEndSampleIndex =
     lookAheadIndex;
+
+  const netMovement = Math.abs(
+    values[lookAheadIndex] - previousValue
+  );
+
+  if (
+    counterMovement >
+    Math.max(10, netMovement * 0.2)
+  ) {
+    // Material reversal before any hold: not one step.
+    break;
+  }
 
   if (
     stableSampleCount >=
@@ -693,12 +834,45 @@ for (
       requiredStableSamples +
       1;
 
+    targetStabilized = true;
+
     break;
   }
 }
 
 const commandTarget =
   values[commandEndSampleIndex];
+
+// ---- event qualification ----
+// Two bars before anything is measured or reported:
+// the command must be big enough to be a deliberate stick
+// input (tiny nudges are normal hover corrections and read
+// as absurd percentages when scored), and the target must
+// have stabilized (a target still moving through the
+// response window pairs an old command with a newer,
+// different setpoint).
+const qualifiedMagnitude =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(previousValue)
+    ? Math.abs(commandTarget - previousValue)
+    : null;
+
+if (
+  !targetStabilized ||
+  !Number.isFinite(qualifiedMagnitude) ||
+  qualifiedMagnitude < meaningfulCommandMinimum
+) {
+  // Still one stick movement: resume after it, exactly like
+  // an accepted event, so it cannot re-trigger along its
+  // own rise.
+  sampleIndex = Math.max(
+    sampleIndex,
+    targetStabilized
+      ? commandEndSampleIndex + commandChangeWindowSamples - 1
+      : commandEndSampleIndex
+  );
+  continue;
+}
 
 const responseResult =
   reconstructedAxisResponse[axisIndex];
@@ -767,79 +941,237 @@ const validResponseWindow =
     Number.isFinite(value)
   );
 
-const responsePeak =
-  validResponseWindow.length > 0
-    ? validResponseWindow.reduce(
-        (peak, value) =>
-          Math.abs(value) > Math.abs(peak)
-            ? value
-            : peak,
-        validResponseWindow[0]
-      )
-    : null;
-
-const responsePeakOffset =
-  Number.isFinite(responsePeak)
-    ? responseWindow.findIndex(
-        (value) => value === responsePeak
-      )
-    : -1;
-
-const responsePeakSampleIndex =
-  responsePeakOffset >= 0
-    ? responseWindowStart +
-      responsePeakOffset
-    : null;
- 
-
 const commandDirection =
   Math.sign(commandChange);
 
-const responseStart =
-  responseWindow.length > 0
-    ? responseWindow[0]
+const commandMagnitude = qualifiedMagnitude;
+
+// Every response read below runs on a lightly smoothed trace
+// (~25 ms): raw gyro noise otherwise breaks the consecutive
+// settle window on every real log and turns single-sample
+// spikes into "peaks". The charts still draw the raw trace;
+// only the measurements smooth.
+const measuredResponseWindow = buildRollingMean(
+  responseWindow,
+  responseSmoothingSamples
+);
+
+// Signed error in the command direction: positive means the
+// response has gone BEYOND the target, negative means it has
+// not reached it yet. Every response read below works in this
+// space, so "peak", "reached" and "overshoot" all refer to the
+// same movement the command asked for.
+const directionalError = (value) =>
+  Number.isFinite(value) &&
+  Number.isFinite(commandTarget)
+    ? (value - commandTarget) * commandDirection
     : null;
 
-const responsePeakChange =
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(responseStart)
-    ? responsePeak - responseStart
+const approachTolerance =
+  Number.isFinite(commandMagnitude)
+    ? Math.max(2, commandMagnitude * 0.1)
+    : 2;
+
+// The response has ANSWERED the command once it comes within
+// tolerance of the target. Overshoot exists only after that
+// moment, and only as the FIRST excursion beyond the target:
+// later wandering inside the window is ringing or disturbance,
+// not the answer to this command.
+let reachedOffset = -1;
+
+for (
+  let offset = 0;
+  offset < measuredResponseWindow.length;
+  offset += 1
+) {
+  const error = directionalError(measuredResponseWindow[offset]);
+  if (
+    Number.isFinite(error) &&
+    error >= -approachTolerance
+  ) {
+    reachedOffset = offset;
+    break;
+  }
+}
+
+// Settling is measured BEFORE overshoot on purpose: once the
+// response has demonstrably settled at the target, anything the
+// gyro does afterwards is a new disturbance, and the overshoot
+// scan below must not read it as this command's answer.
+const settlingTolerance =
+  Number.isFinite(commandMagnitude)
+    ? Math.max(
+        2,
+        commandMagnitude * 0.1
+      )
+    : null;
+const settlingInToleranceFlags =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(settlingTolerance)
+    ? measuredResponseWindow.map((value) =>
+        Number.isFinite(value) &&
+        Math.abs(value - commandTarget) <=
+          settlingTolerance
+      )
+    : [];
+const requiredSettledSamples = settledWindowSamples;
+let settlingStartOffset = null;
+let consecutiveSettledSamples = 0;
+
+for (
+  let offset = 0;
+  offset < settlingInToleranceFlags.length;
+  offset += 1
+) {
+  if (settlingInToleranceFlags[offset]) {
+    consecutiveSettledSamples += 1;
+  } else {
+    consecutiveSettledSamples = 0;
+  }
+
+  if (
+    consecutiveSettledSamples >=
+    requiredSettledSamples
+  ) {
+    settlingStartOffset =
+      offset -
+      requiredSettledSamples +
+      1;
+
+    break;
+  }
+}
+
+// Every response measurement ends where the response's own story
+// ends: at the settled window when one exists, else at the window
+// edge. The peak marker a pilot sees must belong to THIS command
+// — a directional maximum found after the settle (or under a
+// later target wiggle) is a different moment's story.
+const responseMeasureEnd = Number.isInteger(settlingStartOffset)
+  ? Math.min(
+      settlingStartOffset + requiredSettledSamples,
+      measuredResponseWindow.length
+    )
+  : measuredResponseWindow.length;
+
+// How far the response actually got, measured along the
+// commanded direction — a wandering gyro on another errand can
+// no longer supply the "peak" of this command's response.
+let responsePeak = null;
+let responsePeakOffset = -1;
+
+for (
+  let offset = 0;
+  offset < responseMeasureEnd;
+  offset += 1
+) {
+  const value = measuredResponseWindow[offset];
+  if (!Number.isFinite(value)) continue;
+  if (
+    responsePeak === null ||
+    value * commandDirection >
+      responsePeak * commandDirection
+  ) {
+    responsePeak = value;
+    responsePeakOffset = offset;
+  }
+}
+
+let overshootAmount = null;
+let overshootPeakOffset = -1;
+
+if (reachedOffset >= 0 && !hasOverlappingCommand) {
+  // Overshoot lives between arrival and rest: the scan stops
+  // where the settled window ends, so a disturbance half a
+  // second after a clean settle can never be scored as this
+  // command's overshoot.
+  const excursionScanEnd = responseMeasureEnd;
+  // An overshoot is a movement, not an instant: a one-sample
+  // spike at the moment the stick is released reads as a
+  // beyond-target value but proves nothing about the tune. An
+  // excursion only scores when it PERSISTS beyond the target.
+  const excursionMinimumSamples = minimumBounceBackSamples;
+
+  let runLength = 0;
+  let runPeak = null;
+  let runPeakOffset = -1;
+
+  for (
+    let offset = reachedOffset;
+    offset < excursionScanEnd;
+    offset += 1
+  ) {
+    const error = directionalError(measuredResponseWindow[offset]);
+    if (!Number.isFinite(error)) continue;
+
+    if (error > 0) {
+      runLength += 1;
+      if (runPeak === null || error > runPeak) {
+        runPeak = error;
+        runPeakOffset = offset;
+      }
+    } else {
+      if (runLength >= excursionMinimumSamples) {
+        // First persistent excursion ended — anything after
+        // this is a separate story.
+        overshootAmount = runPeak;
+        overshootPeakOffset = runPeakOffset;
+        break;
+      }
+      // A blip too short to be a movement: discard and keep
+      // scanning.
+      runLength = 0;
+      runPeak = null;
+      runPeakOffset = -1;
+    }
+  }
+
+  // The window can end while still beyond the target.
+  if (
+    overshootAmount === null &&
+    runLength >= excursionMinimumSamples
+  ) {
+    overshootAmount = runPeak;
+    overshootPeakOffset = runPeakOffset;
+  }
+}
+
+const responseReachedTarget = reachedOffset >= 0;
+
+// Bounce-back is recovery from having been AT (or past) the
+// target — a response that only came within tolerance has
+// nothing to bounce back from, and its steady-state gap must
+// not be measured as a reversal.
+const peakDirectionalError = Number.isFinite(responsePeak)
+  ? directionalError(responsePeak)
+  : null;
+
+const responseTouchedTarget =
+  Number.isFinite(peakDirectionalError) &&
+  peakDirectionalError >= 0;
+
+// The response-peak anchor names the moment the pilot should
+// look at: the top of the overshoot when there is one,
+// otherwise how far the tracked response got.
+const anchorOffset =
+  overshootPeakOffset >= 0
+    ? overshootPeakOffset
+    : responsePeakOffset;
+
+const responsePeakSampleIndex =
+  anchorOffset >= 0
+    ? responseWindowStart + anchorOffset
     : null;
 
 const responsePeakInCommandDirection =
-  Number.isFinite(responsePeakChange) &&
-  Math.sign(responsePeakChange) ===
-    commandDirection;
+  responseReachedTarget;
 const crossedCommandTarget =
-  Number.isFinite(responsePeak) &&
-  (
-    commandDirection > 0
-      ? responsePeak > commandTarget
-      : responsePeak < commandTarget
-  );
-const commandMagnitude =
-  Number.isFinite(commandTarget) &&
-  Number.isFinite(previousValue)
-    ? Math.abs(
-        commandTarget - previousValue
-      )
-    : null;
-
-const overshootAmount =
-  !hasOverlappingCommand &&
-  responsePeakInCommandDirection &&
-  crossedCommandTarget &&
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(commandTarget)
-    ? Math.abs(
-        responsePeak - commandTarget
-      )
-    : null;
+  Number.isFinite(overshootAmount);
 
 const overshootPercent =
   Number.isFinite(overshootAmount) &&
   Number.isFinite(commandMagnitude) &&
-  commandMagnitude >= 10
+  commandMagnitude >= meaningfulCommandMinimum
     ? (
         overshootAmount /
         commandMagnitude
@@ -875,16 +1207,8 @@ const hasSufficientBounceBackWindow =
       : Math.max(...validBounceBackWindow)
     : null;
 
-    const responseReachedTarget =
-  Number.isFinite(responsePeak) &&
-  Number.isFinite(commandTarget)
-    ? commandDirection > 0
-      ? responsePeak >= commandTarget
-      : responsePeak <= commandTarget
-    : false;
-
 const bounceBackAmount =
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(commandTarget) &&
   Number.isFinite(bounceBackExtreme)
     ? commandDirection > 0
@@ -901,7 +1225,7 @@ const bounceBackAmount =
 
     const bounceBackPercent =
   hasSufficientBounceBackWindow &&
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(bounceBackAmount) &&
   Number.isFinite(commandMagnitude) &&
   commandMagnitude >= 10
@@ -912,51 +1236,8 @@ const bounceBackAmount =
     : null;
     const bounceBackEligible =
   hasSufficientBounceBackWindow &&
-  responseReachedTarget &&
+  responseTouchedTarget &&
   Number.isFinite(bounceBackPercent);
-  const settlingTolerance =
-  Number.isFinite(commandMagnitude)
-    ? Math.max(
-        2,
-        commandMagnitude * 0.1
-      )
-    : null;
-    const settlingInToleranceFlags =
-  Number.isFinite(commandTarget) &&
-  Number.isFinite(settlingTolerance)
-    ? responseWindow.map((value) =>
-        Number.isFinite(value) &&
-        Math.abs(value - commandTarget) <=
-          settlingTolerance
-      )
-    : [];
-    const requiredSettledSamples = settledWindowSamples;
-    let settlingStartOffset = null;
-let consecutiveSettledSamples = 0;
-
-for (
-  let offset = 0;
-  offset < settlingInToleranceFlags.length;
-  offset += 1
-) {
-  if (settlingInToleranceFlags[offset]) {
-    consecutiveSettledSamples += 1;
-  } else {
-    consecutiveSettledSamples = 0;
-  }
-
-  if (
-    consecutiveSettledSamples >=
-    requiredSettledSamples
-  ) {
-    settlingStartOffset =
-      offset -
-      requiredSettledSamples +
-      1;
-
-    break;
-      }
-    }
 
     const settlingSampleIndex =
   Number.isInteger(settlingStartOffset)
@@ -1030,6 +1311,48 @@ const hasSufficientRingingWindow =
  Number.isFinite(commandMagnitude) &&
 commandMagnitude >= 10
 
+// A separate, deliberately deaf read of the same window: how
+// big were the swings, and how often did they cross the target
+// counting only swings a pilot would call a swing. The noise
+// threshold above (~1-2 deg/s) is right for "has it settled",
+// but a verdict of OSCILLATION must not be reachable by sensor
+// noise alone.
+const strongRingingThreshold = Math.max(
+  5,
+  Number.isFinite(settlingTolerance) ? settlingTolerance : 5
+);
+
+let ringingAmplitude = null;
+let strongRingingCrossingCount = 0;
+let previousStrongSign = 0;
+
+for (const error of ringingErrorWindow) {
+  if (!Number.isFinite(error)) continue;
+
+  const size = Math.abs(error);
+
+  if (
+    ringingAmplitude === null ||
+    size > ringingAmplitude
+  ) {
+    ringingAmplitude = size;
+  }
+
+  if (size < strongRingingThreshold) {
+    continue;
+  }
+
+  const sign = Math.sign(error);
+
+  if (
+    previousStrongSign !== 0 &&
+    sign !== previousStrongSign
+  ) {
+    strongRingingCrossingCount += 1;
+  }
+
+  previousStrongSign = sign;
+}
 
 events.push({
   axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
@@ -1042,6 +1365,7 @@ commandTarget,
   commandMagnitude,
 commandDirection,
 responsePeakInCommandDirection,
+responseReachedTarget,
 overshootAmount,
 overshootPercent,
 bounceBackWindowStart,
@@ -1068,6 +1392,8 @@ ringingTargetCrossingCount,
 ringingSampleCount,
 hasSufficientRingingWindow,
 ringingEligible,
+ringingAmplitude,
+strongRingingCrossingCount,
   responseWindowStart,
   responseWindowEnd,
   responseWindow,
@@ -1090,10 +1416,19 @@ responsePeakSampleIndex,
 
 // One stick movement is one event: the scan resumes after the
 // command finished settling, so a long continuous input cannot
-// re-trigger every few tenths along its own rise.
+// re-trigger every few tenths along its own rise. A HELD target is
+// the new baseline, so the scan resumes at the end of the hold the
+// lookahead proved (one change-window long): resuming AT the hold
+// compared the first held sample against the ramp's last 0.2 s and
+// re-triggered a ghost event on the tail of every ramp longer than
+// the event spacing — the same response measured twice, the second
+// time against a fraction of the real step (#32). A movement that
+// never held resumes where it stopped, as before.
 sampleIndex = Math.max(
   sampleIndex,
-  commandEndSampleIndex
+  targetStabilized
+    ? commandEndSampleIndex + commandChangeWindowSamples - 1
+    : commandEndSampleIndex
 );
       }
     }
@@ -1232,6 +1567,24 @@ const bestTrackingProfile =
     null
   );
 
+// A ranking is only as good as its thinnest side: a profile a few
+// hundred samples deep can "win" simply by containing less flight.
+// Best-profile claims are qualified when the winner is severely
+// under-sampled in absolute terms or against the best-measured bank.
+const largestProfileSampleCount =
+  validProfileTrackingResults.reduce(
+    (max, profile) =>
+      Math.max(max, profile.sampleCount ?? 0),
+    0
+  );
+
+const bestProfileUnderSampled =
+  canCompareProfiles &&
+  bestTrackingProfile !== null &&
+  ((bestTrackingProfile.sampleCount ?? 0) < 5000 ||
+    (bestTrackingProfile.sampleCount ?? 0) * 20 <
+      largestProfileSampleCount);
+
 const worstTrackingProfile =
   validProfileTrackingResults.reduce(
     (worst, profile) => {
@@ -1261,11 +1614,16 @@ const averageAbsoluteAxisError =
 // invisible in a full-rate flip. Each axis's error is read relative
 // to its own commanded magnitude, with a floor so a hover-only log
 // cannot divide by almost nothing.
+const axisSetpointMagnitudes = averageAbsoluteAxisError.map(
+  (axisResult, index) =>
+    calculateAverageAbsolute(
+      axisSetpointValues[index]?.values ?? []
+    )
+);
+
 const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
   (axisResult, index) => {
-    const setpointMagnitude = calculateAverageAbsolute(
-      axisSetpointValues[index]?.values ?? []
-    );
+    const setpointMagnitude = axisSetpointMagnitudes[index];
 
     return Number.isFinite(axisResult.averageAbsoluteError) &&
       Number.isFinite(setpointMagnitude)
@@ -1277,6 +1635,23 @@ const axisRelativeTrackingErrors = averageAbsoluteAxisError.map(
       : null;
   }
 );
+
+// How hard was the machine actually flown? When EVERY axis's
+// average commanded rate sits below the scoring floor, all the
+// relative errors above were measured against the floor rather
+// than real demand — the score then describes gentle flying and
+// cannot be compared with a score earned in hard maneuvers. This
+// is exactly how a mis-set-up machine hovering calmly outscored
+// its own fixed self on a sport flight.
+const finiteSetpointMagnitudes =
+  axisSetpointMagnitudes.filter(Number.isFinite);
+
+const hoverLevelDemand =
+  finiteSetpointMagnitudes.length > 0 &&
+  finiteSetpointMagnitudes.every(
+    (magnitude) =>
+      magnitude < TRACKING_SCORE_TUNING.SETPOINT_ACTIVITY_FLOOR
+  );
 
 const finiteRelativeErrors = axisRelativeTrackingErrors.filter(
   Number.isFinite
@@ -1306,6 +1681,30 @@ const pidColumns = findMatchingColumns(
    
 const groupedPidColumns =
   groupPidColumns(pidColumns);
+
+// PID-term activity is scored on the SAME qualified flight rows as
+// the tracking analysis. The full log includes spool-up, landing and
+// post-flight seconds where a term (the I-term especially) can wind
+// against a grounded airframe — activity that must not be able to
+// turn a qualified flight analysis into Review. Full-log values are
+// the fallback only when no qualified window exists at all, where
+// the tracking analysis is empty too. Sampling by the same rows also
+// keeps the command-event windows (compacted qualified-row space)
+// aligned with these arrays.
+const pidTermColumnValues = (columnName) =>
+  hasStableFlightRows
+    ? getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        columnName,
+        stableRowIndexes
+      )
+    : getColumnValues(
+        lines,
+        telemetryHeaderIndex,
+        columnName
+      );
+
   const pidTermValues = {
   p: groupedPidColumns.p.map(
     (columnName, axisIndex) => ({
@@ -1313,11 +1712,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1327,11 +1722,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1341,11 +1732,7 @@ const groupedPidColumns =
         axisNames[axisIndex] ??
         `Axis ${axisIndex}`,
       columnName,
-      values: getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        columnName
-      )
+      values: pidTermColumnValues(columnName)
     })
   ),
 
@@ -1356,11 +1743,7 @@ const groupedPidColumns =
           axisNames[axisIndex] ??
           `Axis ${axisIndex}`,
         columnName,
-        values: getColumnValues(
-          lines,
-          telemetryHeaderIndex,
-          columnName
-        )
+        values: pidTermColumnValues(columnName)
       })
     )
 };
@@ -1469,6 +1852,7 @@ const analyzeNearPeakActivity = (
       nearPeakSampleCount: 0,
       nearPeakPercent: null,
       longestNearPeakRun: 0,
+      longestNearPeakRunEndIndex: null,
       threshold: null
     };
   }
@@ -1476,32 +1860,61 @@ const analyzeNearPeakActivity = (
   const threshold =
     maximumAbsolute * 0.98;
 
+  // The same pass also measures wider ceiling zones (95 % and 90 %
+  // of the term's own peak) — distributions for the saturation-zone
+  // calibration, not a verdict input. An I-term that rides at 93 %
+  // of its ceiling for long stretches never enters the 98 % zone;
+  // whether that is saturation is a fleet question, answered from
+  // these numbers, not hot-patched off one label.
+  const zoneThresholds = {
+    95: maximumAbsolute * 0.95,
+    90: maximumAbsolute * 0.9
+  };
+  const zoneCounts = { 95: 0, 90: 0 };
+  const zoneRuns = { 95: 0, 90: 0 };
+  const zoneLongest = { 95: 0, 90: 0 };
+
   let validSampleCount = 0;
   let nearPeakSampleCount = 0;
   let currentNearPeakRun = 0;
   let longestNearPeakRun = 0;
+  let longestNearPeakRunEndIndex = null;
 
-  for (const value of values) {
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+
     if (!Number.isFinite(value)) {
       currentNearPeakRun = 0;
+      zoneRuns[95] = 0;
+      zoneRuns[90] = 0;
       continue;
     }
 
     validSampleCount += 1;
 
-    const isNearPeak =
-      Math.abs(value) >= threshold;
+    const magnitude = Math.abs(value);
+    const isNearPeak = magnitude >= threshold;
 
     if (isNearPeak) {
       nearPeakSampleCount += 1;
       currentNearPeakRun += 1;
 
-      longestNearPeakRun = Math.max(
-        longestNearPeakRun,
-        currentNearPeakRun
-      );
+      if (currentNearPeakRun > longestNearPeakRun) {
+        longestNearPeakRun = currentNearPeakRun;
+        longestNearPeakRunEndIndex = index;
+      }
     } else {
       currentNearPeakRun = 0;
+    }
+
+    for (const zone of [95, 90]) {
+      if (magnitude >= zoneThresholds[zone]) {
+        zoneCounts[zone] += 1;
+        zoneRuns[zone] += 1;
+        if (zoneRuns[zone] > zoneLongest[zone]) zoneLongest[zone] = zoneRuns[zone];
+      } else {
+        zoneRuns[zone] = 0;
+      }
     }
   }
 
@@ -1516,8 +1929,40 @@ const analyzeNearPeakActivity = (
           ) * 100
         : null,
     longestNearPeakRun,
-    threshold
+    longestNearPeakRunEndIndex,
+    threshold,
+    zones: {
+      95: {
+        percent: validSampleCount > 0 ? (zoneCounts[95] / validSampleCount) * 100 : null,
+        longestRun: zoneLongest[95]
+      },
+      90: {
+        percent: validSampleCount > 0 ? (zoneCounts[90] / validSampleCount) * 100 : null,
+        longestRun: zoneLongest[90]
+      }
+    }
   };
+};
+
+// A saturation reading is only auditable if it can be walked back
+// to its place in the flight. The run end index is in qualified-row
+// space, so the moment resolves through the same clock the command
+// events print with.
+const nearPeakMomentText = (termResult) => {
+  if (
+    !hasStableFlightRows ||
+    !Number.isInteger(termResult?.longestNearPeakRunEndIndex)
+  ) {
+    return "";
+  }
+
+  const seconds = stableSampleTimeSeconds(
+    termResult.longestNearPeakRunEndIndex
+  );
+
+  return seconds === null
+    ? ""
+    : ` ending near ${seconds.toFixed(1)} s, inside the analyzed flight window`;
 };
 
 const pidTermNearPeakActivity = {
@@ -1598,14 +2043,21 @@ const classifyPidTermSaturation = (
     };
   }
 
+  const bars =
+    SATURATION_REVIEW_BARS[nearPeakResult?.axis] ??
+    SATURATION_REVIEW_BARS.Roll;
+
+  const longestRunMs =
+    longestNearPeakRun * (1000 / samplesPerSecond);
+
   const sustainedRunDetected =
-    longestNearPeakRun >= 100;
+    longestRunMs >= bars.runMs;
 
   const elevatedNearPeakActivity =
-    nearPeakPercent >= 0.25;
+    nearPeakPercent >= bars.sharePercent;
 
   const moderateNearPeakActivity =
-    nearPeakPercent >= 0.10;
+    nearPeakPercent >= bars.sharePercent / 2;
 
   const status =
     sustainedRunDetected &&
@@ -2012,12 +2464,45 @@ if (
 // — which is a limit on the verdict, not a detail beneath it.
 const commandEvidence = assessCommandEvidence(commandEvents);
 
+// Cross-axis I coupling: off-axis integrator build during a
+// command, measured in the same compacted row space as the
+// events and term columns. Each pair carries a Review/Observed
+// status judged against the fleet-calibrated per-pair bars.
+const crossAxisPairs = analyzeCrossAxisIDump({
+  commandEvents,
+  iTermValuesByAxis: Object.fromEntries(
+    pidTermValues.i.map((termResult) => [
+      termResult.axis,
+      termResult.values
+    ])
+  ),
+  samplesPerSecond
+});
+
+const crossAxisFindings = crossAxisFindingLines(
+  crossAxisPairs,
+  (strongest) =>
+    `strongest at ${eventMomentText(
+      strongest.peakSampleIndex,
+      Number.isInteger(strongest.peakSampleIndex)
+        ? stableRowIndexes[strongest.peakSampleIndex] ?? null
+        : null
+    )}`
+);
+
 confidenceScore = Math.max(
   0,
   confidenceScore - commandEvidence.penalty
 );
 
 if (motionBasisOnly) {
+  confidenceScore = Math.min(confidenceScore, 65);
+}
+
+// A hover-level flight can supply thousands of samples and still
+// interrogate the machine gently: sample count must not read as
+// certainty about behavior the flight never demanded.
+if (hoverLevelDemand) {
   confidenceScore = Math.min(confidenceScore, 65);
 }
 
@@ -2067,13 +2552,19 @@ const confidenceLevel =
         highestTrackingErrorAxis?.axis ===
         axisResult.axis;
 
+      // Per-axis bars (COMMAND_BALANCE_BARS): fleet-calibrated on
+      // the aligned measurement — the axes' I-share distributions
+      // differ too much for one global bar.
+      const bars =
+        COMMAND_BALANCE_BARS[axisResult.axis] ?? COMMAND_BALANCE_BARS.Roll;
+
       const iRemainsDominantDuringCommands =
-        axisResult.iPercent >= 65;
+        axisResult.iPercent >= bars.iPercent;
 
       const commandSupportIsLow =
         axisResult.pPercent +
           axisResult.feedforwardPercent <
-        35;
+        bars.supportPercent;
 
       const status =
   !hasUsableContributionData
@@ -2084,6 +2575,21 @@ const confidenceLevel =
       ? "Review"
       : "Clear";
 
+      // How far past the bar, 0..1 — feeds the severity-scaled
+      // deduction: just-past loses the minimum, pinned-at-extreme
+      // loses the full per-axis amount.
+      const balanceSeverity =
+        status === "Review"
+          ? Math.min(
+              1,
+              Math.max(
+                0,
+                (axisResult.iPercent - bars.iPercent) /
+                  (100 - bars.iPercent)
+              )
+            )
+          : 0;
+
       return {
         axis: axisResult.axis,
         status,
@@ -2091,7 +2597,8 @@ const confidenceLevel =
           axisResult.commandWindowCount,
         isHighestTrackingErrorAxis,
         iRemainsDominantDuringCommands,
-        commandSupportIsLow
+        commandSupportIsLow,
+        balanceSeverity
       };
     }
   );
@@ -2130,7 +2637,9 @@ const pidSummary = [
     : "No sustained PID-term saturation pattern was identified.",
 
   canCompareProfiles
-    ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
+    ? bestProfileUnderSampled
+      ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error, but only ${bestTrackingProfile.sampleCount} samples were measured at that headspeed. Collect more flight time there before comparing headspeeds.`
+      : `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
     : onlyTrackingProfile
       ? Number.isFinite(onlyTrackingProfile.targetRpm)
         ? `The flight ran at one headspeed, ${onlyTrackingProfile.targetRpm} RPM, so headspeeds cannot be compared.`
@@ -2152,6 +2661,9 @@ const pidOverallStatus =
       const scoreParts = computeTrackingScore({
   relativeError: meanRelativeTrackingError,
   commandBalanceReviewCount: commandBalanceReviewAxes.length,
+  commandBalanceSeverities: commandBalanceReviewAxes.map(
+    (axisResult) => axisResult.balanceSeverity ?? 0
+  ),
   saturationReviewCount: saturationReviewTerms.length
 });
 
@@ -2161,7 +2673,7 @@ const pidScore =
 const pidScoreExplanation = [
   `${TRACKING_SCORE_TUNING.REAL_WORLD_MARGIN} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
   Number.isFinite(meanRelativeTrackingError)
-    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error — on average the response missed its commanded rate by ${Math.round(
+    ? `${scoreParts.trackingDeduction} points deducted for measured tracking error: on average the response missed its commanded rate by ${Math.round(
         meanRelativeTrackingError * 100
       )}% of the commanded magnitude.`
     : "Tracking error could not be measured against commanded motion.",
@@ -2177,10 +2689,12 @@ const pidScoreExplanation = [
     : "No points were deducted for PID-term saturation.",
 
   bestTrackingProfile
-  ? "No points were deducted for profile comparison data."
+  ? bestProfileUnderSampled
+    ? "Profile comparison carries limited evidence (severe sample imbalance between headspeeds) and did not affect the PID score."
+    : "No points were deducted for profile comparison data."
   : "Profile comparison was not available and did not affect the PID score."
 ];
-  return {
+  const pidResult = {
     status: hasCompleteTrackingEvidence
   ? "PID Tracking Analysis Complete"
   : "PID Tracking Analysis Unavailable",
@@ -2191,6 +2705,14 @@ const pidScoreExplanation = [
   ? pidScoreExplanation
   : [],
     technicalSummary: {
+  demand: {
+    hoverLevel: hoverLevelDemand,
+    axisSetpointMagnitudes: axisSetpointMagnitudes.map((value) =>
+      Number.isFinite(value)
+        ? Math.round(value * 10) / 10
+        : null
+    )
+  },
   highestTrackingErrorAxis:
     highestTrackingErrorAxis?.axis ?? null,
   meanRelativeTrackingError:
@@ -2209,8 +2731,76 @@ const pidScoreExplanation = [
     commandBalanceReviewAxes.map(
       (axisResult) => axisResult.axis
     ),
+  // The raw command-window term shares behind the balance verdict,
+  // exported structurally: the severity-aware deduction reads them,
+  // and fleet calibration measures its bars against them instead of
+  // against the verdict they produce.
+  commandBalance: pidCommandTermContributionPercentages.map(
+    (axisResult) => ({
+      axis: axisResult.axis,
+      commandWindowCount: axisResult.commandWindowCount,
+      iPercent: Number.isFinite(axisResult.iPercent)
+        ? Math.round(axisResult.iPercent * 10) / 10
+        : null,
+      pPercent: Number.isFinite(axisResult.pPercent)
+        ? Math.round(axisResult.pPercent * 10) / 10
+        : null,
+      dPercent: Number.isFinite(axisResult.dPercent)
+        ? Math.round(axisResult.dPercent * 10) / 10
+        : null,
+      feedforwardPercent: Number.isFinite(axisResult.feedforwardPercent)
+        ? Math.round(axisResult.feedforwardPercent * 10) / 10
+        : null,
+      isHighestTrackingErrorAxis:
+        highestTrackingErrorAxis?.axis === axisResult.axis
+    })
+  ),
+  // Per term, per axis: the near-peak shares and longest runs at the
+  // 98 % zone the bars use and at the wider 95 %/90 % zones — for
+  // the fleet calibration of the zone definition.
+  saturationZones: Object.fromEntries(
+    Object.entries(pidTermSaturationAssessment).map(([term, results]) => [
+      term,
+      results.map((termResult) => ({
+        axis: termResult.axis,
+        sampleCount: termResult.sampleCount ?? 0,
+        samplesPerSecond,
+        maximumAbsolute: termResult.threshold != null ? termResult.threshold / 0.98 : null,
+        share98: termResult.nearPeakPercent ?? null,
+        run98: termResult.longestNearPeakRun ?? 0,
+        share95: termResult.zones?.[95]?.percent ?? null,
+        run95: termResult.zones?.[95]?.longestRun ?? 0,
+        share90: termResult.zones?.[90]?.percent ?? null,
+        run90: termResult.zones?.[90]?.longestRun ?? 0,
+        status: termResult.status ?? null
+      }))
+    ])
+  ),
   saturationReviewTermCount:
     saturationReviewTerms.length,
+  // Off-axis I build per ordered axis pair. The measurement stays
+  // raw — the fleet probe calibrates bars against it — and the
+  // status carries the verdict those bars produce.
+  crossAxisCoupling: crossAxisPairs.map((pair) => ({
+    commandAxis: pair.commandAxis,
+    offAxis: pair.offAxis,
+    status: crossAxisPairStatus(pair),
+    eventCount: pair.eventCount,
+    baseline: Math.round(pair.baseline * 10) / 10,
+    medianPeak: Number.isFinite(pair.medianPeak)
+      ? Math.round(pair.medianPeak * 10) / 10
+      : null,
+    strongestPeak: Math.round(pair.strongest.peak * 10) / 10,
+    strongestDelta: Math.round(pair.strongest.delta * 10) / 10,
+    strongestRatio: Math.round(pair.strongest.ratio * 10) / 10,
+    strongestReleaseDrop:
+      Math.round(pair.strongest.releaseDrop * 10) / 10,
+    strongestCommandMagnitude: Number.isFinite(
+      pair.strongest.commandMagnitude
+    )
+      ? Math.round(pair.strongest.commandMagnitude * 10) / 10
+      : null
+  })),
     axisStatus: axisNames.map((axis) => {
   const commandBalance =
     pidCommandBalanceAssessment.find(
@@ -2239,14 +2829,21 @@ const pidScoreExplanation = [
   confidence: hasCompleteTrackingEvidence
   ? {
       level: confidenceLevel,
-      score: confidenceScore
+      score: confidenceScore,
+      demand: hoverLevelDemand ? "gentle" : "normal"
     }
   : {
       level: "Insufficient",
-      score: 0
+      score: 0,
+      demand: hoverLevelDemand ? "gentle" : "normal"
     },
 
     findings: [
+      ...(hoverLevelDemand
+        ? [
+            "Stick demand: gentle. The average commanded rate stayed below the scoring floor on every axis, so this score describes gentle flying and is not comparable to a score earned in hard maneuvers."
+          ]
+        : []),
       `Axis setpoint columns detected: ${axisSetpointColumns.length}`,
       axisErrorColumns.length === 3
   ? `Tracking-error source: recorded axis-error columns (${axisErrorColumns.join(", ")})`
@@ -2278,6 +2875,7 @@ const pidScoreExplanation = [
 ...commandEvents.map((axisResult) =>
   `${axisResult.axis} meaningful command events detected: ${axisResult.eventCount}`
 ),
+...crossAxisFindings,
 ...commandEvents.flatMap((axisResult) => {
   const validPeakEvents =
     axisResult.events.filter((event) =>
@@ -2426,7 +3024,7 @@ return [
   
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — command at: ${
+  ? `${axisResult.axis} highest overshoot event details: command at: ${
       eventMomentText(
         highestOvershootEvent.sampleIndex,
         highestOvershootEvent.sampleRowIndex
@@ -2559,7 +3157,8 @@ const trimmedMaximumBounceBackPercent =
   bounceBackConfidence === "Low"
     ? `Collect more clean ${axisResult.axis} command events before evaluating bounce-back.`
     : Number.isFinite(medianBounceBackPercent) &&
-        medianBounceBackPercent >= 15
+        medianBounceBackPercent >=
+          (RESPONSE_REVIEW_BARS.bounceBackPercent[axisResult.axis] ?? 54)
       ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
       : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
 
@@ -2570,7 +3169,8 @@ const trimmedMaximumBounceBackPercent =
   bounceBackConfidence === "Low"
     ? "Insufficient Data"
     : Number.isFinite(medianBounceBackPercent) &&
-        medianBounceBackPercent >= 15
+        medianBounceBackPercent >=
+          (RESPONSE_REVIEW_BARS.bounceBackPercent[axisResult.axis] ?? 54)
       ? "Review"
       : "Clear";
 return [
@@ -2583,7 +3183,7 @@ return [
   }`,
   `${axisResult.axis} bounce-back evidence: ${
     nothingToBounceFrom
-      ? `${cleanBounceResponseCount} clean responses without overshoot — no bounce-back events expected`
+      ? `${cleanBounceResponseCount} clean responses without overshoot, no bounce-back events expected`
       : `${validBounceBackEvents.length} valid event${
           validBounceBackEvents.length === 1 ? "" : "s"
         }`
@@ -2615,7 +3215,7 @@ return [
   }%`,
 
   highestBounceBackEvent
-    ? `${axisResult.axis} highest bounce-back event details — command at: ${
+    ? `${axisResult.axis} highest bounce-back event details: command at: ${
         eventMomentText(
           highestBounceBackEvent.sampleIndex,
           highestBounceBackEvent.sampleRowIndex
@@ -2725,7 +3325,8 @@ const trimmedMaximumSettlingDurationSamples =
     : Number.isFinite(
         medianSettlingDurationSamples
       ) &&
-        medianSettlingDurationSamples >= 100
+        medianSettlingDurationSamples * (1000 / samplesPerSecond) >=
+          (RESPONSE_REVIEW_BARS.settleMs[axisResult.axis] ?? 290)
       ? `Review ${axisResult.axis} for slow settling after command changes. Confirm the pattern with another log before changing PID values.`
       : `No repeated slow-settling pattern was identified for ${axisResult.axis}.`;
       const settlingStatus =
@@ -2735,7 +3336,8 @@ const trimmedMaximumSettlingDurationSamples =
     : Number.isFinite(
         medianSettlingDurationSamples
       ) &&
-        medianSettlingDurationSamples >= 100
+        medianSettlingDurationSamples * (1000 / samplesPerSecond) >=
+          (RESPONSE_REVIEW_BARS.settleMs[axisResult.axis] ?? 290)
       ? "Review"
       : "Clear";
   return [
@@ -2769,7 +3371,7 @@ const trimmedMaximumSettlingDurationSamples =
     : "Unavailable"
 } samples`,
 highestSettlingDurationEvent
-  ? `${axisResult.axis} slowest settling event details — sample: ${highestSettlingDurationEvent.sampleIndex}, command end: ${highestSettlingDurationEvent.commandEndSampleIndex}, target: ${
+  ? `${axisResult.axis} slowest settling event details: sample: ${highestSettlingDurationEvent.sampleIndex}, command end: ${highestSettlingDurationEvent.commandEndSampleIndex}, target: ${
       Number.isFinite(highestSettlingDurationEvent.commandTarget)
         ? highestSettlingDurationEvent.commandTarget.toFixed(2)
         : "Unavailable"
@@ -2872,7 +3474,8 @@ const trimmedMaximumRingingCrossingCount =
     : Number.isFinite(
         medianRingingCrossingCount
       ) &&
-        medianRingingCrossingCount >= 3
+        medianRingingCrossingCount >=
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 40)
       ? `Review ${axisResult.axis} for repeated post-command ringing. Confirm the pattern with another log before changing PID or filter values.`
       : `No repeated sustained-ringing pattern was identified for ${axisResult.axis}.`;
       const ringingStatus =
@@ -2882,7 +3485,8 @@ const trimmedMaximumRingingCrossingCount =
     : Number.isFinite(
         medianRingingCrossingCount
       ) &&
-        medianRingingCrossingCount >= 3
+        medianRingingCrossingCount >=
+          (RESPONSE_REVIEW_BARS.ringingCrossings[axisResult.axis] ?? 40)
       ? "Review"
       : "Clear";
   return [
@@ -2915,7 +3519,7 @@ const trimmedMaximumRingingCrossingCount =
     : "Unavailable"
 }`,
 highestRingingEvent
-  ? `${axisResult.axis} highest ringing event details — sample: ${highestRingingEvent.sampleIndex}, command end: ${highestRingingEvent.commandEndSampleIndex}, target: ${
+  ? `${axisResult.axis} highest ringing event details: sample: ${highestRingingEvent.sampleIndex}, command end: ${highestRingingEvent.commandEndSampleIndex}, target: ${
       Number.isFinite(highestRingingEvent.commandTarget)
         ? highestRingingEvent.commandTarget.toFixed(2)
         : "Unavailable"
@@ -2963,9 +3567,13 @@ highestTrackingErrorAxis
 
 ...(canCompareProfiles
   ? [
-      `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
-        2
-      )}.`,
+      bestProfileUnderSampled
+        ? `${bestTrackingProfile.targetRpm} RPM showed the lowest observed tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+            2
+          )}: from only ${bestTrackingProfile.sampleCount} samples (best-measured bank: ${largestProfileSampleCount}), a limited read rather than an established comparison.`
+        : `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(
+            2
+          )}.`,
       `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(
         2
       )}.`
@@ -2987,7 +3595,7 @@ highestTrackingErrorAxis
       axisResult.commandWindowCount
     } window${
       axisResult.commandWindowCount === 1 ? "" : "s"
-    } — P: ${
+    }: P: ${
       Number.isFinite(axisResult.pPercent)
         ? axisResult.pPercent.toFixed(2)
         : "Unavailable"
@@ -3018,14 +3626,14 @@ highestTrackingErrorAxis
 ...pidCommandBalanceAssessment.map(
   (axisResult) =>
     axisResult.status === "Review"
-      ? `${axisResult.axis} command-balance finding: I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Review setpoint, axis error, feedforward, and I behavior together before changing any PID value.`
+      ? `${axisResult.axis} command-balance finding: I remains dominant during command events while P plus feedforward support stays below the axis's fleet-calibrated bar, and this axis also has the highest tracking error. Review setpoint, axis error, feedforward, and I behavior together before changing any PID value.`
       : axisResult.status === "Clear"
         ? `${axisResult.axis} command-balance finding: No combined tracking-error and command-support concern was identified.`
         : `${axisResult.axis} command-balance finding: More usable command windows are required before evaluating PID-term balance.`
 ),
   ...pidTermContributionPercentages.map(
   (axisResult) =>
-    `${axisResult.axis} PID-term contribution — P: ${
+    `${axisResult.axis} PID-term contribution: P: ${
       Number.isFinite(axisResult.pPercent)
         ? axisResult.pPercent.toFixed(2)
         : "Unavailable"
@@ -3233,7 +3841,7 @@ highestTrackingErrorAxis
           : "Unavailable"
       }% with a longest run of ${
         termResult.longestNearPeakRun ?? 0
-      } samples. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
+      } samples${nearPeakMomentText(termResult)}. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
   ),
       ...pidTermSaturationAssessment.feedforward
   .filter(
@@ -3251,7 +3859,7 @@ highestTrackingErrorAxis
   )
   .map(
     (axisResult) =>
-      `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
+      `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below the axis's fleet-calibrated bar, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
   ),
  commandBalanceReviewAxes.length === 0 &&
 saturationReviewTerms.length === 0 &&
@@ -3292,4 +3900,196 @@ highestTrackingErrorAxis
       ? lines.length
       : 0
   };
+
+  // The per-axis behavior checks (bounce-back, settling, ringing)
+  // file their verdicts as technical-finding lines. Collected here
+  // as structured data so surfaces that cannot show the full
+  // findings list — the exported report above all — can still carry
+  // the checks' statuses, evidence counts and recommendations
+  // instead of silently dropping them.
+  const responseBehavior = [];
+  const behaviorStatusPattern =
+    /^(\w+) (bounce-back|settling|ringing) status: (.+)$/;
+
+  for (const line of pidResult.findings) {
+    if (typeof line !== "string") {
+      continue;
+    }
+
+    const match = behaviorStatusPattern.exec(line);
+
+    if (!match) {
+      continue;
+    }
+
+    const [, axis, check, status] = match;
+
+    const companion = (label) => {
+      const prefix = `${axis} ${check} ${label}: `;
+      const companionLine = pidResult.findings.find(
+        (candidate) =>
+          typeof candidate === "string" &&
+          candidate.startsWith(prefix)
+      );
+
+      return companionLine
+        ? companionLine.slice(prefix.length)
+        : null;
+    };
+
+    // The check's key statistic, so surfaces that cannot show the
+    // findings list still carry the number that matters (#36).
+    const statLabel = {
+      "bounce-back": `${axis} median event bounce-back`,
+      settling: `${axis} median settling duration`,
+      ringing: `${axis} average ringing target crossings`
+    }[check];
+    const statLine = statLabel
+      ? pidResult.findings.find(
+          (candidate) =>
+            typeof candidate === "string" &&
+            candidate.startsWith(statLabel + ": ")
+        )
+      : null;
+
+    // The events behind the check, as row anchors — the same
+    // predicates the findings above counted with. A card that says
+    // "4 valid events" and a confidence line that counts its own
+    // evidence must count the SAME rows (#61).
+    const axisResult = commandEvents.find(
+      (candidate) => candidate.axis === axis
+    );
+    const eligibleEvents = (axisResult?.events ?? []).filter((event) =>
+      check === "bounce-back"
+        ? event?.bounceBackEligible === true &&
+          Number.isFinite(event?.bounceBackPercent)
+        : check === "settling"
+          ? event?.settlingEligible === true &&
+            Number.isFinite(event?.settlingDurationSamples)
+          : event?.ringingEligible === true &&
+            Number.isFinite(event?.ringingTargetCrossingCount)
+    );
+    const evidenceRows = eligibleEvents.map((event) => ({
+      kind: "command-event",
+      axis,
+      check,
+      rowIndex: event.sampleRowIndex ?? null,
+      ...(check === "bounce-back"
+        ? {
+            bounceBackPercent:
+              Math.round(event.bounceBackPercent * 10) / 10
+          }
+        : check === "settling"
+          ? { settlingSamples: event.settlingDurationSamples }
+          : { ringingCrossings: event.ringingTargetCrossingCount })
+    }));
+
+    responseBehavior.push({
+      axis,
+      check,
+      status,
+      confidence: companion("confidence"),
+      evidence: companion("evidence"),
+      eventCount: evidenceRows.length,
+      evidenceRows,
+      recommendation: companion("recommendation"),
+      stat: statLine ? statLine.slice(statLabel.length + 2) : null
+    });
+  }
+
+  pidResult.responseBehavior = responseBehavior;
+
+  // Technical recommendations follow the same priority the
+  // evidence-gated workflow uses everywhere else (#62): an axis with
+  // an active response-behavior Review — a detected pattern, counted
+  // events, a confidence and a confirmation maneuver — leads; the
+  // generic "highest tracking error" observation stays visible but
+  // is labeled the secondary context it is, and never displaces the
+  // Review axis. Without any Review the tracking-error lead stands.
+  const responseReviews = responseBehavior.filter(
+    (checkResult) => checkResult.status === "Review"
+  );
+
+  if (
+    responseReviews.length > 0 &&
+    Array.isArray(pidResult.recommendations)
+  ) {
+    const trackingLeadPattern =
+      /^No command-balance or PID-term saturation review condition was identified\. If further tuning is desired, compare (\w+) first because it had the highest tracking error\.$/;
+    const trackingLead = pidResult.recommendations.find((line) =>
+      trackingLeadPattern.test(line)
+    );
+    const trackingLeadAxis = trackingLead
+      ? trackingLeadPattern.exec(trackingLead)[1]
+      : null;
+    // The SAME priority rule every other surface uses (#62): higher
+    // confidence first, more supporting events first — so the axis
+    // Technical leads with is the axis Home and the pack selected.
+    const confidenceRank = {
+      High: 0,
+      Medium: 1,
+      Low: 2,
+      Insufficient: 3
+    };
+    const rankedReviews = [...responseReviews].sort(
+      (a, b) =>
+        (confidenceRank[a.confidence] ?? 4) -
+          (confidenceRank[b.confidence] ?? 4) ||
+        (b.eventCount ?? 0) - (a.eventCount ?? 0)
+    );
+
+    const reviewAxes = [
+      ...new Set(rankedReviews.map((checkResult) => checkResult.axis))
+    ];
+
+    const leadLines = rankedReviews.map((checkResult) => {
+      const maneuver = {
+        Roll: "Repeat 4-6 deliberate roll inputs with clean stops and reversals at the same headspeed",
+        Pitch: "Repeat 4-6 deliberate pitch inputs with clean stops and reversals at the same headspeed",
+        Yaw: "Repeat 4-6 deliberate yaw stops in both directions at the same headspeed"
+      }[checkResult.axis] ?? "Fly the same maneuvers again at the same headspeed";
+      return (
+        `${checkResult.axis} ${checkResult.check} is the current Review finding` +
+        (checkResult.evidence ? `, supported by ${checkResult.evidence}` : "") +
+        (checkResult.confidence ? ` at ${checkResult.confidence} confidence` : "") +
+        ". No PID change is earned yet. " +
+        `${maneuver} to confirm whether the pattern repeats.`
+      );
+    });
+
+    const secondary = trackingLeadAxis
+      ? reviewAxes.includes(trackingLeadAxis)
+        ? `${trackingLeadAxis} also had the highest average tracking error, which is consistent with its Review finding above.`
+        : `Secondary context: ${trackingLeadAxis} had the highest average tracking error, but no separate ${trackingLeadAxis} Review condition was identified — confirm the ${reviewAxes.join(" and ")} finding above first.`
+      : null;
+
+    pidResult.recommendations = [
+      ...leadLines,
+      ...pidResult.recommendations.filter((line) => line !== trackingLead),
+      secondary
+    ].filter(Boolean);
+  }
+
+  // "Clear" is a promise that nothing below needs follow-up. An
+  // overall Clear must not sit on top of Review lines a pilot would
+  // only find by reading the technical findings.
+  const behaviorReviewCount = responseBehavior.filter(
+    (checkResult) => checkResult.status === "Review"
+  ).length;
+
+  if (
+    pidResult.overallStatus === "Clear" &&
+    behaviorReviewCount > 0
+  ) {
+    pidResult.overallStatus = "Review";
+    if (Array.isArray(pidResult.summary)) {
+      pidResult.summary.push(
+        `${behaviorReviewCount} response-behavior check${
+          behaviorReviewCount === 1 ? "" : "s"
+        } (bounce-back, settling or ringing) flagged for confirmation. Nothing to change yet, but fly the same maneuvers again and see whether the pattern returns.`
+      );
+    }
+  }
+
+  return pidResult;
 }

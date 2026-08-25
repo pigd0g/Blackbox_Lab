@@ -399,6 +399,19 @@ export function buildRollingMean(values, windowSamples) {
 
   const half = Math.max(1, Math.round(windowSamples / 2));
 
+  // null means MISSING, and Number(null) is 0 — without the
+  // explicit check, gaps average into the window as zeros and
+  // dilute every smoothed signal near a dropout (an 8% droop
+  // straddling a gap can read below the event band).
+  const finiteAt = (index) => {
+    const value = values[index];
+    return value !== null &&
+      value !== undefined &&
+      Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+  };
+
   let runningTotal = 0;
   let runningCount = 0;
 
@@ -408,9 +421,9 @@ export function buildRollingMean(values, windowSamples) {
     index += 1
   ) {
     if (index < values.length) {
-      const entering = Number(values[index]);
+      const entering = finiteAt(index);
 
-      if (Number.isFinite(entering)) {
+      if (entering !== null) {
         runningTotal += entering;
         runningCount += 1;
       }
@@ -419,9 +432,9 @@ export function buildRollingMean(values, windowSamples) {
     const leavingIndex = index - 2 * half;
 
     if (leavingIndex >= 0) {
-      const leaving = Number(values[leavingIndex]);
+      const leaving = finiteAt(leavingIndex);
 
-      if (Number.isFinite(leaving)) {
+      if (leaving !== null) {
         runningTotal -= leaving;
         runningCount -= 1;
       }
@@ -745,4 +758,118 @@ export function detectInFlightSamples({ timeSeconds, headspeed }) {
   }
 
   return inFlightIndexes.length >= 100 ? inFlightIndexes : null;
+}
+
+// The flight envelope for LOAD-event selection: from the moment the
+// machine first settles into sustained stable flight to the last
+// stable sample. Spool-up crosses every rotor-speed threshold on its
+// way in, and the governor's first settling seconds run an elevated
+// output plateau that outranks any real flight moment — both live
+// before the first sustained stable segment, so the envelope starts
+// there. It deliberately does NOT require per-sample stability inside
+// the flight: a hard collective pump droops the rotor out of the
+// stable mask, and the hardest load moments are exactly what the
+// selection exists to find. A short stable brush (a settling
+// transient touching a bank for a second) is not "settled" — the
+// first segment must be sustained.
+export function qualifiedLoadEnvelope({
+  timeSeconds,
+  headspeed,
+  governorTarget
+}) {
+  const phase = detectStableFlightPhase({
+    timeSeconds,
+    headspeed: headspeed ?? [],
+    governorTarget: governorTarget ?? []
+  });
+
+  const segments = phase?.segments ?? [];
+  const stableIndexes = phase?.stableIndexes ?? [];
+
+  if (segments.length === 0 || stableIndexes.length === 0) {
+    return null;
+  }
+
+  const minimumSustainedSeconds = 5;
+
+  const sustained = segments.find((segment) => {
+    if (
+      !Number.isInteger(segment.startIndex) ||
+      !(segment.sampleCount > 1)
+    ) {
+      return false;
+    }
+
+    const first = timeSeconds[segment.startIndex];
+    const last =
+      timeSeconds[segment.startIndex + segment.sampleCount - 1];
+
+    return (
+      Number.isFinite(first) &&
+      Number.isFinite(last) &&
+      last - first >= minimumSustainedSeconds
+    );
+  });
+
+  if (!sustained) {
+    return null;
+  }
+
+  return {
+    startIndex: sustained.startIndex,
+    endIndex: stableIndexes[stableIndexes.length - 1]
+  };
+}
+
+// A logged governor target is only a TARGET if the rotor plausibly
+// chased it. Rotorflight's DIRECT mode (and FUNCTION throttle) logs
+// a govTarget column that is not a rotor-speed target at all — on
+// such flights it sits far below the measured headspeed, and every
+// governed-flight comparison built on it rejects a perfectly good
+// flight. The test is the ratio of in-flight medians: a real
+// governed rotor lives near its target; a passthrough number does
+// not. Implausible targets are treated as absent, which routes the
+// flight to the headspeed-only analysis it should have had.
+export function isUsableGovernorTarget(headspeed, governorTarget) {
+  if (
+    !Array.isArray(governorTarget) ||
+    !Array.isArray(headspeed) ||
+    !governorTarget.some((value) => Number(value) > 300)
+  ) {
+    return false;
+  }
+
+  const pairedRatios = [];
+
+  for (let index = 0; index < governorTarget.length; index += 1) {
+    const target = Number(governorTarget[index]);
+    const actual = Number(headspeed[index]);
+
+    if (
+      Number.isFinite(target) &&
+      Number.isFinite(actual) &&
+      target > 300 &&
+      actual > 500
+    ) {
+      pairedRatios.push(target / actual);
+    }
+  }
+
+  if (pairedRatios.length < 100) {
+    // Too little overlap to judge — keep the old behavior and let
+    // the sample-count guards downstream speak.
+    return true;
+  }
+
+  pairedRatios.sort((a, b) => a - b);
+  const medianRatio =
+    pairedRatios[Math.floor(pairedRatios.length / 2)];
+
+  // Asymmetric band: passthrough targets sit far BELOW the rotor
+  // (the reported DIRECT case reads 0.29), while a REAL target on a
+  // struggling machine sits ABOVE the rotor — sustained heavy droop
+  // pushes the ratio up, and blanking that target would hide
+  // exactly the failure it exposes. Up to 2× (a 50% droop median,
+  // beyond anything that stays airborne) the target is believed.
+  return medianRatio >= 0.7 && medianRatio <= 2.0;
 }

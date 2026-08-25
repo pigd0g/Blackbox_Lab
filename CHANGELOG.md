@@ -1,3 +1,273 @@
+## v1.8.0 — The 180 Edition
+
+Everything between v1.3.0 and here, in one entry — a
+field-feedback release series: every item below was shaped, retested and signed off
+by the community test round.
+
+### The big ones
+
+- **Change Packs** — each flight ends with concrete setting changes
+  (setting, direction, reason, verifying metric on the next log), or
+  the evidence flight that would earn one. Previous packs are checked
+  against the next log automatically.
+- **Replay: all logged fields** — a searchable, grouped field browser
+  stacks any recorded channel (PID terms, mixer, servos, governor,
+  ESC telemetry, debug) on the synchronized timeline; chart legends
+  keep exact field names.
+- **PDF reports** — one compact A4 file: verdict, What To Do First in
+  priority order, the Change Pack, like-for-like data, every lab and
+  the charts, worded exactly as the app.
+- **Compare Flights: like-for-like check** — flight demand, stick
+  demand per axis, maneuver coverage, headspeed, collective work,
+  length and evidence quality compared before any verdict, with the
+  verdict confidence stated; non-comparable pairs read as
+  observations, the same flight twice reads as a self-check.
+- **Roughly 4× faster log loading**, with results verified identical.
+
+### Honesty and evidence
+
+- Under-sampled headspeed banks are never rated "best" or "cleanest";
+  per-bank evidence (seconds, confidence) is shown everywhere.
+- One priority rule across Home, the pack, the labs, Technical and
+  the report: the same flight names the same primary finding on
+  every surface.
+- Missing telemetry appears as greyed "not logged" cards plus a
+  "Not measured on this flight" list naming the sensor or setting.
+- BEC verdicts speak in sustained readings and disclose brief raw
+  dips; a tracking score read through an open vibration finding, or
+  from thin evidence, is never called crisp.
+- Health Record: no trend lines under four flights, comparability
+  differences named, one flight is one row whatever build analyzed it.
+- Flight Events: one stick movement is one event; the selected
+  event's card, description and windowed chart always show the same
+  moment, with the measured-response band drawn on the chart.
+
+### Simpler by default
+
+- Lab pages open with the verdict, Try This First and the key chart;
+  tables and raw numbers live behind one "Show the advanced data"
+  button per page, and folds open themselves when they hold a
+  finding.
+- The Diagnosis Academy: six practice flights with a known planted
+  problem, reachable before and after loading a log.
+- A declared type scale and a full legibility pass: reading text
+  never below 16px, results uniformly emphasized, shorter sentences
+  and cleaner paragraphs throughout.
+- Sidebar and report credit: a passion project by Daniel Sink and
+  Vincent Offenbeck.
+
+## v1.3.0 — Signal Lab, BEC Lab, and the Confirm Round
+
+Built from the field's own verification pass of v1.2.0: six
+refinements confirmed against real logs, plus two new labs that
+extend the mission from tune and power to the radio link and the
+receiver's own power supply.
+
+### New: Signal Lab
+
+- "Was the radio link healthy the whole flight?" — signal strength
+  judged against this flight's own typical level (never an absolute
+  threshold: protocols scale these numbers differently), with the
+  firmware's failsafe and signal-valid flags as the only authority
+  on loss of control. A telemetry hiccup is never read as loss of
+  control, and fields the log doesn't carry report Not Evaluated.
+
+### New: BEC Lab
+
+- "Did the receiver and servos receive stable power?" — the
+  reference is the flight's own median voltage, so a system
+  deliberately running 6.0 V is never judged against one running
+  8.4 V. Dips are judged by depth, duration and repetition
+  together, each with its servo-demand context: voltage following
+  hard servo work is load; voltage sagging with the servos quiet
+  points at wiring, connectors or the BEC. Brownout language
+  appears only near the absolute floor where receivers genuinely
+  let go — and when the receiver kept reporting a healthy link
+  through a "brownout" reading, the lab says what that means: a
+  measurement-path story, not a power loss.
+- When a link event and a power event overlap, each lab points at
+  the other — correlation named, causation never claimed.
+
+### Flight events
+
+- A command that materially reverses direction before ever holding
+  now ends at the reversal: several slurred movements can no longer
+  anchor as one event measured against a target from seconds later,
+  and the response-peak marker always belongs to the command the
+  card names. Response measurements end at the settled point.
+
+### Consistency
+
+- Compare Flights' spectrum caption follows the page's own
+  comparability ruling — no "shrinking peaks = progress" between
+  two different machines.
+- The exported report's Governor Lab status now renders the same
+  capability state the app shows: a partial (stability-only)
+  analysis is never labeled with a scored-quality word.
+- Governor Lab help opens with what the current log can support;
+  Filter Lab help keeps mechanics-first for real mechanical
+  evidence without implying every well-managed harmonic needs a
+  wrench; PID Lab help now defines bounce-back, oscillation,
+  still-approaching and sustained PID-term activity.
+
+## v1.2.0 — The Events-Integrity Round
+
+The community's first deep-review wave — issues on the events
+analysis, the governor verdict, battery sag and servo limits, plus
+a real before/after tuning case from the field — answered in one
+build. The theme throughout: every number the app shows must be the
+answer to the question it claims to answer.
+
+### Flight events, rebuilt
+
+- A command event now means a real stick step (20 deg/s or more)
+  toward a target that holds still. Tiny nudges and still-moving
+  targets are not step responses and are no longer scored.
+- Overshoot only exists after the response actually reaches the
+  target, only while it persists past it, and is bounded by
+  settling — the response-peak marker always points at the moment
+  it names. Reported in deg/s alongside percent, and both must be
+  meaningful for the verdict to fire.
+- Two new verdicts: **oscillation** — the response swings across
+  the target repeatedly, bigger than the command itself — and
+  **still approaching** — the response had not arrived when its
+  window closed. Both were previously lumped into other labels.
+- All response measurements run on a lightly smoothed trace, so a
+  single noisy sample can no longer fake a peak or break a settle.
+
+### Governor Lab
+
+- Multi-bank flights get one verdict row per commanded headspeed
+  bank — average, dip and percent against that bank's own target.
+  A cross-bank average describes nothing the pilot commanded.
+- Commanded bank changes no longer register as droop, and a dip
+  with the motor output at its ceiling is named a power-system
+  limit, pointing at the ESC Lab instead of governor gain.
+
+### ESC and Battery
+
+- Load-event sag is measured against the pack's level just before
+  each event, and the table shows both voltages — the reference is
+  visible, never implied. Ordinary discharge no longer reads as
+  event sag.
+
+### New: Servo Travel Check
+
+- The PID Lab watches for servo commands frozen at the edge of
+  their own travel while the controller is actively working — the
+  servo-level confirmation of a saturation condition. Each event
+  lists time, edge, duration and command value. Silent on logs
+  without servo data.
+
+### Scores that name their demand
+
+- A tracking score from a gently flown flight now says so ("at
+  gentle demand"), carries Medium confidence, and Compare Flights
+  shows — but does not subtract — scores from flights flown at
+  different intensities.
+
+### Calibration
+
+- Every fleet-anchored threshold behind the event verdicts and the
+  What To Try Next gates was re-measured on the contributed corpus
+  (370 flights) under the new measurement.
+
+## v1.1.0 — The Recommendation Engine
+
+v1.0.0 finished the analysis half of the mission; this release starts
+the other half the roadmap always promised: recommendations,
+explained and evidence-backed, with the pilot deciding. It was asked
+for by the first users of v1.0.0 within hours of the release — this
+is that answer.
+
+### The big ones
+
+- **What To Try Next.** The PID and Governor Lab pages now carry
+  recommendation cards. Each one states the finding, teaches the
+  mechanism behind it, and — only when enough evidence agrees —
+  names ONE setting family, a direction, and a small step, followed
+  by its verify plan: change the one thing, fly the same moves, and
+  the card names the exact number that must improve. Below the gate,
+  the same card says plainly what is missing ("Not calling it yet").
+  Advice is confidence-gated (at least two comparable events, high
+  evidence confidence, no conflicting higher-priority finding) and
+  respects the tuning order in code: an open vibration finding
+  silences PID advice, a power limit silences governor advice.
+- **Headspeed Events.** The Governor Lab gains the event layer the
+  PID page already had: every sustained moment the rotor ran over or
+  under its governed target shows as a card on a time axis — click
+  one and its evidence unfolds in place, target vs headspeed and
+  motor output vs collective on one clock, with the pilot's hands
+  beside it when the log carries stick telemetry. Each event is
+  classified from its context: power-limit, load droop, overspeed
+  after a collective drop, with post-event hunting flagged. The
+  event band is fleet-calibrated on 247 contributed flights: the
+  median governed machine reads zero events.
+- **Precomp Balance.** Precomp is never logged, but how well the
+  anticipation worked is. The Governor Lab's advanced view now reads
+  the flight's own fast collective moves both ways: droop on rises
+  with clean drops = precomp behind the load; overspeed on drops
+  with clean rises = precomp past it; missed both ways = a
+  response-speed story, routed to the ESC Lab. The tail gets the
+  same treatment — a tail kicked consistently by collective moves is
+  torque anticipation, not tail tuning, and the card says which knob
+  that is and how to verify the direction.
+- **Reading the findings.** The How-to-Use guide gains the chapter
+  users asked for — how events, patterns and recommendations relate,
+  and when NOT to change anything — plus a fuller written version in
+  `Documentation/READING_THE_FINDINGS.md`.
+
+- **The overshoot driver, answered carefully.** Repeated overshoot
+  now gets its own recommendation — and the engine reads what
+  drives it before naming a knob: overshoots that ring point at
+  damping; overshoot growing with how FAST the command moved
+  carries the feedforward signature; growing with how BIG the
+  command was, the proportional one. When the driver is not
+  separable from the log, the card says so and names both knobs in
+  doctrine order, feedforward first, one at a time.
+- **Precomp trends across flights.** The Health Record now tracks
+  each flight's precomp reads — rise-side droop, drop-side
+  overspeed, tail kick ratio — and warns when they worsen across
+  sessions, the way it already watches vibration and droop. Trends
+  on metrics that live near zero carry an absolute floor, so a
+  rise from nothing to almost nothing can never read as a
+  deterioration.
+
+- **The loop actually closes.** Every recommendation names the
+  number the next log must improve — and Compare Flights now shows
+  those exact numbers: stick-response events needing review,
+  headspeed excursion counts, the precomp balance reads, the tail
+  kick ratio. The shareable report carries the What To Try Next
+  cards, the excursion summary and the precomp reads, so the second
+  pair of eyes sees what the pilot sees. And the tuning order is
+  enforced everywhere: an open vibration finding silences governor
+  advice exactly as it silences PID advice — including the tail
+  read, which is measured from the most vibration-sensitive signal
+  of all.
+
+### Also in
+
+- Governor & precomp settings from the craft's saved configuration
+  shown beside the events they produced (advanced view).
+- The governor verdict sentence carries the excursion summary when
+  events exist; headspeed excursions ride the Replay scrub bar
+  beside the stick-command ticks; the Technical PID analysis
+  drilldown says in one line how it relates to the What To Try Next
+  card above it.
+- The contributed-data description now names the derived analysis
+  results that travel with a contribution — command events,
+  excursion events, precomp reads — and the in-app sharing
+  description says the same.
+- Contribution schema 1.2: governor excursion events and the
+  precomp balance reads now travel with contributed flights — the
+  same allowlist-on-write, consent and caps as the command events;
+  pilot-facing text never uploads.
+- The ingest guide gains browser-only steps for updating the
+  worker, and describes the addressed bucket layout (one folder
+  per distinct flight, error reports in their own area).
+- Stick insets across the app now hide cleanly on logs without
+  rcCommand telemetry instead of rendering an empty box.
+
 ## v1.0.0 — Blackbox Lab
 
 The first full release. Everything below grew out of months of test
@@ -232,7 +502,7 @@ the helicopter and see things the CSV log doesn't show.
 ### Added
 
 - Native binary BBL decoder, implemented clean-room from the
-  published Blackbox format specification (MIT-safe): all
+  published Blackbox format specification, no code copied: all
   standard encodings and predictors, multi-flight files,
   corruption resync, end-of-log events. Validated against real
   Betaflight-family logs (24,893 frames, zero corruption) and

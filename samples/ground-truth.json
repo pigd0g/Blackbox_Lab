@@ -25,5 +25,100 @@
     "headspeedTarget": 1850,
     "expectedMainRotorPeakHz": 30.8,
     "expectedTailPeakHz": 141.8
+  },
+  {
+    "file": "sample-academy-imbalance.bbl",
+    "preset": "academy-imbalance",
+    "description": "Planted defect: heavy 1/rev main-rotor imbalance — the tune is fine",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1800,
+    "expectedMainRotorPeakHz": 30,
+    "expectedTailPeakHz": 138,
+    "headerTuning": {
+      "rollPID": "52,180,42,110,0",
+      "pitchPID": "56,190,48,115,0",
+      "yawPID": "70,120,20,60,0",
+      "govPID": "40,25,0,0,105"
+    }
+  },
+  {
+    "file": "sample-academy-underdamped-roll.bbl",
+    "preset": "academy-underdamped-roll",
+    "description": "Planted defect: underdamped roll — every roll input bounces back",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1820,
+    "expectedMainRotorPeakHz": 30.3,
+    "expectedTailPeakHz": 139.5,
+    "headerTuning": {
+      "rollPID": "58,170,18,120,0",
+      "pitchPID": "54,185,46,115,0",
+      "yawPID": "72,118,22,62,0",
+      "govPID": "42,26,0,0,102"
+    }
+  },
+  {
+    "file": "sample-academy-weak-ff.bbl",
+    "preset": "academy-weak-ff",
+    "description": "Planted defect: feedforward too weak — the I-term carries every command",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1810,
+    "expectedMainRotorPeakHz": 30.2,
+    "expectedTailPeakHz": 138.8,
+    "headerTuning": {
+      "rollPID": "48,210,40,25,0",
+      "pitchPID": "50,215,44,25,0",
+      "yawPID": "68,130,20,30,0",
+      "govPID": "40,25,0,0,104"
+    }
+  },
+  {
+    "file": "sample-academy-governor-droop.bbl",
+    "preset": "academy-governor-droop",
+    "description": "Planted defect: weak governor — headspeed droops hard under load",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1850,
+    "expectedMainRotorPeakHz": 30.8,
+    "expectedTailPeakHz": 141.8,
+    "headerTuning": {
+      "rollPID": "50,182,42,112,0",
+      "pitchPID": "54,192,48,116,0",
+      "yawPID": "70,122,20,60,0",
+      "govPID": "18,10,0,0,62"
+    }
+  },
+  {
+    "file": "sample-academy-dead-current.bbl",
+    "preset": "academy-dead-current",
+    "description": "Planted defect: dead current sensor — every amperage sample reads zero",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1820,
+    "expectedMainRotorPeakHz": 30.3,
+    "expectedTailPeakHz": 139.5,
+    "headerTuning": {
+      "rollPID": "51,184,42,110,0",
+      "pitchPID": "55,194,48,114,0",
+      "yawPID": "71,121,21,61,0",
+      "govPID": "41,25,0,0,103"
+    }
+  },
+  {
+    "file": "sample-academy-stale-dump.bbl",
+    "dumpFile": "sample-academy-stale-dump.dump.txt",
+    "preset": "academy-stale-dump",
+    "description": "Planted trap: the paired CLI dump is OUTDATED — bench changes were never re-dumped",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1820,
+    "expectedMainRotorPeakHz": 30.3,
+    "expectedTailPeakHz": 139.5,
+    "headerTuning": {
+      "rollPID": "52,180,42,110,0",
+      "pitchPID": "56,190,45,115,0",
+      "yawPID": "70,120,20,60,0",
+      "govPID": "40,25,0,0,105"
+    },
+    "staleDumpSettings": {
+      "roll_p_gain": 44,
+      "pitch_d_gain": 30
+    }
   }
 ]

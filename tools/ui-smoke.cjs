@@ -23,7 +23,12 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("css brace balance ok");
 
-  const app = await _electron.launch({ args: ["."], cwd: process.cwd() });
+  const pdfDirectory = require("node:path").resolve("smoke-shots");
+  const app = await _electron.launch({
+    args: ["."],
+    cwd: process.cwd(),
+    env: { ...process.env, BLACKBOX_LAB_SMOKE_PDF_DIR: pdfDirectory }
+  });
   const window = await app.firstWindow();
 
   const errors = [];
@@ -118,6 +123,61 @@ const { mkdirSync } = require("node:fs");
       badPresets.map((entry) => entry.id).join(", "));
   }
   console.log("preset grid ok: 9/9 charts scaled");
+  // ---- Signal + BEC labs: verdicts filled, charts carry DATA ----
+  // The v1.3 lesson repeated: a chart can render healthy-looking
+  // axes with zero series (a per-value convert handed an array) —
+  // assert scales, never just absence of errors.
+  await window.click('.nav-button[data-target="signal"]');
+  await window.waitForTimeout(400);
+  const signalState = await window.evaluate(() => ({
+    story: document.getElementById("signalStory")?.textContent ?? "",
+    metrics: document.querySelectorAll("#signalMetrics .metric").length
+  }));
+  if (signalState.story.length < 20) {
+    throw new Error(
+      "signal lab verdict empty: " + JSON.stringify(signalState)
+    );
+  }
+  console.log("signal lab ok:", signalState.story.slice(0, 70));
+
+  await window.click('.nav-button[data-target="bec"]');
+  await window.waitForTimeout(600);
+  const becState = await window.evaluate(() => {
+    const chart = document
+      .getElementById("chartBecVoltage")
+      ?.querySelector("canvas")
+      ? document.getElementById("chartBecVoltage").__blackboxLabChart
+      : null;
+    return {
+      story: document.getElementById("becStory")?.textContent ?? "",
+      chartScaled: Boolean(
+        chart &&
+          chart.scales.x.min != null &&
+          chart.scales.x.max > chart.scales.x.min
+      ),
+      chartHidden:
+        document.getElementById("becChartCard")?.hidden ?? null
+    };
+  });
+  if (becState.story.length < 20) {
+    throw new Error("bec lab verdict empty: " + JSON.stringify(becState));
+  }
+  if (becState.chartHidden === false && !becState.chartScaled) {
+    throw new Error(
+      "bec voltage chart rendered without scaled data: " +
+        JSON.stringify(becState)
+    );
+  }
+  console.log(
+    "bec lab ok:",
+    becState.story.slice(0, 70),
+    "| chart scaled:",
+    becState.chartScaled
+  );
+
+  await window.click('.nav-button[data-target="home"]');
+  await window.waitForTimeout(300);
+
 
   await window.click(".verdict-tile");
   await window.waitForTimeout(600);
@@ -185,6 +245,102 @@ const { mkdirSync } = require("node:fs");
       "replay transport misbehaved: " + JSON.stringify(replayState)
     );
   }
+  // All logged fields (#63): the add-menu lists the log's own
+  // header fields by group beside the presets; adding a raw field
+  // stacks it as its own synchronized chart with the original field
+  // name in the heading; the search box narrows the menu.
+  // The dropdown holds presets ONLY; fields live in the browser.
+  const fieldMenu = await window.evaluate(() => {
+    const select = document.getElementById("replayAddGraph");
+    return {
+      fieldOptions: [...select.options].filter((o) => o.value.startsWith("field:")).length,
+      presetOptions: select.options.length
+    };
+  });
+  if (fieldMenu.fieldOptions !== 0 || fieldMenu.presetOptions < 3) {
+    throw new Error("replay dropdown should be presets-only: " + JSON.stringify(fieldMenu));
+  }
+  const rowsBefore = stackState.rows;
+  await window.click("#replayFieldBrowserSummary");
+  await window.waitForTimeout(200);
+  await window.click('.replay-field-chip[data-field-key="field:axisP[0]"]');
+  await window.waitForTimeout(400);
+  const fieldRow = await window.evaluate(() => {
+    const rows = [...document.querySelectorAll(".replay-graph-row")];
+    const last = rows[rows.length - 1];
+    return {
+      rows: rows.length,
+      heading: last?.querySelector(".replay-graph-head span")?.textContent ?? "",
+      canvas: Boolean(last?.querySelector("canvas")),
+      legend: last?.querySelector(".u-legend")?.textContent ?? ""
+    };
+  });
+  if (fieldRow.rows !== rowsBefore + 1 || !fieldRow.canvas || !/axisP\[0\]/.test(fieldRow.heading)) {
+    throw new Error("raw field did not stack: " + JSON.stringify(fieldRow));
+  }
+  // Legends never re-guess a field's identity: a servo chip stacks
+  // as "Servo N output", not "Tail servo".
+  await window.fill("#replayFieldSearch", "servo");
+  await window.waitForTimeout(200);
+  const servoChip = await window.evaluate(() =>
+    [...document.querySelectorAll("#replayFieldGroups .replay-field-chip")]
+      .map((c) => c.dataset.fieldKey)
+      .find((k) => /servo\[3\]/.test(k)) ?? null
+  );
+  if (servoChip) {
+    await window.click(`.replay-field-chip[data-field-key="${servoChip.replace(/([\[\]])/g, "\\$1")}"]`);
+    await window.waitForTimeout(400);
+    const servoLegend = await window.evaluate(() => {
+      const rows = [...document.querySelectorAll(".replay-graph-row")];
+      return rows[rows.length - 1]?.querySelector(".u-legend")?.textContent ?? "";
+    });
+    if (/Tail servo/.test(servoLegend) || !/Servo 4 output/.test(servoLegend)) {
+      throw new Error("replay servo legend guessed a function: " + servoLegend);
+    }
+    await window.evaluate(() => {
+      const layout = JSON.parse(localStorage.getItem("blackboxLabReplayLayout") ?? "[]");
+      localStorage.setItem("blackboxLabReplayLayout", JSON.stringify(layout.filter((k) => k !== "field:servo[3]")));
+    });
+    console.log("replay servo legend exact ok");
+  }
+  await window.fill("#replayFieldSearch", "");
+  await window.waitForTimeout(200);
+  // The field browser: visible, grouped, one click per field.
+  const browserState = await window.evaluate(() => {
+    const browser = document.getElementById("replayFieldBrowser");
+    return {
+      visible: browser ? browser.offsetParent !== null : null,
+      summary: document.getElementById("replayFieldBrowserSummary")?.textContent ?? "",
+      groups: document.querySelectorAll("#replayFieldGroups .replay-field-group").length,
+      chips: document.querySelectorAll("#replayFieldGroups .replay-field-chip").length,
+      axisPDisabled: document.querySelector('.replay-field-chip[data-field-key="field:axisP[0]"]')?.disabled
+    };
+  });
+  if (!browserState.visible || browserState.groups < 3 || browserState.chips < 10 || browserState.axisPDisabled !== true) {
+    throw new Error("replay field browser missing or wrong: " + JSON.stringify(browserState));
+  }
+  // (browser is already open from the chip clicks above)
+  await window.fill("#replayFieldSearch", "yaw gyro");
+  await window.waitForTimeout(200);
+  const searched = await window.evaluate(() => ({
+    chips: [...document.querySelectorAll("#replayFieldGroups .replay-field-chip")].map((c) => c.dataset.fieldKey)
+  }));
+  if (!searched.chips.includes("field:gyroADC[2]") || searched.chips.includes("field:axisP[1]")) {
+    throw new Error("field search did not narrow the browser: " + JSON.stringify(searched));
+  }
+  await window.click('.replay-field-chip[data-field-key="field:gyroADC[2]"]');
+  await window.waitForTimeout(400);
+  const chipAdded = await window.evaluate(() => ({
+    rows: document.querySelectorAll(".replay-graph-row").length,
+    lastHeading: [...document.querySelectorAll(".replay-graph-head span:first-child")].pop()?.textContent ?? ""
+  }));
+  if (chipAdded.rows !== rowsBefore + 2 || !/gyroADC\[2\]/.test(chipAdded.lastHeading)) {
+    throw new Error("chip click did not stack the field: " + JSON.stringify(chipAdded));
+  }
+  await window.fill("#replayFieldSearch", "");
+  await window.waitForTimeout(200);
+  await window.screenshot({ path: "smoke-shots/17b-replay-fields.png", fullPage: true });
+  console.log("replay fields ok:", fieldRow.heading, "|", browserState.summary, "| chip added", chipAdded.lastHeading);
   await window.screenshot({ path: "smoke-shots/17-replay.png" });
   await window.click('.nav-button[data-target="viewer"]');
   await window.waitForTimeout(300);
@@ -220,6 +376,17 @@ const { mkdirSync } = require("node:fs");
   );
   const compareSummary = await window.textContent("#compareSummary");
   console.log("compare rows:", compareRowCount, "| summary:", compareSummary);
+  // The like-for-like table is VISIBLE (it used to be overwritten
+  // away before it reached the page) with a verdict confidence.
+  const footing = await window.evaluate(() => ({
+    visible: document.getElementById("compareComparability")?.offsetParent !== null,
+    rows: document.querySelectorAll("#compareComparabilityTable tr[data-verdict]").length,
+    confidence: document.getElementById("compareComparabilityConfidence")?.textContent ?? ""
+  }));
+  if (!footing.visible || footing.rows < 3 || !/Verdict confidence: (High|Medium|Low)/.test(footing.confidence)) {
+    throw new Error("comparability footing missing: " + JSON.stringify(footing));
+  }
+  console.log("comparability ok:", footing.rows, "dimensions |", footing.confidence);
   await window.screenshot({ path: "smoke-shots/08-compare.png" });
 
   // ---- multi-flight "after" file: the flight picker ----
@@ -327,21 +494,34 @@ const { mkdirSync } = require("node:fs");
       explain: document
         .getElementById("pidEventExplain")
         .textContent.slice(0, 40),
-      chartScaled: Boolean(
-        chart && chart.scales.x.min != null && chart.scales.x.max > chart.scales.x.min
+      // "Scaled" means WINDOWED: tight around the selected event,
+      // not merely any finite range — a full-flight view passed the
+      // old check while #71 stared at it.
+      xMin: chart?.scales?.x?.min ?? null,
+      xMax: chart?.scales?.x?.max ?? null,
+      flightEnd: chart?.data?.[0]?.[chart.data[0].length - 1] ?? null,
+      eventT: Number(
+        (document.getElementById("pidEventExplain").textContent.match(/At ([\d.]+) s/) ?? [])[1]
       )
     };
   });
+  const windowSpan = detailState.xMax - detailState.xMin;
+  const chartWindowed =
+    Number.isFinite(windowSpan) &&
+    windowSpan > 0 &&
+    windowSpan < Math.max(20, detailState.flightEnd * 0.5) &&
+    detailState.eventT >= detailState.xMin &&
+    detailState.eventT <= detailState.xMax;
   if (
     detailState.screen !== "pid" ||
     !detailState.detailVisible ||
-    !detailState.chartScaled
+    !chartWindowed
   ) {
     throw new Error(
       "in-place event detail misbehaved: " + JSON.stringify(detailState)
     );
   }
-  console.log("event detail ok: in place, chart scaled —", detailState.explain);
+  console.log(`event detail ok: windowed ${detailState.xMin.toFixed(1)}-${detailState.xMax.toFixed(1)} s of ${detailState.flightEnd.toFixed(0)} s —`, detailState.explain);
 
   // The event's stick inset replays the pilot's hands; give the
   // one-shot replay a moment, then require a painted canvas.
@@ -472,6 +652,35 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("lab verdicts ok: filter + pid filled, power card on Home");
 
+  // ---- change pack card: present and in a sane state ----
+  const packState = await window.evaluate(() => {
+    const card = document.getElementById("packCard");
+    if (!card) return { exists: false };
+    return {
+      exists: true,
+      hidden: card.hidden,
+      intro: document.getElementById("packIntro")?.textContent ?? "",
+      empty: card.classList.contains("pack-empty"),
+      members: document.querySelectorAll("#packMembers .pack-member").length,
+      prescriptions: document.querySelectorAll("#packPrescriptionList li").length
+    };
+  });
+  if (!packState.exists) throw new Error("packCard missing from Home");
+  // The card is ALWAYS present once a log is open: with nothing
+  // earned it explains why, never disappears.
+  if (packState.hidden) throw new Error("packCard hidden after a load");
+  if (!packState.intro)
+    throw new Error("packCard visible without an intro sentence");
+  if (packState.empty && !/No change is earned/.test(packState.intro))
+    throw new Error("empty pack card lacks its explanation: " + packState.intro);
+  console.log(
+    `change pack card ok: ${
+      packState.empty
+        ? "empty state explains itself — " + packState.intro.slice(0, 90) + "…"
+        : `${packState.members} member(s), ${packState.prescriptions} prescription(s)`
+    }`
+  );
+
   // ---- advanced re-triage: numbers hidden for beginners ----
   const gateProbe = () =>
     window.evaluate(() => {
@@ -501,10 +710,13 @@ const { mkdirSync } = require("node:fs");
   await window.click('.nav-button[data-target="governor"]');
   await window.waitForTimeout(300);
   const beginnerState = await gateProbe();
-  // Metric grids are beginner content again (owner round 3);
-  // evidence views and findings stay advanced.
+  // Owner ruling 2026-08-24 (supersedes round 3): beginner pages show
+  // the bare minimum — verdict, Try This First, the key chart. Metric
+  // grids are numbers territory again; evidence views and findings
+  // stay advanced.
   if (
-    !beginnerState.governorMetrics ||
+    beginnerState.governorMetrics ||
+    beginnerState.escMetrics ||
     beginnerState.droopContext ||
     beginnerState.pidFindings
   ) {
@@ -515,6 +727,64 @@ const { mkdirSync } = require("node:fs");
   }
   await window.screenshot({ path: "smoke-shots/13-governor-beginner.png" });
 
+  // Headspeed events: with a governed sample the card must be
+  // visible in beginner mode and carry a real summary sentence —
+  // zero events is a legitimate summary, an empty one is not.
+  const governorEventsState = await window.evaluate(() => {
+    const card = document.getElementById("governorEventsCard");
+    const summary = document.getElementById("governorEventsSummary");
+    return {
+      visible: card ? card.offsetParent !== null : null,
+      sentence: summary?.textContent?.trim() ?? "",
+      chips: document.querySelectorAll(
+        "#governorEventsList .event-card"
+      ).length
+    };
+  });
+  if (!governorEventsState.visible || !governorEventsState.sentence) {
+    throw new Error(
+      "governor events card missing or empty: " +
+        JSON.stringify(governorEventsState)
+    );
+  }
+  // If the sample produced events, the first chip must open its
+  // in-place evidence with a populated rpm chart.
+  if (governorEventsState.chips > 0) {
+    await window.click("#governorEventsList .event-card");
+    await window.waitForTimeout(400);
+    const detailState = await window.evaluate(() => ({
+      detail:
+        document.getElementById("governorEventDetail").offsetParent !==
+        null,
+      explain:
+        document
+          .getElementById("governorEventExplain")
+          ?.textContent?.trim() ?? "",
+      rpmChart: Boolean(
+        document
+          .getElementById("governorEventChartRpm")
+          ?.querySelector("canvas")
+      )
+    }));
+    if (!detailState.detail || !detailState.explain || !detailState.rpmChart) {
+      throw new Error(
+        "governor event detail broken: " + JSON.stringify(detailState)
+      );
+    }
+    console.log(
+      `governor events ok: ${governorEventsState.chips} chip(s), detail opens`
+    );
+    await window.screenshot({
+      path: "smoke-shots/13c-governor-events.png"
+    });
+    await window.click("#governorEventsList .event-card");
+  } else {
+    console.log(
+      "governor events ok: zero-event summary — " +
+        governorEventsState.sentence
+    );
+  }
+
   // Peek: reveals this page's advanced content in beginner
   // mode, shows the teaching note, and toggles back off.
   await window.click('section[data-screen="governor"] .peek-advanced-link');
@@ -522,11 +792,28 @@ const { mkdirSync } = require("node:fs");
     droop: document.getElementById("droopContextCard").offsetParent !== null,
     note: document.querySelector(
       'section[data-screen="governor"] .peek-advanced-note'
-    ).hidden
+    ).hidden,
+    // The dump saved earlier in this run carries gov_mode and
+    // gov_headspeed — the settings card must surface them here.
+    settingsRows: document.querySelectorAll(
+      "#governorSettingsTable tr"
+    ).length,
+    settingsVisible:
+      document.getElementById("governorSettingsCard").offsetParent !==
+      null
   }));
   if (!peekState.droop || peekState.note) {
     throw new Error("peek did not reveal advanced data: " + JSON.stringify(peekState));
   }
+  if (!peekState.settingsVisible || peekState.settingsRows < 3) {
+    throw new Error(
+      "governor settings card missing its dump values: " +
+        JSON.stringify(peekState)
+    );
+  }
+  console.log(
+    `governor settings ok: ${peekState.settingsRows - 1} value row(s) from the saved dump`
+  );
   await window.screenshot({ path: "smoke-shots/13b-governor-peek.png" });
   await window.click('section[data-screen="governor"] .peek-advanced-link');
   const peekOff = await window.evaluate(
@@ -541,7 +828,7 @@ const { mkdirSync } = require("node:fs");
   // what-am-I-looking-at paragraph, deeper text folded behind
   // the summary — the one explanation home per screen.
   const introState = await window.evaluate(() => {
-    const screens = ["viewer", "replay", "filter", "pid", "governor", "esc", "battery", "compare", "history", "reports"];
+    const screens = ["viewer", "replay", "filter", "pid", "governor", "esc", "battery", "signal", "bec", "compare", "history", "reports"];
     return screens.map((name) => ({
       name,
       present: Boolean(
@@ -553,7 +840,7 @@ const { mkdirSync } = require("node:fs");
   if (missingIntros.length) {
     throw new Error("screen intros missing: " + missingIntros.map((entry) => entry.name).join(", "));
   }
-  console.log("screen intros ok: 10/10 pages introduce themselves");
+  console.log(`screen intros ok: ${introState.length}/${introState.length} pages introduce themselves`);
 
   // Pilot-input inset: the governor droop card shows the sticks
   // at the marked moment (the Bell sample carries rcCommand).
@@ -659,6 +946,32 @@ const { mkdirSync } = require("node:fs");
   await window.click("#sidebarAdvancedToggle"); // restore
   console.log("advanced switch ok: toggled to", advAfter.body, "and back");
   await window.screenshot({ path: "smoke-shots/11-sidebar-advanced.png" });
+
+  // ---- the PDF report: built through the real main-process path ----
+  await window.click('.nav-button[data-target="reports"]');
+  await window.waitForTimeout(300);
+  const fsMod = require("node:fs");
+  for (const stale of fsMod.readdirSync(pdfDirectory)) {
+    if (/^blackbox-lab-report-.*\.pdf$/.test(stale)) fsMod.unlinkSync(require("node:path").join(pdfDirectory, stale));
+  }
+  await window.click("#buildReportButton");
+  await window.waitForFunction(
+    () => /Report saved|could not|not saved/.test(document.getElementById("reportStatus")?.textContent ?? ""),
+    null,
+    { timeout: 60000 }
+  );
+  const reportState = await window.evaluate(() => document.getElementById("reportStatus")?.textContent ?? "");
+  const pdfName = fsMod.readdirSync(pdfDirectory).find((name) => /^blackbox-lab-report-.*\.pdf$/.test(name));
+  if (!/Report saved/.test(reportState) || !pdfName) {
+    throw new Error("PDF report did not save: " + reportState);
+  }
+  const pdfBytes = fsMod.readFileSync(require("node:path").join(pdfDirectory, pdfName));
+  const pdfHead = pdfBytes.subarray(0, 5).toString("latin1");
+  const pdfPages = (pdfBytes.toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+  if (pdfHead !== "%PDF-" || pdfBytes.length < 50_000 || pdfPages < 2) {
+    throw new Error(`PDF report malformed: head=${pdfHead} bytes=${pdfBytes.length} pages=${pdfPages}`);
+  }
+  console.log(`pdf report ok: ${pdfName} | ${Math.round(pdfBytes.length / 1024)} KB | ${pdfPages} pages`);
 
   // ---- error-report dialog: the global net actually catches ----
   // A deliberate unhandled throw must raise the dialog with the

@@ -8,7 +8,7 @@
 // whole job is honesty about the input — a chip that
 // promises "fully measurable" for an empty column teaches
 // exactly the wrong thing. In the contributed corpus,
-// 40 of 247 flights (16 %) carry at least one dead column.
+// 16 % of contributed flights carry at least one dead column.
 //
 // ======================================================
 
@@ -73,7 +73,10 @@ test("the excellent-log summary speaks about data, not confidence", () => {
     hasHeadspeed: true,
     hasGovernorTarget: true,
     hasVbat: true,
-    hasAmperage: true
+    hasAmperage: true,
+    hasRssi: true,
+    hasLinkFlags: true,
+    hasVbec: true
   });
 
   assert.match(quality.summary, /data it needs/);
@@ -81,4 +84,32 @@ test("the excellent-log summary speaks about data, not confidence", () => {
     !/full confidence/.test(quality.summary),
     "confidence is the analyses' own word to use"
   );
+});
+
+test("signal and receiver-power chips state their telemetry honestly", () => {
+  const flagsOnly = assessLogQuality({
+    sampleRateHz: 1000,
+    durationSeconds: 300,
+    hasUnfilteredGyro: true,
+    hasFilteredGyro: true,
+    hasHeadspeed: true,
+    hasGovernorTarget: true,
+    hasVbat: true,
+    hasAmperage: true,
+    hasRssi: false,
+    hasLinkFlags: true,
+    hasVbec: false
+  });
+
+  const signal = flagsOnly.capabilities.find(
+    (c) => c.name === "Signal & link"
+  );
+  const bec = flagsOnly.capabilities.find(
+    (c) => c.name === "BEC output"
+  );
+
+  assert.equal(signal.level, "partial");
+  assert.match(signal.note, /flags only/i);
+  assert.equal(bec.level, "missing");
+  assert.match(bec.note, /BEC voltage/);
 });

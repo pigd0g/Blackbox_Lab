@@ -64,6 +64,103 @@ function hasUsablePositiveData(values) {
 
   return false;
 }
+// Raw average of a voltage column — no unit inference here. The
+// cross-check below compares sources scale-invariantly, because
+// unit inference is exactly what cannot be trusted at this point
+// (a 2S micro's decivolt vbat averages 76 raw, which the magnitude
+// rule reads as 76 V and would turn into a phantom conflict).
+function rawAverage(values) {
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  let sum = 0;
+  let count = 0;
+
+  for (const value of values) {
+    const numericValue = Number(value);
+
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      sum += numericValue;
+      count += 1;
+    }
+  }
+
+  return count > 0 ? sum / count : null;
+}
+
+// Scale-free disagreement between two positive readings: fold
+// their ratio by powers of ten into [1/√10, √10) and measure the
+// distance from 1. Two sources measuring the same pack in ANY
+// units (volts, decivolts, centivolts) fold to ~1; a genuine
+// reading difference survives every power-of-ten alignment.
+// (Folding, not mantissas: 9.8 V vs 10.2 V sit on either side of a
+// decade boundary and must still read as agreement.)
+function scaleFreeDisagreement(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
+    return null;
+  }
+
+  let ratio = a / b;
+  const edge = Math.sqrt(10);
+
+  while (ratio >= edge) ratio /= 10;
+  while (ratio < 1 / edge) ratio *= 10;
+
+  return Math.max(ratio, 1 / ratio) - 1;
+}
+
+// The Lab's display scale rule — used for the note's numbers only,
+// after the scale-free comparison has decided the winner.
+function scaledAverageVolts(values) {
+  const average = rawAverage(values);
+
+  if (average === null) {
+    return null;
+  }
+
+  const scale = average > 1000 ? 100 : average > 100 ? 10 : 1;
+  return average / scale;
+}
+
+/**
+ * Choose between the ESC's voltage telemetry and the flight
+ * controller's own pack reading.
+ *
+ * ESC voltage is preferred when it is the only usable source — but
+ * when the flight controller ALSO measured the pack, the two must
+ * agree. Some ESCs report voltage in units the generic scale rule
+ * cannot know, and a cell count estimated from such a reading
+ * invents a pack that does not exist. The FC's own ADC is the one
+ * the pilot calibrates, so on real disagreement it wins — and the
+ * returned note says so, for the story of whichever Lab asked.
+ */
+export function chooseVoltageSource(escVoltage, vbat) {
+  const escUsable = hasUsablePositiveData(escVoltage);
+  const vbatUsable = hasUsablePositiveData(vbat);
+
+  if (escUsable && vbatUsable) {
+    const disagreement = scaleFreeDisagreement(
+      rawAverage(escVoltage),
+      rawAverage(vbat)
+    );
+
+    if (disagreement !== null && disagreement > 0.08) {
+      return {
+        selected: vbat,
+        note: `The ESC's voltage telemetry (reading ~${scaledAverageVolts(escVoltage)?.toFixed(1)} V) disagrees with the flight controller's pack measurement (~${scaledAverageVolts(vbat)?.toFixed(1)} V). This assessment uses the flight controller's. If the FC's voltage calibration is off, correcting it there fixes both readings at once.`
+      };
+    }
+
+    return { selected: escVoltage, note: null };
+  }
+
+  return {
+    selected: escUsable ? escVoltage : vbat,
+    note: null
+  };
+}
+
 export function analyzeBatteryLab({
   timeSeconds,
   vbat,
@@ -73,10 +170,8 @@ export function analyzeBatteryLab({
   headspeed,
   governorTarget
 }) {
-    const selectedVoltage =
-    hasUsablePositiveData(escVoltage)
-      ? escVoltage
-      : vbat;
+  const { selected: selectedVoltage, note: voltageSourceNote } =
+    chooseVoltageSource(escVoltage, vbat);
 
   const selectedAmperage =
     hasUsablePositiveData(escCurrent)
@@ -122,12 +217,12 @@ export function analyzeBatteryLab({
       ? governorTarget.slice(0, sampleCount)
       : [];
 
-  const rawAverage = averageOf(alignedVbat);
+  const rawVoltsAverage = averageOf(alignedVbat);
 
   const voltsScale =
-    rawAverage > 1000
+    rawVoltsAverage > 1000
       ? 100
-      : rawAverage > 100
+      : rawVoltsAverage > 100
         ? 10
         : 1;
 
@@ -278,8 +373,14 @@ export function analyzeBatteryLab({
   const minimumPerCell =
     flightMinVolts / cellCount;
 
-  const flightVoltageDropPercent =
-    ((startVolts - endVolts) / startVolts) * 100;
+  // A pack that reads fractionally higher at the end (recovery
+  // after the last load, sensor ripple) has zero net drop — a
+  // negative "sag" is not a measurement, and it confuses every
+  // comparison built on it.
+  const flightVoltageDropPercent = Math.max(
+    0,
+    ((startVolts - endVolts) / startVolts) * 100
+  );
 
   // ---- consumed capacity during stable flight only ----
   let consumedMah = null;
@@ -340,11 +441,27 @@ export function analyzeBatteryLab({
   //
   // Only evaluate current steps that occur fully inside
   // stable flight. This avoids startup and transition sag.
+  //
+  // And only when voltage and current tell one story: when the
+  // voltage cross-check had to override the ESC's reading, the
+  // volts here come from the FC while the amps come from the ESC —
+  // two sensors with different filtering, whose step response is
+  // not an internal-resistance measurement. Better no estimate
+  // than a trended wrong one.
   let internalResistancePerCell = null;
+  let internalResistanceNote = null;
+
+  if (!amps) {
+    internalResistanceNote = "needs a current sensor";
+  } else if (voltageSourceNote !== null) {
+    internalResistanceNote =
+      "not estimated: voltage and current came from different sensors";
+  }
 
   if (
     amps &&
-    amps.length === volts.length
+    amps.length === volts.length &&
+    voltageSourceNote === null
   ) {
     const stableSet =
       new Set(stableIndexes);
@@ -387,6 +504,9 @@ export function analyzeBatteryLab({
     if (best !== null) {
       internalResistancePerCell =
         (best / cellCount) * 1000;
+    } else {
+      internalResistanceNote =
+        "no clean load steps in stable flight to measure from";
     }
   }
 
@@ -416,12 +536,12 @@ export function analyzeBatteryLab({
             1
           )} V (${minimumPerCell.toFixed(
             2
-          )} V per cell). Review the matching current and throttle event, but this dip alone does not prove the pack is tired.`
+          )} V per cell). A single dip to this level usually reflects the load of that moment rather than a tired pack: the matching current and throttle event below shows what was being asked of it.`
         : `In-flight voltage reached ${flightMinVolts.toFixed(
             1
           )} V (${minimumPerCell.toFixed(
             2
-          )} V per cell). Review pack condition, connectors and load before another hard flight.`;
+          )} V per cell). That is deep enough to matter: sustained lows at this level usually trace to an aging pack or a soft cell, a connector or wiring drop under current, or more load than the pack's capacity comfortably delivers.`;
 
   const metrics = [
     {
@@ -443,6 +563,10 @@ export function analyzeBatteryLab({
       )} V/cell)`
     },
     {
+      label: "Stable-flight voltage drop",
+      value: `${flightVoltageDropPercent.toFixed(1)}%`
+    },
+    {
       label: "Stable samples used",
       value: stableIndexes.length.toLocaleString()
     }
@@ -456,6 +580,11 @@ export function analyzeBatteryLab({
       label: "Stable-flight consumption",
       value: `~${consumedMah} mAh (est.)`
     });
+  } else {
+    metrics.push({
+      label: "Stable-flight consumption",
+      value: "— needs a current sensor"
+    });
   }
 
   if (
@@ -467,11 +596,18 @@ export function analyzeBatteryLab({
         1
       )} mΩ/cell (est.)`
     });
+  } else if (internalResistanceNote) {
+    metrics.push({
+      label: "Internal resistance",
+      value: `— ${internalResistanceNote}`
+    });
   }
 
   return {
     status,
-    story,
+    story: voltageSourceNote
+      ? `${story} ${voltageSourceNote}`
+      : story,
     metrics,
 
     sagPercent:

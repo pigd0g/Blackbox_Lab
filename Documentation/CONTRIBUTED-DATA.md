@@ -29,7 +29,17 @@ description of what leaves the pilot's machine.
      speeds survive; where it happened does not.
    - *Model & tuning* (optional): craft model name and tuning values
      (filters, governor, PIDs) so logs can be grouped by setup type.
-5. **Private storage.** Contributed logs go to the project's private
+5. **Derived analysis results travel too.** Alongside the raw
+   telemetry, a contribution carries what Blackbox Lab itself
+   measured from the flight — because calibrating the analysis
+   against real flights is the point of sharing. Specifically:
+   the stick-command events (times, magnitudes, overshoot and
+   settling numbers, verdicts), the headspeed excursion events
+   (times, classification, magnitudes), and the precomp balance
+   reads (the numbers and verdicts, never the pilot-facing
+   sentences). All of it is derived from telemetry already in the
+   contribution; none of it adds identifying content.
+6. **Private storage.** Contributed logs go to the project's private
    ingest endpoint and are used only to improve this tool. They are
    not published or passed on.
 

@@ -11,6 +11,8 @@
 //
 // ======================================================
 
+import { demandSignature, compareDemand } from "./demandSignature.js";
+
 function strongestPeak(spectra) {
   if (!spectra || spectra.length === 0) {
     return null;
@@ -42,15 +44,32 @@ function percentChange(before, after) {
   return ((after - before) / Math.abs(before)) * 100;
 }
 
-function describeChange(change, lowerIsBetter, absoluteDelta, minimumDelta) {
+function describeChange(before, after, lowerIsBetter, minimumDelta) {
+  const absoluteDelta = after - before;
+
   // Tiny absolute changes are noise, not news — a droop of
   // 4 vs 6 rpm is "excellent both times", not "50% worse".
   if (
-    change === null ||
-    Math.abs(change) < 5 ||
-    (Number.isFinite(absoluteDelta) &&
-      Math.abs(absoluteDelta) < minimumDelta)
+    !Number.isFinite(absoluteDelta) ||
+    Math.abs(absoluteDelta) < minimumDelta
   ) {
+    return { direction: "same", word: "about the same" };
+  }
+
+  // A zero baseline has no percent — but 0 → 8 is not "the same".
+  // The common good state IS zero (no excursions, no events), so
+  // regressions from it must be called what they are.
+  if (before === 0) {
+    const improved = lowerIsBetter ? after < 0 : after > 0;
+    return {
+      direction: improved ? "better" : "worse",
+      word: improved ? "better" : "worse"
+    };
+  }
+
+  const change = percentChange(before, after);
+
+  if (change === null || Math.abs(change) < 5) {
     return { direction: "same", word: "about the same" };
   }
 
@@ -76,6 +95,28 @@ export function comparableEvidence(beforeConfidence, afterConfidence) {
 
   const beforeThin = thin(beforeConfidence);
   const afterThin = thin(afterConfidence);
+
+  // Same-demand flights only: a hover-level score and a
+  // maneuvering score are different measurements wearing the same
+  // number, and subtracting them ranks the flying style, not the
+  // change. (This is how a mis-set-up machine hovering calmly
+  // "outscored" its own fixed self on a sport flight.)
+  const beforeDemand = beforeConfidence?.demand ?? null;
+  const afterDemand = afterConfidence?.demand ?? null;
+
+  if (
+    beforeDemand &&
+    afterDemand &&
+    beforeDemand !== afterDemand
+  ) {
+    return {
+      comparable: false,
+      reason:
+        beforeDemand === "gentle"
+          ? "the earlier flight was flown gently while the later one was flown much harder. The two scores measure different demands, not the change."
+          : "the later flight was flown gently while the earlier one was flown much harder. The two scores measure different demands, not the change."
+    };
+  }
 
   if (!beforeThin && !afterThin) {
     return { comparable: true, reason: "" };
@@ -126,19 +167,203 @@ export function sameAircraft(beforeCraft, afterCraft) {
   return { known: true, same: before === after, before, after };
 }
 
-export function compareFlights(baseline, comparison) {
+
+// ------------------------------------------------------
+// Setup comparison — what actually CHANGED between the
+// two flights, read from the logged FC settings.
+// ------------------------------------------------------
+//
+// "Your change helped" presumes there was one change. The BBL
+// header logs the full tuning state, so the pair can be told
+// apart honestly: no change logged, one named change, or several
+// changes that no single verdict may take credit for.
+
+const COMPARABLE_SETUP_KEYS = [
+  "rollPID", "pitchPID", "yawPID", "levelPID", "govPID",
+  "rates_type", "rc_rates", "rates",
+  "yaw_stop_gain", "yaw_precomp", "yaw_inertia_precomp",
+  "hsi_gain", "hsi_limit",
+  "gyro_lpf1_type", "gyro_lpf1_static_hz", "gyro_lpf1_dyn_hz",
+  "gyro_lpf2_type", "gyro_lpf2_static_hz",
+  "gyro_notch_hz", "gyro_notch_cutoff",
+  "gyro_rpm_notch_preset", "gyro_rpm_notch_min_hz",
+  "dterm_lpf1_type", "dterm_lpf1_static_hz",
+  "dterm_lpf2_type", "dterm_lpf2_static_hz"
+];
+
+export function extractComparableSetup(lines) {
+  if (!Array.isArray(lines)) {
+    return null;
+  }
+
+  const settings = {};
+  let startIso = null;
+  let found = 0;
+
+  for (const line of lines) {
+    if (typeof line !== "string" || line[0] !== '"') continue;
+    const match = line.match(/^"([^"]+)","(.*)"$/);
+    if (!match) continue;
+    if (match[1] === "Log start datetime") {
+      startIso = match[2];
+    } else if (COMPARABLE_SETUP_KEYS.includes(match[1])) {
+      settings[match[1]] = match[2];
+      found += 1;
+    }
+  }
+
+  return { settings, startIso, found };
+}
+
+export function diffSetups(before, after) {
+  if (!before || !after || before.found === 0 || after.found === 0) {
+    return null;
+  }
+
+  const changedKeys = [];
+  for (const key of COMPARABLE_SETUP_KEYS) {
+    const a = before.settings[key];
+    const b = after.settings[key];
+    if (a !== undefined && b !== undefined && a !== b) {
+      changedKeys.push(key);
+    }
+  }
+
+  return { changedKeys, changedCount: changedKeys.length };
+}
+
+// A start timestamp is only trustworthy when the FC clock was
+// actually set: unsynced RTCs log epoch-adjacent years. Equal or
+// unusable stamps mean: preserve the user's order, never guess.
+export function chronologicalOrder(startIsoA, startIsoB) {
+  const parse = (iso) => {
+    const ms = Date.parse(iso ?? "");
+    if (!Number.isFinite(ms)) return null;
+    const year = new Date(ms).getUTCFullYear();
+    return year >= 2010 ? ms : null;
+  };
+
+  const a = parse(startIsoA);
+  const b = parse(startIsoB);
+
+  if (a === null || b === null || a === b) {
+    return null;
+  }
+
+  return a <= b ? "keep" : "swap";
+}
+
+/**
+ * Can these two flights carry a before/after conclusion at all?
+ * Exposed BEFORE any improvement wording (#32): flight-to-flight
+ * variation can be as large as a tuning change, so the comparison
+ * states what evidence it stands on — demand match, per-axis clean
+ * command counts on both sides, duration balance, and both scores'
+ * evidence strength — and downgrades its own language when the
+ * footing is weak.
+ */
+export function assessComparability(baseline, comparison) {
+  const lines = [];
+  let level = "comparable";
+  const demote = (to) => {
+    if (to === "weak" || level === "weak") level = to === "weak" ? "weak" : level;
+    else level = "partial";
+  };
+
+  const beforeDemand = baseline?.pidConfidence?.demand ?? null;
+  const afterDemand = comparison?.pidConfidence?.demand ?? null;
+  if (beforeDemand && afterDemand) {
+    if (beforeDemand === afterDemand) {
+      lines.push(`Flight demand: comparable (both flown ${beforeDemand === "gentle" ? "gently" : "with real inputs"}).`);
+    } else {
+      lines.push("Flight demand: NOT comparable — one flight was flown gently, the other much harder. The measurements describe different flying, not the change.");
+      demote("weak");
+    }
+  }
+
+  const thin = (confidence) =>
+    confidence?.level === "Low" || confidence?.level === "Insufficient";
+  const beforeThin = thin(baseline?.pidConfidence);
+  const afterThin = thin(comparison?.pidConfidence);
+  if (beforeThin || afterThin) {
+    lines.push(
+      `Evidence strength: ${beforeThin && afterThin ? "both flights are" : beforeThin ? "the earlier flight is" : "the later flight is"} thin on clean command responses.`
+    );
+    demote(beforeThin && afterThin ? "weak" : "partial");
+  }
+
+  const axes = new Set([
+    ...Object.keys(baseline?.axisEvidence ?? {}),
+    ...Object.keys(comparison?.axisEvidence ?? {})
+  ]);
+  const axisLines = [];
+  let comparableAxes = 0;
+  for (const axis of axes) {
+    const before = baseline?.axisEvidence?.[axis] ?? 0;
+    const after = comparison?.axisEvidence?.[axis] ?? 0;
+    const ok = before >= 8 && after >= 8;
+    if (ok) comparableAxes += 1;
+    axisLines.push(`${axis} ${before} vs ${after}${ok ? "" : " (too few on one side)"}`);
+  }
+  if (axisLines.length > 0) {
+    lines.push(`Clean command events per axis (before vs after): ${axisLines.join("; ")}.`);
+    if (comparableAxes === 0) demote("weak");
+    else if (comparableAxes < axes.size) demote("partial");
+  }
+
+  const durationOf = (dataset) => {
+    const t = dataset?.timeSeconds;
+    return Array.isArray(t) && t.length ? t[t.length - 1] : null;
+  };
+  const beforeDuration = durationOf(baseline);
+  const afterDuration = durationOf(comparison);
+  if (Number.isFinite(beforeDuration) && Number.isFinite(afterDuration) && beforeDuration > 0 && afterDuration > 0) {
+    const ratio = Math.min(beforeDuration, afterDuration) / Math.max(beforeDuration, afterDuration);
+    if (ratio < 0.4) {
+      lines.push(`Flight length: unbalanced (${Math.round(beforeDuration)} s vs ${Math.round(afterDuration)} s) — the longer flight simply had more chances to show events.`);
+      demote("partial");
+    }
+  }
+
+  // The demand signature (#38 / preview #32): every dimension the two
+  // flights can differ on, side by side, with the verdict confidence
+  // it leaves. The weaker of the two rulings governs the wording.
+  const demand = compareDemand(
+    demandSignature(baseline),
+    demandSignature(comparison)
+  );
+  const rank = { weak: 0, partial: 1, comparable: 2 };
+  if (rank[demand.level] < rank[level]) level = demand.level;
+
+  return {
+    level,
+    causal: level === "comparable",
+    lines,
+    rows: demand.rows,
+    confidence: demand.confidence,
+    reducedBy: demand.reducedBy,
+    guidance:
+      level === "comparable"
+        ? null
+        : "Treat differences below as observations, not proof of a tuning change. Repeat the same maneuvers at the same headspeed to confirm them."
+  };
+}
+
+export function compareFlights(baseline, comparison, options = {}) {
   const rows = [];
+  const comparability = assessComparability(baseline, comparison);
+  const causally = (causalSentence, neutralSentence) =>
+    comparability.causal ? causalSentence : neutralSentence;
 
   // ---- vibration ----
   const peakBefore = strongestPeak(baseline.spectra);
   const peakAfter = strongestPeak(comparison.spectra);
 
   if (peakBefore && peakAfter) {
-    const change = percentChange(peakBefore.magnitude, peakAfter.magnitude);
     const described = describeChange(
-      change,
+      peakBefore.magnitude,
+      peakAfter.magnitude,
       true,
-      peakAfter.magnitude - peakBefore.magnitude,
       1.5
     );
 
@@ -150,7 +375,10 @@ export function compareFlights(baseline, comparison) {
       sentence:
         described.direction === "same"
           ? `Biggest vibration peak is about the same (${peakAfter.magnitude.toFixed(1)} at ${peakAfter.hz.toFixed(0)} Hz).`
-          : `Your change made the biggest vibration peak ${described.word}: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`
+          : causally(
+              `Your change made the biggest vibration peak ${described.word}: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`,
+              `The biggest vibration peak measured ${described.word} in the later flight: ${peakBefore.magnitude.toFixed(1)} → ${peakAfter.magnitude.toFixed(1)} at ~${peakAfter.hz.toFixed(0)} Hz.`
+            )
     });
   }
 
@@ -161,11 +389,10 @@ export function compareFlights(baseline, comparison) {
   if (govBefore && govAfter) {
     const droopBefore = govBefore.droopRpm;
     const droopAfter = govAfter.droopRpm;
-    const change = percentChange(droopBefore, droopAfter);
     const described = describeChange(
-      change,
+      droopBefore,
+      droopAfter,
       true,
-      droopAfter - droopBefore,
       8
     );
 
@@ -209,11 +436,10 @@ export function compareFlights(baseline, comparison) {
     );
 
     if (evidence.comparable) {
-      const change = percentChange(scoreBefore, scoreAfter);
       const described = describeChange(
-        change,
+        scoreBefore,
+        scoreAfter,
         false,
-        scoreAfter - scoreBefore,
         5
       );
 
@@ -238,16 +464,183 @@ export function compareFlights(baseline, comparison) {
     }
   }
 
+  // ---- stick response events ----
+  //
+  // The recommendation cards name "the slow-settle count" and "the
+  // overshoot count in Flight Events" as their verify metric — this
+  // row is where that promise is kept. Counts are compared as a
+  // RATE per measured command: two flights rarely contain the same
+  // number of stick inputs, and 3-of-40 versus 3-of-8 are different
+  // machines.
+  const eventsBefore = baseline.flightEvents?.summary;
+  const eventsAfter = comparison.flightEvents?.summary;
+
+  if (eventsBefore?.total > 0 && eventsAfter?.total > 0) {
+    const reviewBefore =
+      eventsBefore.overshoot +
+      eventsBefore.slow +
+      (eventsBefore.lagging ?? 0) +
+      (eventsBefore.oscillation ?? 0);
+    const reviewAfter =
+      eventsAfter.overshoot +
+      eventsAfter.slow +
+      (eventsAfter.lagging ?? 0) +
+      (eventsAfter.oscillation ?? 0);
+
+    const rateBefore = reviewBefore / eventsBefore.total;
+    const rateAfter = reviewAfter / eventsAfter.total;
+
+    // The DIRECTION comes from the rate (two flights rarely hold
+    // the same number of commands), but the noise floor is one
+    // whole event: a rate wiggle without a count change is nothing.
+    const described =
+      Math.abs(reviewAfter - reviewBefore) < 1
+        ? { direction: "same", word: "about the same" }
+        : describeChange(rateBefore, rateAfter, true, 0.001);
+
+    const describeSide = (summary, review) =>
+      `${review} of ${summary.total} command${summary.total === 1 ? "" : "s"}` +
+      (review > 0
+        ? ` (${summary.overshoot} overshot · ${summary.slow} slow` +
+          ((summary.oscillation ?? 0) > 0
+            ? ` · ${summary.oscillation} oscillated`
+            : "") +
+          ((summary.lagging ?? 0) > 0
+            ? ` · ${summary.lagging} late`
+            : "") +
+          `)`
+        : "");
+
+    rows.push({
+      title: "Stick response events",
+      direction: described.direction,
+      before: describeSide(eventsBefore, reviewBefore),
+      after: describeSide(eventsAfter, reviewAfter),
+      sentence:
+        reviewBefore === 0 && reviewAfter === 0
+          ? "Every measured stick command tracked cleanly in both flights."
+          : described.direction === "same"
+            ? `The share of commands needing review is about the same (${reviewAfter} of ${eventsAfter.total}).`
+            : `The share of commands needing review got ${described.word}: ${reviewBefore} of ${eventsBefore.total} → ${reviewAfter} of ${eventsAfter.total}.`
+    });
+  }
+
+  // ---- governor excursions ----
+  const govExBefore = baseline.governorEvents?.summary;
+  const govExAfter = comparison.governorEvents?.summary;
+
+  if (govExBefore && govExAfter) {
+    const countBefore = govExBefore.totalFound;
+    const countAfter = govExAfter.totalFound;
+
+    const described = describeChange(
+      countBefore,
+      countAfter,
+      true,
+      1
+    );
+
+    const describeSide = (summary, count) =>
+      count === 0
+        ? "none"
+        : `${count} (${summary.under} under · ${summary.over} over)`;
+
+    rows.push({
+      title: "Headspeed excursions",
+      direction:
+        countBefore === 0 && countAfter === 0
+          ? "same"
+          : described.direction,
+      before: describeSide(govExBefore, countBefore),
+      after: describeSide(govExAfter, countAfter),
+      sentence:
+        countBefore === 0 && countAfter === 0
+          ? "The rotor stayed inside the event band in both flights."
+          : described.direction === "same"
+            ? `Headspeed excursions are about the same (${countAfter}).`
+            : `Headspeed excursions got ${described.word}: ${countBefore} → ${countAfter}.`
+    });
+  }
+
+  // ---- precomp balance ----
+  //
+  // The precomp recommendations name these exact numbers as their
+  // before/after judge. Each side must have READ a balance (enough
+  // collective moves both ways) for the row to appear.
+  const precompRows = [
+    {
+      key: "riseDroopPercent",
+      title: "Collective-rise droop",
+      unit: "%",
+      minimumDelta: 1
+    },
+    {
+      key: "dropOvershootPercent",
+      title: "Collective-drop overspeed",
+      unit: "%",
+      minimumDelta: 1
+    }
+  ];
+
+  for (const { key, title, unit, minimumDelta } of precompRows) {
+    const valueBefore = baseline.precomp?.governor?.[key];
+    const valueAfter = comparison.precomp?.governor?.[key];
+
+    if (!Number.isFinite(valueBefore) || !Number.isFinite(valueAfter)) {
+      continue;
+    }
+
+    const described = describeChange(
+      valueBefore,
+      valueAfter,
+      true,
+      minimumDelta
+    );
+
+    rows.push({
+      title,
+      direction: described.direction,
+      before: `${valueBefore}${unit}`,
+      after: `${valueAfter}${unit}`,
+      sentence:
+        described.direction === "same"
+          ? `${title} is about the same (${valueAfter}${unit}).`
+          : `${title} got ${described.word}: ${valueBefore}${unit} → ${valueAfter}${unit}.`
+    });
+  }
+
+  const kickBefore = baseline.precomp?.tail?.kickRatio;
+  const kickAfter = comparison.precomp?.tail?.kickRatio;
+
+  if (Number.isFinite(kickBefore) && Number.isFinite(kickAfter)) {
+    const described = describeChange(
+      kickBefore,
+      kickAfter,
+      true,
+      0.8
+    );
+
+    rows.push({
+      title: "Tail kick on collective moves",
+      direction: described.direction,
+      before: `${kickBefore}× baseline`,
+      after: `${kickAfter}× baseline`,
+      sentence:
+        described.direction === "same"
+          ? `The tail's reaction to collective moves is about the same (${kickAfter}× its baseline error).`
+          : `The tail's reaction to collective moves got ${described.word}: ${kickBefore}× → ${kickAfter}× its baseline error.`
+    });
+  }
+
   // ---- battery sag ----
   const sagBefore = baseline.batterySagPercent;
   const sagAfter = comparison.batterySagPercent;
 
   if (Number.isFinite(sagBefore) && Number.isFinite(sagAfter)) {
-    const change = percentChange(sagBefore, sagAfter);
     const described = describeChange(
-      change,
+      sagBefore,
+      sagAfter,
       true,
-      sagAfter - sagBefore,
       1.5
     );
 
@@ -278,6 +671,47 @@ export function compareFlights(baseline, comparison) {
   const comparedRows = better + worse;
   const aircraft = sameAircraft(baseline.craftName, comparison.craftName);
 
+  // ---- comparability gate for the causal headline ----
+  // "That's a keeper" and "consider reverting" recommend keeping or
+  // undoing a setup change — causal claims. The rows above only
+  // DESCRIBE differences; attributing them to the change needs the
+  // pair to be like-for-like: same machine, matched flight demand,
+  // and solid evidence on both sides. Below that bar the summary
+  // stays descriptive and asks for the confirming flight instead of
+  // recommending action.
+  const setupDiff = options.setupDiff ?? null;
+
+  const headlineEvidence = comparableEvidence(
+    baseline.pidConfidence,
+    comparison.pidConfidence
+  );
+  const evidenceKnown =
+    Boolean(baseline.pidConfidence) && Boolean(comparison.pidConfidence);
+  const likeForLike =
+    aircraft.same &&
+    evidenceKnown &&
+    headlineEvidence.comparable &&
+    comparability.causal;
+  const unlikeReason = !aircraft.same
+    ? ""
+    : !evidenceKnown
+      ? "this pair does not carry enough evidence to verify the two flights were flown alike."
+      : !headlineEvidence.comparable
+        ? headlineEvidence.reason
+        : comparability.causal
+          ? ""
+          : "the flights' demand or per-axis evidence was only partially comparable (the comparability panel above has the details).";
+
+  // Different helicopters: the numbers are shown for reference, but
+  // "90% better" is a tuning judgment and there is no tune being
+  // judged — every row becomes descriptive, not directional.
+  if (!aircraft.same) {
+    for (const row of rows) {
+      row.direction = "unknown";
+      row.sentence = `${row.title}: ${row.before} vs ${row.after}. Two different machines, shown side by side for reference only.`;
+    }
+  }
+
   const summary =
     rows.length === 0
       ? "Not enough shared data between the two flights to compare."
@@ -285,20 +719,61 @@ export function compareFlights(baseline, comparison) {
         ? `These flights are different helicopters (${aircraft.before} and ${aircraft.after}), so the figures below describe two machines rather than a change to one.`
         : comparedRows === 0
           ? uncomparable > 0
-            ? "These two flights cannot be compared usefully — see the rows below for what was missing."
+            ? "These two flights cannot be compared usefully: see the rows below for what was missing."
             : "No meaningful change between these two flights."
           : worse === 0 && better > 0
-            ? "Your change helped — nothing got worse. That's a keeper."
+            ? likeForLike
+              ? setupDiff && setupDiff.changedCount === 0
+                ? "The later flight measured better with NO logged setup change between the two: the difference reflects conditions or flying, not a tune. Nothing to keep or revert."
+                : setupDiff && setupDiff.changedCount === 1
+                  ? `Your change helped: nothing got worse, and the logs show exactly one setup change (${setupDiff.changedKeys[0]}). That's a keeper.`
+                  : setupDiff && setupDiff.changedCount > 1
+                    ? `The later flight measured better and nothing got worse, and ${setupDiff.changedCount} settings changed between these flights (${setupDiff.changedKeys.slice(0, 3).join(", ")}${setupDiff.changedCount > 3 ? ", …" : ""}). The win belongs to the set: each change's own verifying metric — the pack check runs these automatically for pack changes — tells which member earned it.`
+                    : "Your change helped: nothing got worse. That's a keeper."
+              : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet: ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
             : better === 0 && worse > 0
-              ? "This change went the wrong way — consider reverting it."
-              : "Mixed result: some things improved, others got worse. Trade-off territory.";
+              ? likeForLike
+                ? "This change went the wrong way. Consider reverting it."
+                : `The later flight measured worse in ${worse} area${worse === 1 ? "" : "s"}, but ${unlikeReason} Repeat the same maneuvers before reverting anything.`
+              : likeForLike
+                ? "Mixed result: some things improved, others got worse. Trade-off territory."
+                : `The measurements moved in both directions, and ${unlikeReason} This pair reads as two different flights more than as one change; repeat the same maneuvers for a cleaner verdict.`;
+
+  // Better/worse is a JUDGMENT, and a weak footing cannot carry one
+  // (#38): when the pair is not causal, directional rows keep their
+  // numbers but are displayed as observations — the badge, the color
+  // and the report all inherit this flag.
+  if (aircraft.same && !comparability.causal) {
+    for (const row of rows) {
+      if (row.direction === "better" || row.direction === "worse") {
+        row.gated = true;
+      }
+    }
+  }
+
+  // The verdict names the confidence it carries, and what lowered it,
+  // in the same sentence the pilot reads first.
+  const confidenceSentence =
+    comparability.confidence && rows.length > 0 && aircraft.same
+      ? ` Verdict confidence: ${comparability.confidence}${
+          comparability.reducedBy?.length
+            ? ` — reduced by ${comparability.reducedBy.join(", ")}`
+            : ""
+        }.`
+      : "";
 
   return {
     rows,
-    summary,
+    summary: summary + confidenceSentence,
+    // The footing (rows, confidence, level, lines) AND the causal
+    // gate (likeForLike, reason) — one object. A second key of the
+    // same name used to overwrite the first here, which is why the
+    // comparability panel never showed on the page.
+    comparability: { ...comparability, likeForLike, reason: unlikeReason },
     better,
     worse,
     uncomparable,
-    sameAircraft: aircraft.same
+    sameAircraft: aircraft.same,
+    setupDiff
   };
 }

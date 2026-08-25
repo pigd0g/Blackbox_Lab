@@ -62,10 +62,14 @@ export function sameFlight(a, b) {
     return false;
   }
 
-  // The source bytes are the flight: equal hashes are one recording
-  // whatever it is named or dated; differing hashes are two.
-  if (a.sourceHash && b.sourceHash) {
-    return a.sourceHash === b.sourceHash;
+  // Equal hashes are one recording, whatever it is named or dated.
+  // Differing hashes are NOT proof of two flights (#70): the hash is
+  // taken over the adapter's generated lines, and a newer build that
+  // adds a column or fixes a header changes the hash of the very
+  // same flight. Identity falls through to the decode-stable shape
+  // (duration + sample count + date) instead of vetoing on it.
+  if (a.sourceHash && b.sourceHash && a.sourceHash === b.sourceHash) {
+    return true;
   }
 
   const durationA = Number(a.durationSeconds);
@@ -215,12 +219,32 @@ export function buildHistoryEntry({
     vibrationPeak: peak ? Math.round(peak.magnitude * 10) / 10 : null,
     vibrationHz: peak ? Math.round(peak.hz * 10) / 10 : null,
     droopRpm: dataset.labs?.governor?.droopRpm ?? null,
+    // Whether that number was measured against a logged governor
+    // target ("full") or against the rotor's own trend — the Health
+    // Record wording depends on it. Older entries lack the key and
+    // read as unknown, which the wording treats as target-free.
+    governorCapability: dataset.labs?.governor?.capability ?? null,
     trackingScore:
   dataset.pidAnalysis?.score ??
   dataset.pidScore ??
   null,
     batterySagPercent: dataset.batterySagPercent ?? null,
-    internalResistance: dataset.labs?.battery?.internalResistance ?? null
+    internalResistance: dataset.labs?.battery?.internalResistance ?? null,
+    // Precomp balance reads (v1.1) — how hard collective moves hit
+    // the headspeed and the tail on THIS flight. Older entries
+    // simply lack these keys and the trend checks skip them.
+    precompRiseDroopPercent:
+      dataset.precomp?.governor?.riseDroopPercent ?? null,
+    precompDropOvershootPercent:
+      dataset.precomp?.governor?.dropOvershootPercent ?? null,
+    tailKickRatio: dataset.precomp?.tail?.kickRatio ?? null,
+    // What this flight ASKED of the machine (#65): the Health Record
+    // can only call a change across flights a trend when the flights
+    // asked comparable things. Older entries lack these keys and
+    // read as "not recorded".
+    demand: dataset.pidConfidence?.demand ?? null,
+    evidence: dataset.pidConfidence?.level ?? null,
+    headspeedRpm: dataset.labs?.governor?.averageHeadspeed ?? null
   };
 }
 
@@ -280,6 +304,60 @@ const normalizeFileName = (fileName = "") =>
     .replace(/\.bbl\.csv$/, "")
     .replace(/\.bbl$/, "")
     .replace(/\.csv$/, "");
+
+// Are the stored flights comparable enough for their line to mean a
+// trend (#65)? Judged on what each flight asked of the machine:
+// demand level, headspeed, evidence strength, duration. Differences
+// are NAMED; unknowns (older entries) are stated, never assumed.
+export function assessHistoryComparability(entries) {
+  const rows = entries ?? [];
+  if (rows.length < 2) return { level: "unknown", notes: [] };
+
+  const notes = [];
+  let level = "comparable";
+  const demote = (to) => {
+    if (to === "mixed") level = "mixed";
+    else if (level === "comparable") level = "partial";
+  };
+
+  const known = (key) => rows.map((r) => r[key]).filter((v) => v !== null && v !== undefined);
+
+  const demands = [...new Set(known("demand"))];
+  if (demands.length > 1) {
+    notes.push("flight demand differs (gentle and real-input flights are mixed)");
+    demote("mixed");
+  }
+
+  const speeds = known("headspeedRpm").filter(Number.isFinite);
+  if (speeds.length >= 2) {
+    const min = Math.min(...speeds);
+    const max = Math.max(...speeds);
+    if (min > 0 && min / max < 0.95) {
+      notes.push(`headspeed differs across flights (${Math.round(min)}–${Math.round(max)} rpm)`);
+      demote("mixed");
+    }
+  }
+
+  const thin = known("evidence").filter((v) => v === "Low" || v === "Insufficient").length;
+  if (thin > 0) {
+    notes.push(`${thin} flight${thin === 1 ? " is" : "s are"} thin on clean-command evidence`);
+    demote("partial");
+  }
+
+  const durations = known("durationSeconds").filter((v) => Number.isFinite(v) && v > 0);
+  if (durations.length >= 2 && Math.min(...durations) / Math.max(...durations) < 0.4) {
+    notes.push("flight lengths are very unbalanced");
+    demote("partial");
+  }
+
+  const unrecorded = rows.filter((r) => r.demand === undefined || r.demand === null).length;
+  if (unrecorded > 0) {
+    notes.push(`${unrecorded} older flight${unrecorded === 1 ? "" : "s"} carry no comparability data`);
+    demote("partial");
+  }
+
+  return { level, notes };
+}
 
 export function recordFlight(storage, craftName, entry) {
   const history = loadHistory(storage);
@@ -663,7 +741,11 @@ function averageOf(values) {
   return sum / usable.length;
 }
 
-function assessMetric(entries, key, { label, lowerIsBetter, unit, adviceUp }) {
+function assessMetric(
+  entries,
+  key,
+  { label, lowerIsBetter, unit, adviceUp, minimumRecent }
+) {
   const values = entries.map((entry) => entry[key]);
   const usable = values.filter((value) => Number.isFinite(value));
 
@@ -676,6 +758,17 @@ function assessMetric(entries, key, { label, lowerIsBetter, unit, adviceUp }) {
   const recent = averageOf(usable.slice(-Math.min(3, half)));
 
   if (earlier === null || recent === null || earlier === 0) {
+    return null;
+  }
+
+  // Ratios on tiny bases are noise: 0.1 → 0.15 is a 50% "rise" of
+  // nothing. Metrics that live near zero on a healthy machine set
+  // an absolute floor the recent value must clear before a trend
+  // may speak.
+  if (
+    Number.isFinite(minimumRecent) &&
+    Math.abs(recent) < minimumRecent
+  ) {
     return null;
   }
 
@@ -693,13 +786,49 @@ function assessMetric(entries, key, { label, lowerIsBetter, unit, adviceUp }) {
   };
 }
 
+/**
+ * How the rotor-speed trend may speak, given what these flights
+ * actually measured.
+ *
+ * "Droop" is a target-relative word: it may only appear when every
+ * flight carrying a number was measured against a logged governor
+ * target. One target-free (or pre-capability) flight in the set and
+ * the whole trend speaks in stability terms — mixing the two
+ * measurements under one target-relative title would misname the
+ * very distinction the labs are careful about.
+ */
+export function rotorTrendWording(entries = []) {
+  const measured = entries.filter((entry) =>
+    Number.isFinite(entry.droopRpm)
+  );
+  const targetRelative =
+    measured.length > 0 &&
+    measured.every((entry) => entry.governorCapability === "full");
+
+  return targetRelative
+    ? {
+        title: "Governor Droop Across Flights",
+        hint: "A rising line means the rotor falls further below its target over time. Read it alongside output, voltage and load before blaming any one part.",
+        label: "Governor droop",
+        adviceUp:
+          "The rotor is falling further below target across flights. Aging pack, dirty pinion or a slipping gear are the usual suspects. Confirm against the output and voltage picture before changing the tune."
+      }
+    : {
+        title: "Rotor-Speed Stability Across Flights",
+        hint: "A rising line means the rotor is holding less steadily across flights, worth investigating.",
+        label: "Rotor-speed deviation",
+        adviceUp:
+          "The rotor is holding less steadily across flights. Worth checking mechanics, power and setup before it grows."
+      };
+}
+
 export function assessTrends(entries) {
   if (!entries || entries.length < 4) {
     return {
       findings: [],
       note:
         entries && entries.length > 0
-          ? `Keep flying — trends appear after 4 logged flights (${entries.length} so far).`
+          ? `Keep flying: trends appear after 4 logged flights (${entries.length} so far).`
           : "No flights recorded for this craft yet."
     };
   }
@@ -710,27 +839,50 @@ export function assessTrends(entries) {
       lowerIsBetter: true,
       unit: "",
       adviceUp:
-        "Something mechanical is changing — check bearings, blade balance and links before it grows."
+        "Something mechanical is changing: check bearings, blade balance and links before it grows."
     }),
     assessMetric(entries, "droopRpm", {
-      label: "Governor droop",
+      label: rotorTrendWording(entries).label,
       lowerIsBetter: true,
       unit: " rpm",
-      adviceUp:
-        "The power system is losing headroom — aging pack, dirty pinion or slipping gear are the usual suspects."
+      adviceUp: rotorTrendWording(entries).adviceUp
     }),
     assessMetric(entries, "internalResistance", {
       label: "Pack internal resistance",
       lowerIsBetter: true,
       unit: " mΩ",
-      adviceUp: "The battery is aging — expect softer punch and more sag."
+      adviceUp: "The battery is aging: expect softer punch and more sag."
     }),
     assessMetric(entries, "trackingScore", {
       label: "Tracking score",
       lowerIsBetter: false,
       unit: "",
       adviceUp:
-        "The tune is drifting — mechanics wearing in, or settings changed along the way."
+        "The tune is drifting: mechanics wearing in, or settings changed along the way."
+    }),
+    assessMetric(entries, "tailKickRatio", {
+      label: "Tail kick on collective moves",
+      lowerIsBetter: true,
+      unit: "×",
+      minimumRecent: 3,
+      adviceUp:
+        "The collective-to-yaw anticipation no longer matches the torque: either the precomp drifted or the tail drive is wearing. The Governor Lab's Precomp Balance shows the current read."
+    }),
+    assessMetric(entries, "precompRiseDroopPercent", {
+      label: "Droop on collective rises",
+      lowerIsBetter: true,
+      unit: "%",
+      minimumRecent: 2.5,
+      adviceUp:
+        "The governor's load anticipation is losing ground across flights: an aging pack shrinking headroom, or precomp no longer matching the machine."
+    }),
+    assessMetric(entries, "precompDropOvershootPercent", {
+      label: "Overspeed on collective drops",
+      lowerIsBetter: true,
+      unit: "%",
+      minimumRecent: 2.5,
+      adviceUp:
+        "Collective drops overspeed the rotor more than they used to. Worth re-reading the Precomp Balance before it becomes audible."
     })
   ].filter(Boolean);
 

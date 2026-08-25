@@ -1,8 +1,8 @@
 # Installing Blackbox Lab
 
 Blackbox Lab installs like most community-built RC software —
-the same way the Rotorflight Configurator and the Betaflight
-Blackbox Explorer do. Your operating system may show a warning
+the same way the Rotorflight Configurator does. Your operating
+system may show a warning
 the first time because the installers are not commercially
 signed; the steps below get you through it in a few clicks.
 
@@ -35,6 +35,10 @@ updates it in place. Your Health Record and settings are kept.
    xattr -cr "/Applications/Blackbox Lab.app"
    ```
 
+   Note: move the app into your Applications folder FIRST, then
+   run the command. Cleared where it was downloaded, macOS may
+   still run a quarantined copy and show the same message again.
+
 4. Open the app normally.
 
 ## Linux
@@ -46,7 +50,21 @@ updates it in place. Your Health Record and settings are kept.
 
 ## Where your data lives
 
-Everything Blackbox Lab analyzes stays on your computer. Your
-Health Record, model cards and settings live in your user
-profile and survive updates. Sharing anything is always your
-choice, per action, in the app.
+Analysis runs on your computer, and your Health Record, model
+cards and settings live in your user profile and survive updates.
+Sharing flight data with the project is a consent choice: the app
+asks once on first launch, the answer can be changed anytime in
+Settings, and `Documentation/CONTRIBUTED-DATA.md` describes
+exactly what a shared flight contains — and what never uploads.
+
+## Running from source (developers)
+
+```
+npm install
+npm start        # run the app
+npm test         # run the test suite
+```
+
+Then click "Open Blackbox Log" and pick a `.bbl`, `.csv` or CLI
+dump — or try `samples/sample-bell-222ut.bbl` (a real recorded
+flight) and visit the Filter Lab.

@@ -11,153 +11,74 @@ Deeper when you want it.
 
 # Core Principles
 
-- Blackbox Lab NEVER changes RotorFlight settings.
-- Blackbox Lab only recommends changes.
+- Blackbox Lab NEVER silently changes anything — every change happens through an explicit pilot confirmation.
 - Blackbox Lab explains WHY.
 - Every recommendation must be supported by evidence.
 - The pilot always makes the final decision.
 
 ---
 
-# Evidence Engine
+# Where the vision stands (v1.8.0)
 
-Recommendations should be based on every available source.
+The founding roadmap asked for an evidence engine, a guided
+workflow, teaching over recommending, professional reports, and a
+beginner/advanced split. As of v1.8.0 that core is shipped:
 
-Priority:
-
-1. Blackbox Log (BBL)
-2. CLI Dump
-3. CSV
-4. Telemetry
-5. Aircraft Profile
-6. Firmware Version
-7. ESC Telemetry
-8. GPS
-9. User supplied information
-
-Every recommendation should explain what evidence was used.
-
-Example:
-
-Recommendation Confidence: HIGH
-
-Evidence:
-✓ Blackbox
-✓ CLI
-✓ CSV
-✓ Telemetry
-
----
-
-# Beginner Workflow
-
-Blackbox Lab should guide new RotorFlight users through the same order used by RotorFlight.
-
-1. Setup Verification
-2. Filter Tuning
-3. PID Tuning
-4. Fine Adjustments
-5. Governor Tuning
-6. ESC Optimization
-7. Battery Optimization
-8. Final Flight Review
-
-Never skip steps.
+- **Evidence engine** — every recommendation names its events, its
+  confidence, and the metric that will verify it on the next log;
+  thin evidence is named, not papered over.
+- **The tuning order, enforced** — vibration and filters gate PID
+  advice; power findings outrank governor findings; the app's own
+  advice follows the order it teaches.
+- **Teaching** — every verdict explains why, in plain words;
+  the Diagnosis Academy ships six practice flights with known
+  planted problems to learn diagnosis on, risk-free.
+- **Change Packs** — the recommendation, direction, reason and
+  verifying metric as one reviewable unit, checked automatically
+  against the next flight; nothing is ever applied without the
+  pilot's explicit confirmation.
+- **Reports** — a compact PDF carrying the verdict, priorities,
+  pack, labs and charts, worded exactly as the app.
+- **Simple first, deeper on request** — every lab opens with the
+  verdict, Try This First and the key chart; the tables and raw
+  numbers live behind one "Show the advanced data" control.
+- **The fleet** — all scoring calibrated against contributed
+  flights, refreshed as the fleet grows.
 
 ---
 
-# Learning Philosophy
+# Roadmap
 
-Teach.
+Next, in no promised order:
 
-Don't simply recommend.
+## Video overlay export
 
-Explain:
+The Replay dashboard is the design surface: arrange the graphs,
+stick overlay and playhead exactly as you want them — down to no
+graph overlay at all — and render that same configurable view as
+an overlay track for flight video. The log and the footage telling
+one story.
 
-• Why
-• What changed
-• Expected result
+## Direct FBL access
 
----
+Read logs (and the configuration needed to explain them) straight
+from the flight controller over USB — no SD card shuffle. And in
+the write direction: apply a flight's Change Pack to the FBL after
+explicit pilot confirmation, with the actual state and values of
+every setting verified over the CLI first, so a change is only
+ever applied against the configuration that is really on the
+helicopter.
 
-# RotorFlight Integration
+## Setup Wizard / Configuration
 
-Future Goal:
+Guide a pilot from a fresh flash to a safe first log: verify the
+setup basics, confirm what the log will record, and make the first
+analysis a one-click path.
 
-Blackbox Lab recommends changes.
+## Web app
 
-Open RotorFlight Configurator to the correct page.
-
-User applies changes manually.
-
-Blackbox Lab NEVER writes settings.
-
----
-
-# Visual Learning
-
-Future Features
-
-• Filtered vs Unfiltered PID graphs
-• Governor tracking graphs
-• ESC efficiency graphs
-• Battery efficiency graphs
-• Vibration visualization
-• Flight timeline
-• GPS flight playback
-
----
-
-# Reports
-
-Professional Reports
-
-Include
-
-• Findings
-• Evidence
-• Confidence
-• Recommendations
-• Aircraft profile
-• Firmware
-• ESC
-• Battery
-• Attached logs
-
-Export
-
-PDF
-
-Support Package
-
-ZIP
-
----
-
-# Community Sharing
-
-Future Feature
-
-Generate a shareable report that users can post directly to forums or social media.
-
-The report should contain enough evidence that others can understand WHY the recommendation was made.
-
----
-
-# Modes
-
-Beginner Mode
-
-Simple language
-Guided workflow
-Step-by-step
-
-Advanced Mode
-
-Raw data
-Expert analysis
-Graphs
-Detailed statistics
+Blackbox Lab in the browser — open a log without installing
+anything, same analysis, same honesty.
 
 ---
 
@@ -175,38 +96,3 @@ Minimal clicks
 
 No clutter
 
----
-
-# Goal
-
-Make RotorFlight feel as approachable as iKon2 or Spirit while remaining technically accurate enough for professional pilots.
----
-
-# Gift Ideas (from your friends at EGODRIFT, 2026-07-22)
-
-Suggestions only — this is your project and your vision. Five
-things we believe would make Blackbox Lab one of a kind:
-
-1. **Practice Mode.** Ship known-problem sample flights and walk
-   new pilots through diagnosing them INSIDE the app, before
-   they ever risk their own machine. (Log files only — nothing
-   ever touches a helicopter.) The generator in tools/ makes
-   unlimited practice material with known truth.
-
-2. **Before/After Compare.** Two logs side by side, same charts,
-   and one sentence: "your change reduced the 136 Hz tail peak
-   by 62%." The emotional payoff of the whole tuning loop.
-
-3. **The Helicopter's Health Record.** File every analyzed log
-   per craft (craft name is in the header) and trend vibration
-   across sessions: "tail vibration doubled over five flights —
-   check the bearings." Predictive maintenance, from data you
-   already extract.
-
-4. **Evidence You Can Click.** Every recommendation deep-links
-   to the zoomed chart region that proves it. Evidence stops
-   being a checklist and becomes something a pilot sees.
-
-5. **One-File Shareable Reports.** Export a single HTML file —
-   charts embedded, findings, confidence — that works on any
-   forum or support email. No server, no account.

@@ -18,7 +18,7 @@ import {
   estimateSampleRate
 } from "./flightPhase.js";
 
-// Fleet-calibrated scoring (247 contributed flights, 2026-08-07).
+// Fleet-calibrated scoring (contributed fleet, 2026-08-07).
 // The fleet's stable sustained droop runs p25 2.57% / p50 4.09% /
 // p90 6.44%; RMS tracking error p25 9.3 rpm / p50 16.6 / p90 40.
 // The previous linear deductions (droop×12 + rms×0.5) put the
@@ -83,6 +83,53 @@ export function computeGovernorScore({ droopPercent, rmsError }) {
 //   "full"        — target + headspeed: droop and score are real
 //   "partial"     — headspeed only: stability, never droop, no score
 //   "unavailable" — not enough telemetry to judge anything
+// Per-bank evidence, stated the way a pilot can audit it (#35):
+// how long the rotor actually flew on that bank, and how much the
+// bank's numbers can be trusted. The ladder mirrors the whole-
+// flight evidence confidence (5000 / 1500 samples); below the lower
+// rung a bank is LIMITED — shown, never ranked against a bank with
+// real flight time behind it.
+export function bankEvidence(sampleCount, sampleRate) {
+  const durationSeconds =
+    Number.isFinite(sampleRate) && sampleRate > 0
+      ? Math.round((sampleCount / sampleRate) * 10) / 10
+      : null;
+  const confidence =
+    sampleCount >= 5000
+      ? "High"
+      : sampleCount >= 1500
+        ? "Moderate"
+        : "Low";
+  return {
+    durationSeconds,
+    confidence,
+    limited: sampleCount < 1500
+  };
+}
+
+// One line per bank, shared by the Technical card and the exported
+// report so both carry the same evidence story.
+export function describeBank(bank) {
+  return (
+    `avg ${bank.averageRpm} rpm · dip ${Math.round(bank.droopRpm)} rpm` +
+    (Number.isFinite(bank.droopPercent)
+      ? ` (${bank.droopPercent.toFixed(1)}%)`
+      : "") +
+    (Number.isFinite(bank.rmsError)
+      ? ` · RMS ${bank.rmsError.toFixed(1)} rpm`
+      : "") +
+    (Number.isFinite(bank.durationSeconds)
+      ? ` · ${bank.durationSeconds} s of evidence`
+      : Number.isFinite(bank.sampleCount)
+        ? ` · ${bank.sampleCount.toLocaleString()} samples`
+        : "") +
+    (bank.confidence ? ` · ${bank.confidence} confidence` : "") +
+    (bank.limited
+      ? " — limited evidence: not compared against better-sampled banks until more time is flown at this headspeed"
+      : "")
+  );
+}
+
 export function analyzeGovernorLab({
   timeSeconds,
   headspeed,
@@ -191,10 +238,43 @@ export function analyzeGovernorLab({
   let targetSum = 0;
   let actualSum = 0;
   let maximumDroop = 0;
+  let targetAtMaximumDroop = null;
+  let maximumDroopIndex = null;
   let peakSampleDroop = 0;
   let droopTime = null;
   let squaredErrorSum = 0;
   let validSampleCount = 0;
+
+  // A flight flown on several headspeed banks has no single
+  // "average headspeed" or "target" — those numbers land between
+  // the banks and describe nothing the pilot commanded. Stable
+  // samples are therefore clustered per bank (1.5% tolerance, the
+  // same idea the per-bank breakdowns use) and every bank keeps
+  // its own hold story.
+  const banks = [];
+
+  const bankFor = (target) => {
+    for (const bank of banks) {
+      if (
+        Math.abs(target - bank.target) <=
+        bank.target * 0.015
+      ) {
+        return bank;
+      }
+    }
+
+    const bank = {
+      target,
+      targetSum: 0,
+      actualSum: 0,
+      count: 0,
+      maxDroop: 0,
+      droopTime: null,
+      squaredErrorSum: 0
+    };
+    banks.push(bank);
+    return bank;
+  };
 
   for (const index of stableIndexes) {
     const actual = Number(headspeed[index]);
@@ -226,7 +306,25 @@ export function analyzeGovernorLab({
       sustained > maximumDroop
     ) {
       maximumDroop = sustained;
+      targetAtMaximumDroop = target;
+      maximumDroopIndex = index;
       droopTime =
+        Number.isFinite(time) ? time : null;
+    }
+
+    const bank = bankFor(target);
+    bank.targetSum += target;
+    bank.actualSum += actual;
+    bank.count += 1;
+    bank.squaredErrorSum +=
+      trackingError * trackingError;
+
+    if (
+      Number.isFinite(sustained) &&
+      sustained > bank.maxDroop
+    ) {
+      bank.maxDroop = sustained;
+      bank.droopTime =
         Number.isFinite(time) ? time : null;
     }
 
@@ -243,6 +341,41 @@ export function analyzeGovernorLab({
   // in-flight sample — with the motor output at that moment,
   // because "governor gain" and "no power left" are different
   // diagnoses of the same dip.
+  // One rule for "how hard was the motor working at that moment",
+  // shared by the whole-flight dip and the stable-flight dip: the
+  // same dip means a different thing at 60% output than at 100%.
+  const outputPercentAt = (index) => {
+    if (!Array.isArray(motorOutput) || !Number.isInteger(index)) {
+      return null;
+    }
+
+    let outputMax = 0;
+
+    for (const value of motorOutput) {
+      const numericValue = Number(value);
+
+      if (
+        Number.isFinite(numericValue) &&
+        numericValue > outputMax
+      ) {
+        outputMax = numericValue;
+      }
+    }
+
+    if (outputMax <= 0) {
+      return null;
+    }
+
+    const fullScale =
+      outputMax > 1100 ? 2000 : outputMax > 100 ? 1000 : 100;
+
+    const atIndex = Number(motorOutput[index]);
+
+    return Number.isFinite(atIndex)
+      ? (atIndex / fullScale) * 100
+      : null;
+  };
+
   const flightDip = (() => {
     const inFlightIndexes = detectInFlightSamples({
       timeSeconds,
@@ -253,12 +386,50 @@ export function analyzeGovernorLab({
       return null;
     }
 
+    // A commanded bank change steps the target instantly while
+    // the rotor follows over the next second or two — target
+    // minus actual reads as a deep "dip" that is really the
+    // transition doing exactly what was asked. Samples within
+    // two seconds after a target step therefore never compete
+    // for the whole-flight dip.
+    const transitionHoldSamples = Math.round(sampleRate * 2);
+    const samplesSinceTargetStep = new Array(
+      governorTarget.length
+    ).fill(Number.MAX_SAFE_INTEGER);
+
+    let sinceStep = Number.MAX_SAFE_INTEGER;
+
+    for (let index = 1; index < governorTarget.length; index += 1) {
+      const current = Number(governorTarget[index]);
+      const previous = Number(governorTarget[index - 1]);
+
+      if (
+        Number.isFinite(current) &&
+        Number.isFinite(previous) &&
+        current > 0 &&
+        Math.abs(current - previous) >
+          Math.max(5, current * 0.002)
+      ) {
+        sinceStep = 0;
+      } else if (sinceStep < Number.MAX_SAFE_INTEGER) {
+        sinceStep += 1;
+      }
+
+      samplesSinceTargetStep[index] = sinceStep;
+    }
+
     let deepest = 0;
     let deepestIndex = null;
 
     for (const index of inFlightIndexes) {
       const sustained = smoothedDroop[index];
       const target = Number(governorTarget[index]);
+
+      if (
+        samplesSinceTargetStep[index] < transitionHoldSamples
+      ) {
+        continue;
+      }
 
       if (
         Number.isFinite(sustained) &&
@@ -275,31 +446,7 @@ export function analyzeGovernorLab({
       return null;
     }
 
-    let outputPercent = null;
-
-    if (Array.isArray(motorOutput)) {
-      let outputMax = 0;
-
-      for (const value of motorOutput) {
-        const numericValue = Number(value);
-
-        if (
-          Number.isFinite(numericValue) &&
-          numericValue > outputMax
-        ) {
-          outputMax = numericValue;
-        }
-      }
-
-      const fullScale =
-        outputMax > 1100 ? 2000 : outputMax > 100 ? 1000 : 100;
-
-      const atDip = Number(motorOutput[deepestIndex]);
-
-      if (Number.isFinite(atDip) && outputMax > 0) {
-        outputPercent = (atDip / fullScale) * 100;
-      }
-    }
+    const outputPercent = outputPercentAt(deepestIndex);
 
     const target = Number(governorTarget[deepestIndex]);
 
@@ -322,9 +469,18 @@ export function analyzeGovernorLab({
     squaredErrorSum / validSampleCount
   );
 
+  // Percent is anchored to the target the dip happened AGAINST:
+  // on a multi-bank flight the average target lands between the
+  // banks and belongs to none of them.
+  const droopReferenceTarget =
+    Number.isFinite(targetAtMaximumDroop) &&
+    targetAtMaximumDroop > 0
+      ? targetAtMaximumDroop
+      : averageTarget;
+
   const droopPercent =
-    averageTarget > 0
-      ? (maximumDroop / averageTarget) * 100
+    droopReferenceTarget > 0
+      ? (maximumDroop / droopReferenceTarget) * 100
       : 0;
 
   const score = computeGovernorScore({ droopPercent, rmsError });
@@ -354,6 +510,56 @@ export function analyzeGovernorLab({
       ? ` at ${droopTime.toFixed(1)} s`
       : "";
 
+  // The same discrimination the whole-flight dip already makes:
+  // a stable-flight dip with the motor output at its ceiling is
+  // a power-system limit, and telling the pilot to review
+  // governor gain for it would point at the wrong knob.
+  const stableDipOutputPercent = outputPercentAt(maximumDroopIndex);
+
+  const stableDipAtPowerLimit =
+    Number.isFinite(stableDipOutputPercent) &&
+    stableDipOutputPercent >= 95;
+
+  const stableDipAdvice = stableDipAtPowerLimit
+    ? ` The motor output was at ${Math.round(
+        stableDipOutputPercent
+      )}% during that dip: a power-system limit, not a governor-gain problem. The ESC Lab carries the full power picture.`
+    : ` The matching event below shows the demand and output of that moment: what was asked, and what the system had left.`;
+
+  // Banks worth reporting held for at least ~2 seconds of stable
+  // flight; smaller clusters are ramp residue, not a commanded
+  // headspeed.
+  const reportableBanks = banks
+    .filter((bank) => bank.count >= Math.max(200, sampleRate * 2))
+    .sort((a, b) => a.target - b.target)
+    .map((bank) => {
+      const bankTarget = bank.targetSum / bank.count;
+      return {
+        targetRpm: Math.round(bankTarget),
+        sampleCount: bank.count,
+        averageRpm: Math.round(bank.actualSum / bank.count),
+        droopRpm: Math.round(bank.maxDroop * 10) / 10,
+        droopPercent:
+          bankTarget > 0
+            ? Math.round((bank.maxDroop / bankTarget) * 1000) / 10
+            : null,
+        rmsError:
+          Math.round(
+            Math.sqrt(bank.squaredErrorSum / bank.count) * 10
+          ) / 10,
+        droopTimeSeconds: Number.isFinite(bank.droopTime)
+          ? Math.round(bank.droopTime * 100) / 100
+          : null,
+        ...bankEvidence(bank.count, sampleRate)
+      };
+    });
+
+  const multiBank = reportableBanks.length > 1;
+
+  const bankListText = reportableBanks
+    .map((bank) => `${bank.targetRpm}`)
+    .join("/");
+
   const flightDipText = flightDipSevere
     ? ` Under load the rotor fell ${Math.round(
         flightDip.droopRpm
@@ -368,26 +574,32 @@ export function analyzeGovernorLab({
       }.${
         Number.isFinite(flightDip.outputPercent) &&
         flightDip.outputPercent >= 95
-          ? " The output was already at its ceiling — that dip is a power-system limit, not a governor-gain problem. See the ESC Lab."
-          : " Review the worst-droop event before changing governor gain."
+          ? " The output was already at its ceiling: that dip is a power-system limit, not a governor-gain problem. The ESC Lab carries the full power picture."
+          : " The worst-droop event below shows whether load or gain was the driver."
       }`
     : "";
 
   const story =
     (status === "good"
-      ? `Excellent hold: average headspeed ${Math.round(
-          averageActual
-        )} rpm against a ${Math.round(
-          averageTarget
-        )} rpm target. Largest sustained dip was ${Math.round(
-          maximumDroop
-        )} rpm.`
+      ? multiBank
+        ? `Excellent hold across ${reportableBanks.length} headspeed banks (${bankListText} rpm). Largest sustained dip was ${Math.round(
+            maximumDroop
+          )} rpm against the ${Math.round(
+            droopReferenceTarget
+          )} rpm bank.`
+        : `Excellent hold: average headspeed ${Math.round(
+            averageActual
+          )} rpm against a ${Math.round(
+            averageTarget
+          )} rpm target. Largest sustained dip was ${Math.round(
+            maximumDroop
+          )} rpm.`
       : status === "watch"
         ? `The largest sustained dip in stable flight was ${Math.round(
             maximumDroop
           )} rpm (${droopPercent.toFixed(
             1
-          )}%)${droopTimeText}. Review the chart before changing governor settings.`
+          )}%)${droopTimeText}.${stableDipAdvice}`
         : flightDipSevere
           ? `Stable flight held to a ${Math.round(
               maximumDroop
@@ -396,7 +608,7 @@ export function analyzeGovernorLab({
               maximumDroop
             )} rpm (${droopPercent.toFixed(
               1
-            )}%)${droopTimeText}. Confirm that this occurred during a real airborne load event before changing governor gain.`) +
+            )}%)${droopTimeText}.${stableDipAdvice}`) +
     flightDipText;
 
   return {
@@ -434,6 +646,12 @@ export function analyzeGovernorLab({
         ? Math.round(flightDip.outputPercent * 10) / 10
         : null,
 
+    stableDipOutputPercent: Number.isFinite(stableDipOutputPercent)
+      ? Math.round(stableDipOutputPercent * 10) / 10
+      : null,
+
+    stableDipAtPowerLimit,
+
     averageHeadspeed:
       Math.round(averageActual),
 
@@ -442,20 +660,36 @@ export function analyzeGovernorLab({
     stableSegments:
       flightPhase.segments ?? [],
 
+    perBank: reportableBanks,
+
     metrics: [
-      {
-        label: "Average headspeed",
-        value: `${Math.round(averageActual)} rpm`
-      },
-      {
-        label: "Target",
-        value: `${Math.round(averageTarget)} rpm`
-      },
+      // One row per commanded bank on multi-bank flights; the
+      // fleet-familiar single pair otherwise. An average across
+      // banks describes nothing the pilot commanded.
+      ...(multiBank
+        ? reportableBanks.map((bank) => ({
+            label: `Bank ${bank.targetRpm} rpm`,
+            value: describeBank(bank)
+          }))
+        : [
+            {
+              label: "Average headspeed",
+              value: `${Math.round(averageActual)} rpm`
+            },
+            {
+              label: "Target",
+              value: `${Math.round(averageTarget)} rpm`
+            }
+          ]),
       {
         label: "Largest sustained dip (stable flight)",
         value: `${Math.round(
           maximumDroop
-        )} rpm (${droopPercent.toFixed(1)}%)`
+        )} rpm (${droopPercent.toFixed(1)}%${
+          multiBank
+            ? ` of the ${Math.round(droopReferenceTarget)} bank`
+            : ""
+        })`
       },
       ...(flightDip
         ? [
@@ -573,7 +807,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
       hasRotorSpeedData: true,
       movedDuringRecording: null,
       story:
-        "This log states no governor target, and the rotor never held a level section long enough to judge — the recording is nearly all spool-up, spool-down or headspeed changes.",
+        "This log states no governor target, and the rotor never held a level section long enough to judge: the recording is nearly all spool-up, spool-down or headspeed changes.",
       droopRpm: null,
       droopPercent: null,
       droopTimeSeconds: null,
@@ -597,6 +831,30 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
   let worstDeviation = 0;
   let worstTime = null;
 
+  // Observed headspeed banks (#35): with no target to cluster on,
+  // the trend itself identifies the banks a pilot flew — same 1.5 %
+  // cluster width the governed path uses. Per bank the evidence is
+  // weighed separately, so a lightly-flown headspeed can never hide
+  // inside a whole-flight average.
+  const observedBanks = [];
+  const observedBankFor = (level) => {
+    for (const bank of observedBanks) {
+      if (Math.abs(level - bank.level) <= bank.level * 0.015) {
+        return bank;
+      }
+    }
+    const bank = {
+      level,
+      actualSum: 0,
+      count: 0,
+      maxDip: 0,
+      dipTime: null,
+      squaredDeviationSum: 0
+    };
+    observedBanks.push(bank);
+    return bank;
+  };
+
   for (const index of inFlightIndexes) {
     const actual = Number(headspeed[index]);
 
@@ -618,7 +876,51 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
       worstDeviation = deviation;
       worstTime = Number(timeSeconds[index]);
     }
+
+    if (
+      Number.isFinite(trend[index]) &&
+      trend[index] > 0 &&
+      Number.isFinite(actual)
+    ) {
+      const bank = observedBankFor(trend[index]);
+      bank.actualSum += actual;
+      bank.count += 1;
+      if (Number.isFinite(deviation)) {
+        bank.squaredDeviationSum += deviation * deviation;
+        const dip = trend[index] - shortTerm[index];
+        if (Number.isFinite(dip) && dip > bank.maxDip) {
+          bank.maxDip = dip;
+          bank.dipTime = Number(timeSeconds[index]);
+        }
+      }
+    }
   }
+
+  const perBank = observedBanks
+    .filter((bank) => bank.count >= Math.max(200, sampleRate * 2))
+    .sort((a, b) => a.level - b.level)
+    .map((bank) => {
+      const averageRpm = bank.actualSum / bank.count;
+      return {
+        targetRpm: Math.round(averageRpm),
+        observed: true,
+        sampleCount: bank.count,
+        averageRpm: Math.round(averageRpm),
+        droopRpm: Math.round(bank.maxDip * 10) / 10,
+        droopPercent:
+          averageRpm > 0
+            ? Math.round((bank.maxDip / averageRpm) * 1000) / 10
+            : null,
+        rmsError:
+          Math.round(
+            Math.sqrt(bank.squaredDeviationSum / bank.count) * 10
+          ) / 10,
+        droopTimeSeconds: Number.isFinite(bank.dipTime)
+          ? Math.round(bank.dipTime * 100) / 100
+          : null,
+        ...bankEvidence(bank.count, sampleRate)
+      };
+    });
 
   if (meanCount < 100) {
     return null;
@@ -634,14 +936,14 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
 
   const story =
     status === "good"
-      ? `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+      ? `Without a usable rotor-speed target in the log (none recorded, or a passthrough mode like DIRECT), hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
           meanRpm
         )} rpm and stayed within ${Math.round(
           worstDeviation
         )} rpm (${deviationPercent.toFixed(
           1
         )}%) of it. Deliberate headspeed changes are not counted against this.`
-      : `No governor target is logged, so hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
+      : `Without a usable rotor-speed target in the log (none recorded, or a passthrough mode like DIRECT), hold is judged against the rotor's own trend: headspeed averaged ${Math.round(
           meanRpm
         )} rpm, with a largest short-term swing of ${Math.round(
           worstDeviation
@@ -649,7 +951,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
           Number.isFinite(worstTime)
             ? ` at ${worstTime.toFixed(1)} s`
             : ""
-        }. Worth a look at that moment on the chart.`;
+        }. The chart marks that moment.`;
 
   return {
     score: null,
@@ -657,6 +959,7 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     capability: "partial",
     mode: "headspeed-hold",
     hasRotorSpeedData: true,
+    perBank,
     story,
     droopRpm: Math.round(worstDeviation * 10) / 10,
     droopPercent:
@@ -671,12 +974,21 @@ function analyzeHeadspeedHold({ timeSeconds, headspeed }) {
     metrics: [
       {
         label: "Analysis scope",
-        value: "Partial — headspeed stability only"
+        value: "Partial: headspeed stability only"
       },
       {
         label: "Average headspeed",
         value: `${Math.round(meanRpm)} rpm`
       },
+      // Observed banks ride along into the export on multi-bank
+      // flights (#35): the whole-flight average must not be the
+      // only governor number a report's recipient sees.
+      ...(perBank.length > 1
+        ? perBank.map((bank) => ({
+            label: `Bank ${bank.targetRpm} rpm (observed)`,
+            value: describeBank(bank)
+          }))
+        : []),
       {
         label: "Governor target",
         value: "not logged"

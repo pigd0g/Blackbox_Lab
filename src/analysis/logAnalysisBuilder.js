@@ -11,10 +11,13 @@ import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
 import {
+  isUsableGovernorTarget,
   detectStableFlightPhase,
   hasUsableRotorSpeed
 } from "./flightPhase.js";
 import { analyzeGovernorLab } from "./governorLabAnalysis.js";
+import { buildProfileSegments } from "./profileSegments.js";
+import { isPlausibleFlightDate } from "./metadataReader.js";
 
 // Does this log carry a governor target, or only rotor speed?
 // Models on an ESC or external governor log the second without the
@@ -326,7 +329,7 @@ export function describeGovernorSystemScore(governor) {
   }
 
   if (governor.capability === "partial") {
-    return "Partial — headspeed stability only (no governor target logged)";
+    return "Partial: headspeed stability only (no governor target logged)";
   }
 
   if (
@@ -335,10 +338,10 @@ export function describeGovernorSystemScore(governor) {
     governor.status !== "No Active Flight Data" &&
     governor.status !== "Target Unavailable"
   ) {
-    return `${governor.score}/100 — ${governor.status}`;
+    return `${governor.score}/100 (${governor.status})`;
   }
 
-  return `Not scored — ${
+  return `Not scored: ${
     governor.status === "insufficient"
       ? "insufficient telemetry"
       : governor.status
@@ -356,6 +359,7 @@ export function buildLogAnalysis({
   let analysisContext = null;
   let filterAnalysis = null;
   let pidAnalysis = null;
+  let profileSegments = [];
   // ====================================================
   // BLACKBOX BBL LOG
   // ====================================================
@@ -376,6 +380,14 @@ export function buildLogAnalysis({
 
     const telemetryHeaderIndex =
       findTelemetryHeaderIndex(lines);
+
+    // In-flight PID profile switches, when the log carries them.
+    // Empty for single-profile flights and for sources without the
+    // pidProfile column — nothing downstream changes in that case.
+    profileSegments = buildProfileSegments({
+      lines,
+      telemetryHeaderIndex
+    });
 
     let averageEscOutput = null;
     let averageEscRPM = null;
@@ -476,6 +488,55 @@ const governorTargetSamples = getColumnSamples(
   telemetryHeaderIndex,
   governorTargetHeader
 );
+
+// DIRECT-mode / passthrough targets are not rotor-speed targets —
+// blank them here so profiles, labs and the report all fall back
+// to headspeed-only reads (mirrors the renderer's dataset rule).
+const governorTargetUsable = (() => {
+  // Pair by SOURCE ROW, not by compacted array position —
+  // getColumnValues drops non-finite cells per column, so the two
+  // value arrays can be time-shifted against each other, and a
+  // shifted pairing on a multi-bank flight reads ratios that are
+  // nothing like the truth.
+  const targetByRow = new Map(
+    governorTargetSamples.map((sample) => [sample.rowIndex, sample.value])
+  );
+
+  const pairedHeadspeed = [];
+  const pairedTarget = [];
+
+  for (const sample of headspeedSamples) {
+    const target = targetByRow.get(sample.rowIndex);
+
+    if (target !== undefined) {
+      pairedHeadspeed.push(sample.value);
+      pairedTarget.push(target);
+    }
+  }
+
+  return isUsableGovernorTarget(pairedHeadspeed, pairedTarget);
+})();
+
+if (!governorTargetUsable) {
+  governorTargetValues.length = 0;
+  governorTargetSamples.length = 0;
+}
+
+// A current column that never leaves zero is a header, not a
+// sensor: the battery lab already refuses to analyze it, so the
+// telemetry inventory must not count it either (same rule as the
+// quality gate's columnCarriesData).
+const currentHeader = findHeader(headers, ["current", "esci"]);
+const currentValues = getColumnValues(
+  lines,
+  telemetryHeaderIndex,
+  currentHeader
+);
+const currentUsable = currentValues.some(
+  (value) => Number.isFinite(value) && value !== 0
+);
+
+const headspeedUsable = hasUsableRotorSpeed(headspeedValues);
 
 const governorTargetByRow = new Map(
   governorTargetSamples.map((sample) => [
@@ -631,7 +692,10 @@ const pidProfiles =
 
         [
           "Current",
-          findHeader(headers, ["current", "esci"])
+          currentHeader,
+          currentHeader && !currentUsable
+            ? "present, no usable data"
+            : null
         ],
 
         [
@@ -649,7 +713,10 @@ const pidProfiles =
 
         [
           "Headspeed",
-          headspeedHeader
+          headspeedHeader,
+          headspeedHeader && !headspeedUsable
+            ? "present, no usable data"
+            : null
         ],
 
         [
@@ -674,7 +741,7 @@ const pidProfiles =
 
         [
           "Governor Target",
-          governorTargetHeader
+          governorTargetUsable ? governorTargetHeader : null
         ]
       ];
      
@@ -694,7 +761,7 @@ const pidProfiles =
   detectedTelemetry: {
     time: findHeader(headers, ["time"]),
     batteryVoltage: findHeader(headers, ["vbat", "escv"]),
-    current: findHeader(headers, ["current", "esci"]),
+    current: currentUsable ? currentHeader : null,
     escOutput: escOutputHeader,
     escRpm: escRpmHeader,
     headspeed: headspeedHeader,
@@ -702,7 +769,7 @@ const pidProfiles =
     governorP: findHeader(headers, ["govp"]),
     governorI: findHeader(headers, ["govi"]),
     governorD: findHeader(headers, ["govd"]),
-    governorTarget: governorTargetHeader
+    governorTarget: governorTargetUsable ? governorTargetHeader : null
   },
 
   evidenceSources: {
@@ -771,7 +838,10 @@ const governorLabAnalysis = analyzeGovernorLab({
         "KEY TELEMETRY FOUND\n" +
         "-------------------\n" +
         keyHeaders
-          .map(([label, value]) => {
+          .map(([label, value, emptyNote]) => {
+            if (value && emptyNote) {
+              return `✗ ${label}: ${value} (${emptyNote})`;
+            }
             return `${value ? "✓" : "✗"} ${label}: ${value || "Not found"}`;
           })
           .join("\n") +
@@ -809,7 +879,11 @@ const governorLabAnalysis = analyzeGovernorLab({
       Firmware: ${firmware}<br>
       Firmware Revision: ${firmwareRevision}<br>
       Board: ${board}<br>
-      Log Start: ${logStart}<br>
+      Log Start: ${
+        isPlausibleFlightDate(Date.parse(logStart))
+          ? logStart
+          : "Not recorded (the flight controller had no clock at boot; the file date stands in where it is trustworthy)"
+      }<br>
       Telemetry Header Row: ${
         telemetryHeaderIndex >= 0
           ? telemetryHeaderIndex
@@ -853,21 +927,21 @@ const governorLabAnalysis = analyzeGovernorLab({
 
       Aircraft Profile: ${
         flightAnalysis
-          ? `${flightAnalysis.profile.score}/100 — ${flightAnalysis.profile.status}`
+          ? `${flightAnalysis.profile.score}/100 (${flightAnalysis.profile.status})`
           : "N/A"
       }<br>
 
       ESC Operating Range: ${
   flightAnalysis
     ? flightAnalysis.esc.status === "Unavailable"
-      ? "N/A — Unavailable"
-      : `${flightAnalysis.esc.score}/100 — ${flightAnalysis.esc.status}`
+      ? "N/A (Unavailable)"
+      : `${flightAnalysis.esc.score}/100 (${flightAnalysis.esc.status})`
           : "N/A"
       }<br>
 
       Telemetry Quality: ${
         flightAnalysis
-          ? `${flightAnalysis.telemetry.score}/100 — ${flightAnalysis.telemetry.status}`
+          ? `${flightAnalysis.telemetry.score}/100 (${flightAnalysis.telemetry.status})`
           : "N/A"
       }<br>
 
@@ -1007,6 +1081,7 @@ const headers = csvHeaderLine
   analysisContext,
   filterAnalysis,
   pidAnalysis,
+  profileSegments,
   filterAnalysisSummaryFindings: filterAnalysis?.summaryFindings ?? []
   };
   }

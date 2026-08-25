@@ -1,9 +1,9 @@
 // ======================================================
 // BLACKBOX LAB — LOG INGEST WORKER (Cloudflare)
 //
-// Paste-ready Cloudflare Worker: accepts contributed
-// logs from the app and stores them in a private R2
-// bucket. Setup guide: ingest-endpoint-setup.md
+// The server half of the contribution system: a
+// Cloudflare Worker that accepts contributed logs from
+// the app and stores them in a private R2 bucket.
 // ======================================================
 //
 // The app addresses each contribution by a hash of its own

@@ -26,7 +26,7 @@ function fakeSpectrum(peakHz, magnitude) {
   return { frequencies, magnitudes };
 }
 
-function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag }) {
+function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag, confidence }) {
   return {
     spectra: [{ label: "gyro", spectrum: fakeSpectrum(peakHz, peakMagnitude) }],
     labs: {
@@ -34,13 +34,16 @@ function fakeDataset({ peakHz, peakMagnitude, droopRpm, pidScore, sag }) {
       battery: sag !== undefined ? { sagPercent: sag } : null
     },
     pidScore: pidScore ?? null,
+    pidConfidence: confidence ?? null,
     batterySagPercent: sag ?? null
   };
 }
 
+const solidConfidence = { level: "High", demand: "sport" };
+
 test("compareFlights reports improvements in plain language", () => {
-  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9 });
-  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8 });
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9, confidence: solidConfidence });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8, confidence: solidConfidence });
 
   const result = compareFlights(before, after);
 
@@ -49,18 +52,53 @@ test("compareFlights reports improvements in plain language", () => {
   assert.equal(result.rows[1].direction, "better"); // droop
   assert.equal(result.rows[2].direction, "better"); // tracking
   assert.equal(result.rows[3].direction, "same"); // sag ~2%
+  assert.equal(result.comparability.likeForLike, true);
   assert.match(result.summary, /helped/i);
 });
 
 test("compareFlights flags regressions", () => {
-  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10 });
-  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 11 });
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10, confidence: solidConfidence });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 11, confidence: solidConfidence });
 
   const result = compareFlights(before, after);
   const vibration = result.rows.find((row) => row.title === "Vibration");
 
   assert.equal(vibration.direction, "worse");
   assert.match(result.summary, /wrong way|Mixed/i);
+});
+
+test("keeper language requires verified like-for-like evidence", () => {
+  // Same improvement, but no confidence data on either side: the
+  // rows still describe the gain, the headline must not attribute it.
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9 });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8 });
+
+  const result = compareFlights(before, after);
+
+  assert.equal(result.comparability.likeForLike, false);
+  assert.doesNotMatch(result.summary, /That's a keeper/i);
+  assert.match(result.summary, /Repeat the same maneuvers/i);
+});
+
+test("mismatched flight demand blocks the causal headline", () => {
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 28, droopRpm: 60, pidScore: 40, sag: 9, confidence: { level: "High", demand: "gentle" } });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 12, pidScore: 70, sag: 8.8, confidence: { level: "High", demand: "sport" } });
+
+  const result = compareFlights(before, after);
+
+  assert.equal(result.comparability.likeForLike, false);
+  assert.doesNotMatch(result.summary, /That's a keeper/i);
+  assert.match(result.summary, /flown/i);
+});
+
+test("regressions without comparability ask for a confirming flight, not a revert", () => {
+  const before = fakeDataset({ peakHz: 30, peakMagnitude: 4, droopRpm: 10 });
+  const after = fakeDataset({ peakHz: 30, peakMagnitude: 22, droopRpm: 80 });
+
+  const result = compareFlights(before, after);
+
+  assert.doesNotMatch(result.summary, /reverting it/i);
+  assert.match(result.summary, /before reverting anything/i);
 });
 
 function memoryStorage() {
@@ -161,7 +199,10 @@ test("quality gate praises a complete fast log", () => {
     hasHeadspeed: true,
     hasGovernorTarget: true,
     hasVbat: true,
-    hasAmperage: true
+    hasAmperage: true,
+    hasRssi: true,
+    hasLinkFlags: true,
+    hasVbec: true
   });
 
   assert.ok(quality.capabilities.every((c) => c.level === "full"));
@@ -260,4 +301,110 @@ test("deleteFlight leaves storage untouched on unknown craft or file", () => {
   assert.equal(deleteFlight(storage, "No Such Heli", "a.bbl"), false);
   assert.equal(deleteFlight(storage, "Test Heli", "no-such.bbl"), false);
   assert.equal(JSON.stringify(loadHistory(storage)), before);
+});
+
+// ---- precomp trends (v1.1) ----
+
+function precompEntry(index, { kick = null, riseDroop = null } = {}) {
+  return {
+    fileName: `flight-${index}.bbl`,
+    flightDateMs: 1_700_000_000_000 + index * 86_400_000,
+    durationSeconds: 300,
+    sampleCount: 40_000 + index,
+    vibrationPeak: 5,
+    tailKickRatio: kick,
+    precompRiseDroopPercent: riseDroop
+  };
+}
+
+test("a rising tail kick across flights becomes a trend finding", () => {
+  const entries = [
+    precompEntry(0, { kick: 1.2 }),
+    precompEntry(1, { kick: 1.4 }),
+    precompEntry(2, { kick: 1.3 }),
+    precompEntry(3, { kick: 4.5 }),
+    precompEntry(4, { kick: 5.2 }),
+    precompEntry(5, { kick: 5.8 })
+  ];
+
+  const { findings } = assessTrends(entries);
+  const kick = findings.find((finding) =>
+    finding.sentence.includes("Tail kick")
+  );
+
+  assert.ok(kick, JSON.stringify(findings));
+  assert.match(kick.sentence, /Precomp Balance/);
+});
+
+test("tiny-base precomp ratios never trend — the floor holds", () => {
+  // 0.1% → 0.18% droop is a huge ratio and a meaningless number.
+  const entries = [
+    precompEntry(0, { riseDroop: 0.1 }),
+    precompEntry(1, { riseDroop: 0.12 }),
+    precompEntry(2, { riseDroop: 0.11 }),
+    precompEntry(3, { riseDroop: 0.17 }),
+    precompEntry(4, { riseDroop: 0.18 }),
+    precompEntry(5, { riseDroop: 0.19 })
+  ];
+
+  const { findings } = assessTrends(entries);
+
+  assert.equal(
+    findings.some((finding) =>
+      finding.sentence.includes("collective rises")
+    ),
+    false
+  );
+});
+
+test("history entries from before v1.1 trend cleanly without the fields", () => {
+  const entries = [0, 1, 2, 3, 4].map((index) => ({
+    fileName: `old-${index}.bbl`,
+    durationSeconds: 300,
+    vibrationPeak: 5
+  }));
+
+  const { findings } = assessTrends(entries);
+  assert.ok(Array.isArray(findings));
+});
+
+test("rotor trend speaks droop only when every flight had a target", async () => {
+  const { rotorTrendWording } = await import("../src/analysis/craftHistory.js");
+
+  const full = { droopRpm: 40, governorCapability: "full" };
+  const headspeedOnly = { droopRpm: 120, governorCapability: "partial" };
+  const legacy = { droopRpm: 60 }; // pre-capability entry
+
+  assert.match(rotorTrendWording([full, full]).title, /Governor Droop/);
+  assert.match(rotorTrendWording([full, headspeedOnly]).title, /Stability/);
+  assert.match(rotorTrendWording([full, legacy]).title, /Stability/);
+  assert.match(rotorTrendWording([]).title, /Stability/);
+  assert.doesNotMatch(rotorTrendWording([headspeedOnly]).adviceUp, /losing headroom/i);
+});
+
+// ---- #65: two flights are two facts, not a trend ----
+import { assessHistoryComparability } from "../src/analysis/craftHistory.js";
+
+test("mixed demand or headspeed across stored flights is named, and reads as mixed (#65)", () => {
+  const mixed = assessHistoryComparability([
+    { demand: "gentle", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { demand: "normal", headspeedRpm: 2400, evidence: "High", durationSeconds: 310 }
+  ]);
+  assert.equal(mixed.level, "mixed");
+  assert.ok(mixed.notes.some((n) => /flight demand differs/.test(n)));
+  assert.ok(mixed.notes.some((n) => /headspeed differs/.test(n)));
+
+  const clean = assessHistoryComparability([
+    { demand: "normal", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { demand: "normal", headspeedRpm: 2110, evidence: "Medium", durationSeconds: 290 }
+  ]);
+  assert.equal(clean.level, "comparable");
+  assert.deepEqual(clean.notes, []);
+
+  const legacy = assessHistoryComparability([
+    { demand: "normal", headspeedRpm: 2100, evidence: "High", durationSeconds: 300 },
+    { pidScore: 90 }
+  ]);
+  assert.equal(legacy.level, "partial");
+  assert.ok(legacy.notes.some((n) => /no comparability data/.test(n)));
 });

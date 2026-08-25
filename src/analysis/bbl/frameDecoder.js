@@ -46,6 +46,7 @@ const FRAME_MARKERS = new Set(
 );
 
 const END_OF_LOG_EVENT = 0xff;
+const INFLIGHT_ADJUSTMENT_EVENT = 13;
 
 // Should this loop iteration have been logged? Mirrors the
 // specification's frame-selection formula so the INCREMENT
@@ -347,10 +348,43 @@ export class FrameDecoder {
       return;
     }
 
-    // Other event payloads are variable length without a
+    // Every event is anchored to the main-frame stream, so a
+    // consumer can place it on the flight's own timeline.
+    const event = {
+      type: eventType,
+      afterMainFrame: this.mainFrames.length - 1,
+      time: this.lastMainFrameTime
+    };
+
+    // In-flight adjustment: the pilot changed a setting from the
+    // transmitter mid-flight — profile switches arrive this way.
+    // Payload per the specification: one function byte, then the
+    // new value (raw float32 when the high bit is set, signed VB
+    // otherwise).
+    if (eventType === INFLIGHT_ADJUSTMENT_EVENT) {
+      const functionByte = this.stream.readByte();
+
+      if (functionByte & 0x80) {
+        let bits = 0;
+
+        for (let shift = 0; shift < 32; shift += 8) {
+          bits |= this.stream.readByte() << shift;
+        }
+
+        const view = new DataView(new ArrayBuffer(4));
+        view.setUint32(0, bits >>> 0, true);
+        event.adjustmentFunction = functionByte & 0x7f;
+        event.value = view.getFloat32(0, true);
+      } else {
+        event.adjustmentFunction = functionByte;
+        event.value = this.stream.readSignedVB();
+      }
+    }
+
+    // Remaining event payloads are variable length without a
     // length prefix. Skipping bytes until the next frame
     // marker keeps unknown events from derailing the log.
-    this.events.push({ type: eventType });
+    this.events.push(event);
 
     while (
       !this.stream.eof() &&

@@ -74,7 +74,7 @@ test("System Scores never renders null/100 or a quality label without a score", 
 
   assert.ok(!partialLine.includes("null"), partialLine);
   assert.ok(!partialLine.includes("/100"), partialLine);
-  assert.match(partialLine, /Partial — headspeed stability only/);
+  assert.match(partialLine, /Partial: headspeed stability only/);
 
   const insufficientLine = describeGovernorSystemScore({
     score: null,
@@ -88,7 +88,7 @@ test("System Scores never renders null/100 or a quality label without a score", 
   const full = analyzeGovernorLab(flight({ withTarget: true }));
   assert.match(
     describeGovernorSystemScore(full),
-    /^\d+\/100 — /
+    /^\d+\/100 \(/
   );
 
   // Legacy statuses keep their N/A-style honesty.
@@ -97,7 +97,7 @@ test("System Scores never renders null/100 or a quality label without a score", 
       score: 0,
       status: "Target Unavailable"
     }),
-    /Not scored — Target Unavailable/
+    /Not scored: Target Unavailable/
   );
 });
 

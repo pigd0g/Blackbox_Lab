@@ -77,7 +77,7 @@ export function assessVibrationConclusion({
 
   // ---- the four sentences ----
 
-  const detected = `Vibration detected at ${hzLabel} Hz (raw amplitude ${raw.toFixed(1)}) — frequency territory: ${source}. This is an observation, not a diagnosis.`;
+  const detected = `Vibration detected at ${hzLabel} Hz (raw amplitude ${raw.toFixed(1)}). Frequency territory: ${source}. This is an observation, not a diagnosis.`;
 
   const filtering = filteringKnown
     ? `Rotorflight filtering reduces this peak ${Math.round(reductionPercent)}% (${raw.toFixed(1)} raw → ${residualMagnitude.toFixed(1)} filtered).`
@@ -117,13 +117,13 @@ export function assessVibrationConclusion({
 
   const recommendation =
     level === "observed" && raw > RAW_MODERATE
-      ? "Vibration is present, but it is being managed successfully. No change recommended — worth reviewing mechanically only if this peak grows across flights or begins reaching the filtered gyro."
+      ? "Vibration is present, but it is being managed successfully. No change recommended. Worth reviewing mechanically only if this peak grows across flights or begins reaching the filtered gyro."
       : level === "observed"
-        ? "No action needed — a clean, well-balanced machine."
+        ? "No action needed: a clean, well-balanced machine."
         : level === "review"
           ? "Worth reviewing at the bench when convenient; re-log after any mechanical change to compare."
           : level === "suspected"
-            ? "Mechanical review suggested: balance, tracking, damping and bearings in the named frequency territory — then re-log. Filters suppress what the gyro sees; they do not remove the physical vibration."
+            ? "Mechanical review suggested: balance, tracking, damping and bearings in the named frequency territory, then re-log. Filters suppress what the gyro sees; they do not remove the physical vibration."
             : "Multiple signals agree: strong raw vibration, filters not containing it, and control impact. Inspect the mechanics in the named frequency territory before further flights, then re-log.";
 
   return {

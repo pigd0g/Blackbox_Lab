@@ -2,6 +2,11 @@
 // BLACKBOX LAB - FILTER ANALYSIS
 // ====================================================
 import {
+  columnTableFor,
+  alignedColumnValues,
+  finiteValuesAtRows
+} from "./columnTable.js";
+import {
   detectStableFlightPhase
 } from "./flightPhase.js";
 
@@ -20,7 +25,7 @@ const LOW_REDUCTION_PERCENT = 15;
 
 // Remaining vibration high enough to be worth deducting for.
 //
-// Measured against 190 contributed flights rather than chosen: the
+// Measured against the contributed fleet rather than chosen: the
 // fleet's per-profile filtered level runs a median of 15.5 and an
 // upper quartile of 30.5. Deducting from PROFILE_MONITOR_LEVEL would
 // charge the median helicopter for being ordinary, which tells a pilot
@@ -84,7 +89,7 @@ export function assessUnresolvedFindings({
     // The vibration itself is still charged below.
     findings.push({
       reason:
-        "Low overall reduction alongside a peak below the ~20 Hz filter band — that vibration is structural, and filters are right not to touch it. The fix is at the bench, not in filter settings.",
+        "Low overall reduction alongside a peak below the ~20 Hz filter band: that vibration is structural, and filters are right not to touch it. The fix is at the bench, not in filter settings.",
       cost: 0
     });
   }
@@ -175,14 +180,18 @@ function extractNumericColumnValues(
   }
 
   const values = [];
+  const column = columnTableFor(lines, headerIndex)?.column(columnIndex);
+
+  if (!column) {
+    return values;
+  }
 
   for (
     let rowIndex = headerIndex + 1;
     rowIndex < lines.length;
     rowIndex += sampleStep
   ) {
-    const cells = lines[rowIndex].split(",");
-    const value = Number(cells[columnIndex]);
+    const value = column[rowIndex];
 
     if (Number.isFinite(value)) {
       values.push(value);
@@ -233,17 +242,15 @@ function estimateSampleRate(lines, headerIndex) {
     headerIndex + 5001
   );
 
+  const timeColumn =
+    columnTableFor(lines, headerIndex)?.column(timeColumnIndex) ?? null;
+
   for (
     let rowIndex = headerIndex + 1;
-    rowIndex < lastRow;
+    timeColumn && rowIndex < lastRow;
     rowIndex += 1
   ) {
-    const cells = lines[rowIndex].split(",");
-    const timeValue = Number(
-  cells[timeColumnIndex]
-    ?.trim()
-    .replace(/^"|"$/g, "")
-);
+    const timeValue = timeColumn[rowIndex];
 
     if (Number.isFinite(timeValue)) {
       timeValues.push(timeValue);
@@ -334,18 +341,15 @@ function extractContiguousNumericWindow(
     firstDataRow + windowSize
   );
 
+  const windowColumn =
+    columnTableFor(lines, headerIndex)?.column(columnIndex) ?? null;
+
   for (
     let rowIndex = firstDataRow;
-    rowIndex < lastDataRow;
+    windowColumn && rowIndex < lastDataRow;
     rowIndex += 1
   ) {
-    const cells = lines[rowIndex].split(",");
-
-    const value = Number(
-      cells[columnIndex]
-        ?.trim()
-        .replace(/^"|"$/g, "")
-    );
+    const value = windowColumn[rowIndex];
 
     if (!Number.isFinite(value)) {
       return [];
@@ -396,33 +400,8 @@ function extractAlignedNumericColumn(
     };
   }
 
-  const values = [];
+  const values = alignedColumnValues(lines, headerIndex, columnIndex);
 
-  for (
-    let rowIndex = headerIndex + 1;
-    rowIndex < lines.length;
-    rowIndex += 1
-  ) {
-    const cells = lines[rowIndex].split(",");
-
-    const rawValue =
-  cells[columnIndex]
-    ?.trim()
-    .replace(/^"|"$/g, "") ?? "";
-
-if (rawValue === "") {
-  values.push(null);
-  continue;
-}
-
-const value = Number(rawValue);
-
-values.push(
-  Number.isFinite(value)
-    ? value
-    : null
-);
-  }
   return {
     columnName: headers[columnIndex],
     values
@@ -959,20 +938,7 @@ const headspeedProfiles =
     return [];
   }
 
-  return sampleIndexes
-    .map((rowIndex) => {
-      const line = lines[rowIndex];
-
-      if (!line) {
-        return null;
-      }
-
-      const cells = line.split(",");
-      const value = Number(cells[columnIndex]);
-
-      return Number.isFinite(value) ? value : null;
-    })
-    .filter((value) => value !== null);
+  return finiteValuesAtRows(lines, headerIndex, columnIndex, sampleIndexes);
 }
 
  function buildProfileMechanicalFinding({
@@ -1044,6 +1010,7 @@ const controlMotionAxes = [
 
 let controlMotionAssessment =
   "Control-motion evidence was not available for this profile.";
+let controlMotionConcern = null;
 
 if (controlMotionAxes.length > 0) {
   const controlRatios = controlMotionAxes
@@ -1068,6 +1035,13 @@ if (controlMotionAxes.length > 0) {
         current.ratio > highest.ratio ? current : highest
     );
 
+    controlMotionConcern =
+      highestControlRatio.ratio >= 0.5
+        ? "high"
+        : highestControlRatio.ratio >= 0.25
+          ? "moderate"
+          : "none";
+
     if (highestControlRatio.ratio >= 0.5) {
       controlMotionAssessment =
         `${highestControlRatio.axis} shows a high control-error ratio during the available commanded-motion samples. This indicates a tracking concern, but Filter Lab cannot determine by itself whether the cause is filtering, PID balance, mechanics, or the command-event mix. Cross-check PID Lab before changing filter settings.`;
@@ -1085,6 +1059,8 @@ if (controlMotionAxes.length > 0) {
     confidence,
 sampleCount,
 controlMotionAssessment,
+controlMotionConcern,
+    controlMotionAvailable: controlMotionAxes.length > 0,
     strongestAxis: strongestAxis.name,
     strongestFilteredAverage:
       strongestAxis.data.filteredAverage,
@@ -1314,6 +1290,75 @@ if (profileSpecificFilterAnalysis.length === 1) {
 
   if (onlyProfile.mechanicalFinding?.status === "Cleanest Profile") {
     onlyProfile.mechanicalFinding.status = "Only Profile Measured";
+
+    // The summary sentence was baked with the comparative word —
+    // it must tell the same story as the status it carries.
+    if (typeof onlyProfile.mechanicalFinding.summary === "string") {
+      onlyProfile.mechanicalFinding.summary =
+        onlyProfile.mechanicalFinding.summary.replace(
+          "is rated Cleanest Profile",
+          "is rated Only Profile Measured (nothing to compare against)"
+        );
+    }
+  }
+} else if (profileSpecificFilterAnalysis.length > 1) {
+  // The same placing rule, from the other side: with several
+  // profiles in the field, "Cleanest" is a title only ONE can hold —
+  // the one with the least remaining filtered vibration, the same
+  // measure the recommendation below crowns as its baseline. Every
+  // other below-threshold profile is Clean: a band it earned on its
+  // own reading, not a placing.
+  const cleanProfiles = profileSpecificFilterAnalysis.filter(
+    (profile) => profile.mechanicalFinding?.status === "Cleanest Profile"
+  );
+
+  if (cleanProfiles.length > 0) {
+    // A placing is a claim the evidence must carry (#47's doctrine,
+    // applied to this lab too): a profile whose confidence is Low —
+    // or whose sample count is dwarfed 20:1 by the best-measured
+    // bank — cannot hold the comparative title, however clean its
+    // few samples looked. It reads "Clean — limited evidence", and
+    // the title goes to the best-SUPPORTED clean profile. When every
+    // clean profile is thin, nobody is crowned.
+    const largestSampleCount = profileSpecificFilterAnalysis.reduce(
+      (max, profile) =>
+        Math.max(max, profile.mechanicalFinding?.sampleCount ?? 0),
+      0
+    );
+    const carriesEvidence = (profile) =>
+      profile.mechanicalFinding?.confidence !== "Low" &&
+      (profile.mechanicalFinding?.sampleCount ?? 0) * 20 >=
+        largestSampleCount;
+
+    const eligible = cleanProfiles.filter(carriesEvidence);
+    const winner =
+      eligible.length > 0
+        ? eligible.reduce((best, current) =>
+            (current.mechanicalFinding.averageFiltered ?? Infinity) <
+            (best.mechanicalFinding.averageFiltered ?? Infinity)
+              ? current
+              : best
+          )
+        : null;
+
+    for (const profile of cleanProfiles) {
+      if (profile === winner) continue;
+      const thin = !carriesEvidence(profile);
+      profile.mechanicalFinding.status = thin
+        ? "Clean — limited evidence"
+        : "Clean";
+      if (typeof profile.mechanicalFinding.summary === "string") {
+        profile.mechanicalFinding.summary = thin
+          ? profile.mechanicalFinding.summary.replace(
+              /is rated Cleanest Profile with \w+ confidence from [\d,]+ samples/,
+              `reads clean, but only ${profile.mechanicalFinding.sampleCount} samples were measured at this headspeed — too few to compare against the better-measured banks. Collect more flight time there`
+            )
+          : profile.mechanicalFinding.summary.replace(
+              "is rated Cleanest Profile",
+              "is rated Clean"
+            );
+      }
+    }
   }
 }
   
@@ -1844,9 +1889,14 @@ const averageReduction =
 const remainingVibration =
   quietestProfile?.mechanicalFinding?.averageFiltered ?? null;
 
+// The unavailability sentence is also a string — the flag must ask
+// whether the assessment could actually RUN, or the penalty for
+// missing evidence never fires and confidence reads High while the
+// profile text says the evidence was unavailable.
 const hasControlMotionEvidence =
   profileSpecificFilterAnalysis.some(
-    (profile) => profile.mechanicalFinding?.controlMotionAssessment
+    (profile) =>
+      profile.mechanicalFinding?.controlMotionAvailable === true
   );
 
 const {
@@ -1878,7 +1928,7 @@ let severity = "warning";
 
 if (!hasSufficientFilterEvidence) {
   status =
-    "Filter Analysis Limited — Insufficient Evidence";
+    "Filter Analysis Limited: Insufficient Evidence";
   severity = "warning";
 } else if (detectedGroupCount === 5) {
   if (score >= 95) {
@@ -1886,11 +1936,11 @@ if (!hasSufficientFilterEvidence) {
     severity = "info";
   } else if (score >= 80) {
     status =
-      "Filter Analysis Complete — Monitor";
+      "Filter Analysis Complete: Monitor";
     severity = "warning";
   } else {
     status =
-      "Filter Analysis Complete — Needs Review";
+      "Filter Analysis Complete: Needs Review";
     severity = "warning";
   }
 } else if (detectedGroupCount >= 3) {
@@ -1906,8 +1956,12 @@ if (!hasSufficientFilterEvidence) {
 // whether the checks that need commanded motion or a stable profile
 // could be run at all.
 const missingEvidencePenalty =
-  (hasControlMotionEvidence ? 0 : 20) +
-  (hasStableProfileEvidence ? 0 : 15);
+  (hasControlMotionEvidence ? 0 : 25) +
+  (hasStableProfileEvidence ? 0 : 15) +
+  // Peaks the matcher could not explain are evidence the verdict
+  // does NOT rest on — they lower confidence, never the score
+  // (the fleet lesson: unmatched measures the matcher's reach).
+  (unmatchedMechanicalPeakCount > matchedMechanicalPeakCount ? 15 : 0);
 
   const confidenceScore =
   hasSufficientFilterEvidence
@@ -1953,8 +2007,19 @@ if (Number.isFinite(averageReduction)) {
       ? " Measurable vibration remained afterwards, so the filters are not removing much of what is there."
       : " There was little vibration to remove, so filters doing little is the expected result here.";
   } else if (averageReduction > 60) {
-    filterReductionAssessment =
-      " The high average reduction deserves a closer check for possible over-filtering.";
+    // High reduction alone is the filters doing a big job, not proof
+    // they are doing harm. The caution is only actionable when the
+    // control-motion evidence shows tracking actually suffering;
+    // without that, the number is informational and must not read as
+    // a recommendation the verdict does not share.
+    const controlSuffering = profileSpecificFilterAnalysis.some(
+      (profile) =>
+        profile.mechanicalFinding?.controlMotionConcern === "high" ||
+        profile.mechanicalFinding?.controlMotionConcern === "moderate"
+    );
+    filterReductionAssessment = controlSuffering
+      ? " The high average reduction deserves a closer check for possible over-filtering: the control-motion evidence shows tracking being affected."
+      : " The high average reduction reflects how much vibration the filters had to remove. With no control-motion impact in evidence, this is informational, not a call to action.";
   }
 }
 
@@ -1962,19 +2027,31 @@ if (Number.isFinite(averageReduction)) {
 // which profile was measured, not which one won.
 const onlyOneProfile = profileSpecificFilterAnalysis.length === 1;
 
+// "Use this as the baseline" turns an observation into a testing
+// decision — a Low-confidence, short-window profile has not earned
+// that promotion. It is still reported as the lowest OBSERVED, with
+// the ask to collect more time at that headspeed first.
+const quietestIsEstablished =
+  quietestProfile.mechanicalFinding?.confidence === "High" ||
+  quietestProfile.mechanicalFinding?.confidence === "Moderate";
+
 recommendations.push(
   `${quietestProfile.targetRpm} RPM ${
     onlyOneProfile
       ? "was the only headspeed profile analyzed, so profiles cannot be compared"
-      : "currently has the lowest remaining filtered vibration"
+      : quietestIsEstablished
+        ? "currently has the lowest remaining filtered vibration"
+        : `showed the lowest remaining filtered vibration in the limited samples available (${quietestProfile.mechanicalFinding?.sampleCount ?? "few"} samples)`
   }` +
   `${
     Number.isFinite(averageReduction)
-      ? ` — average gyro reduction ${averageReduction.toFixed(1)}%`
+      ? `: average gyro reduction ${averageReduction.toFixed(1)}%`
       : ""
   }.` +
   filterReductionAssessment +
-  ` It should be used as the baseline for the next comparison flight.`
+  (quietestIsEstablished
+    ? ` It should be used as the baseline for the next comparison flight.`
+    : ` Collect more time at this headspeed before using it as a comparison baseline.`)
 );
 
 for (const finding of unresolvedFindings) {

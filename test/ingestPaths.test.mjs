@@ -23,7 +23,7 @@ import { contributionPaths } from "../src/contribute/uploader.js";
 const here = dirname(fileURLToPath(import.meta.url));
 
 const workerSource = readFileSync(
-  join(here, "..", "Documentation", "ingest-worker.js"),
+  join(here, "..", "src", "contribute", "ingest-worker.js"),
   "utf8"
 );
 
