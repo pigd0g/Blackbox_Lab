@@ -7,6 +7,12 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+// Test harnesses point this at a throwaway directory so probe runs
+// never share Health Record / settings state with a real install.
+if (process.env.BLACKBOX_LAB_USER_DATA) {
+  app.setPath('userData', process.env.BLACKBOX_LAB_USER_DATA);
+}
+
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({

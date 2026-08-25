@@ -135,7 +135,8 @@ import { profileName } from "./analysis/profileSegments.js";
 import { packSnippet, revertSnippet } from "./analysis/packSnippet.js";
 import {
   fileAnalysis,
-  latestPack
+  latestPack,
+  openConfirmations
 } from "./analysis/confirmationLedger.js";
 import {
   assessAppliedState,
@@ -2675,7 +2676,7 @@ function recommendationFirstStep(rec) {
 
   if (rec.suggestion) {
     return {
-      text: `Try one ${rec.suggestion.magnitudeClass} step ${rec.suggestion.direction === "up" ? "up" : "down"} on ${rec.suggestion.family}. Change only this, fly the same moves again, and watch ${rec.verifyMetric ?? "the same finding"}. Compare Flights is the judge.`,
+      text: `Try one ${rec.suggestion.magnitudeClass} ${rec.suggestion.direction === "up" ? "up" : "down"} on ${rec.suggestion.family}. Change only this, fly the same moves again, and watch ${rec.verifyMetric ?? "the same finding"}. Compare Flights is the judge.`,
       tone: "action"
     };
   }
@@ -2705,9 +2706,27 @@ function statusTone(status) {
 // so each is verified by its own instrument next flight. Hidden when
 // the flight earned nothing and asks for no evidence — What To Do
 // First already tells that story.
+let lastPackRender = null;
+
+// Re-render the pack card in place after the craft's dump changed
+// (pasted or updated mid-session). Read-only against the ledger:
+// the flight was already filed when it was analyzed.
+function refreshPackCard() {
+  if (!lastPackRender) return;
+  renderPackCard(
+    lastPackRender.dataset,
+    lastPackRender.nextSteps,
+    lastPackRender.firmwareRevision,
+    { ...lastPackRender.context, refreshOnly: true }
+  );
+}
+
 function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   const card = el("packCard");
   if (!card) return;
+  if (!context.refreshOnly) {
+    lastPackRender = { dataset, nextSteps, firmwareRevision, context };
+  }
 
   const rawCraftName = dataset?.craftName;
   const craftName =
@@ -2789,14 +2808,16 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
         appliedState: appliedAssessment
       });
     }
-    openItems = fileAnalysis(localStorage, context.craftKey, {
-      sourceHash: context.sourceHash,
-      dateMs: context.dateMs ?? 0,
-      confirms: [...(nextSteps?.pid ?? []), ...(nextSteps?.governor ?? [])]
-        .filter((rec) => rec.level === "confirm"),
-      axisEvidence: context.axisEvidence ?? {},
-      pack
-    });
+    openItems = context.refreshOnly
+      ? openConfirmations(localStorage, context.craftKey)
+      : fileAnalysis(localStorage, context.craftKey, {
+          sourceHash: context.sourceHash,
+          dateMs: context.dateMs ?? 0,
+          confirms: [...(nextSteps?.pid ?? []), ...(nextSteps?.governor ?? [])]
+            .filter((rec) => rec.level === "confirm"),
+          axisEvidence: context.axisEvidence ?? {},
+          pack
+        });
   }
 
   const banner = el("packAppliedBanner");
@@ -3070,6 +3091,13 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     }
   };
 
+  // An EARNED recommendation is a to-do wherever its card's color
+  // landed: a green tile means nothing is wrong, but an earned
+  // change still belongs on Home's list — the pack carries it, so
+  // this list must name it (one priority rule, every surface).
+  const actionableTone = (rec, tone) =>
+    rec?.tone === "action" && tone !== "attention" ? "watch" : tone;
+
   // ---- the capability gaps: what this log could not measure ----
   // Every card carries its gap (the verdict decided it once); the
   // first step on the lab page and the line on Home both read it.
@@ -3136,7 +3164,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           : gentleDemand
             ? "Fly deliberate stick steps — clear inputs, held briefly — then read this page again. Gentle flying cannot earn tuning advice."
             : "Nothing to change."),
-    statusTone(cardStatus("tuning"))
+    actionableTone(pidRec, statusTone(cardStatus("tuning")))
   );
 
   // ---- Governor: answer the dip from the data ----
@@ -3193,7 +3221,9 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     governor && governor.hasRotorSpeedData === false
       ? cardGap("rotor")
       : governorText,
-    governor && governor.hasRotorSpeedData !== false ? governorTone : "info"
+    governor && governor.hasRotorSpeedData !== false
+      ? actionableTone(govRec, governorTone)
+      : "info"
   );
 
   // ---- Filter: speak about THE peak the verdict named ----
@@ -7254,9 +7284,11 @@ if (craftCardSave) {
 
       if (stagedCraftDump) {
         saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
-        // The Governor Lab's settings card reads from this dump —
-        // reflect a fresh save without needing a reload.
+        // The Governor Lab's settings card and the change pack both
+        // read from this dump — reflect a fresh save without
+        // needing a reload.
         renderGovernorSettings(currentDataset);
+        refreshPackCard();
       }
     }
     craftCardAsk.hidden = true;
