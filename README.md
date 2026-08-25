@@ -1,6 +1,6 @@
-@start.png
-
 # Blackbox Lab
+
+![Blackbox Lab](Documentation/screenshots/start.png)
 
 **Understand the flight. Follow the evidence. Make the next change for a reason.**
 
@@ -31,9 +31,9 @@ Every change happens through the pilot's explicit confirmation.
 
 ## Watch the tour
 
-@youtube-thumbnail
-
 Seven minutes, the whole app in motion:
+
+[![Blackbox Lab 180 Preview Tour](Documentation/screenshots/youtube-thumbnail.jpg)](https://www.youtube.com/watch?v=ZFKA7wxAJ18)
 
 **[Blackbox Lab 180 Preview Tour](https://www.youtube.com/watch?v=ZFKA7wxAJ18)** — the Academy, Change Packs, Replay, the labs and the PDF report, walked through on a real log.
 
@@ -91,7 +91,7 @@ The exact path depends on what the flight actually shows.
 
 ## What Blackbox Lab does
 
-@home.png
+![Home — Flight Verdict and What To Do First](Documentation/screenshots/home.png)
 
 ### Flight Verdict
 
@@ -144,7 +144,7 @@ That makes every flight part of the tuning process rather than another pile of u
 
 ---
 
-@filter-lab (image 16)
+![Filter Lab](Documentation/screenshots/filter-lab.png)
 
 ## Filter Lab
 
@@ -172,7 +172,7 @@ It cannot remove vibration from the helicopter.
 
 ---
 
-@pid-lab (image 17)
+![PID Lab](Documentation/screenshots/pid-lab.png)
 
 ## PID Lab
 
@@ -213,7 +213,7 @@ No gain change fixes a control surface that has run out of arm.
 
 ---
 
-@governor-lab (image 18)
+![Governor Lab](Documentation/screenshots/governor-lab.png)
 
 ## Governor Lab
 
@@ -235,7 +235,7 @@ The goal is to distinguish a governor problem from a power-system limitation or 
 
 ---
 
-@esc-lab (image 19)
+![ESC Lab](Documentation/screenshots/esc-lab.png)
 
 ## ESC Lab
 
@@ -257,7 +257,7 @@ Blackbox Lab also tells you when the data required for a conclusion was *not rec
 
 ---
 
-@battery-lab (image 20)
+<!-- battery-lab screenshot pending: the pasted image duplicated the ESC Lab shot -->
 
 ## Battery Lab
 
@@ -279,7 +279,7 @@ Missing current telemetry is reported as missing data rather than silently estim
 
 ---
 
-@signal-lab (image 21)
+![Signal Lab](Documentation/screenshots/signal-lab.png)
 
 ## Signal Lab
 
@@ -299,7 +299,7 @@ If no signal telemetry was recorded, Signal Lab says exactly that — and still 
 
 ---
 
-@bec-lab (image 22)
+![BEC Lab](Documentation/screenshots/bec-lab.png)
 
 ## BEC Lab
 
@@ -362,7 +362,7 @@ The goal is to build confidence gradually rather than manufacture certainty from
 
 ---
 
-@Replay (image 23)
+![Replay](Documentation/screenshots/replay.png)
 
 ## Replay
 
