@@ -320,6 +320,8 @@ That distinction prevents a single short-lived sample from being presented as a 
 
 ---
 
+![Compare Flights](Documentation/screenshots/compare-flights.png)
+
 ## Compare Flights
 
 Compare Flights lets you evaluate a change using a before-and-after flight.
@@ -344,6 +346,8 @@ Sometimes the correct conclusion is simply:
 
 
 ---
+
+![Health Record](Documentation/screenshots/health-record.png)
 
 ## Health Record
 
@@ -403,6 +407,8 @@ Friendly names are shown alongside the original Rotorflight field names.
 If the flight controller did not record a field, Blackbox Lab does not offer it.
 
 ---
+
+![PDF Flight Report](Documentation/screenshots/flight-report.png)
 
 ## PDF Flight Reports
 
