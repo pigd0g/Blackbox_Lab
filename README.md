@@ -74,52 +74,68 @@ Blackbox Lab explains what happened during the flight using plain English and pr
 
 - **Native .bbl decoding** — open raw Blackbox files straight off
   the flight controller, no CSV conversion. Multi-flight files
-  supported, corrupt bytes skipped gracefully.
-- **What To Try Next** — evidence-gated recommendations on the PID
-  and Governor pages: when enough events agree, the card names one
-  setting, a direction and a small step, plus the exact number the
-  next log must improve. Headspeed excursion events, precomp
-  balance reads and cross-flight precomp trends feed it.
-- **Flight Verdict** — answers first: plain-language cards with
-  status, cause, what to do, and a jump straight to the evidence.
+  supported, corrupt bytes skipped gracefully — and loading is
+  fast: large logs open in seconds.
+- **Flight Verdict** — answers first: seven plain-language cards
+  (vibration, rotor speed, tuning, power & ESC, battery, signal,
+  BEC) with status, cause, what to do, and a jump straight to the
+  evidence.
+- **What To Do First** — every finding of the flight in one
+  severity-ordered list; upstream problems outrank downstream
+  tuning, so filters come before PIDs and power before governor.
+- **Flight Change Packs** — the earned changes of a flight as one
+  reviewable plan: at most three setting changes, each verified by
+  its own instrument on the next log, with mechanical fixes named
+  alongside. With a CLI dump loaded, the pack becomes a paste-ready
+  CLI snippet with a guaranteed-undo revert; the next log checks
+  the pack automatically.
+- **Seven labs** — Filter, PID, Governor, ESC, Battery, Signal and
+  BEC. Each opens with its verdict, a Try This First and the key
+  chart; the tables and raw numbers sit behind one "Show the
+  advanced data" control.
+- **Flight Events** — every stick command with its measured
+  response: overshoot, settling, bounce-back, ringing. Click an
+  event and its card, description and windowed chart show the same
+  moment, stick playback included.
+- **Replay** — fly through the log again: synchronized playhead,
+  stick overlays, preset views, and a searchable browser for every
+  field the log recorded, stacked as charts in a dashboard you
+  arrange.
+- **PID profiles & headspeed banks** — per-profile segmentation and
+  per-bank verdicts, with cross-axis effects analyzed and
+  under-sampled banks never crowned "best".
+- **Servo Travel Check** — servo commands pinned at their travel
+  limit mid-maneuver are a mechanical finding, not a tuning one.
+- **Noise spectrum & Filter Advisor** — built-in FFT with peaks
+  classified against rotor harmonics, filter attenuation measured
+  unfiltered-vs-filtered — mechanics first.
+- **Compare Flights** — before vs after with its footing checked:
+  demand, maneuver coverage, headspeed and evidence quality must
+  match before a causal verdict, and the verdict states its
+  confidence.
+- **Health Record** — every analyzed flight filed per craft
+  (locally); trends appear when enough comparable flights exist,
+  never from two points.
+- **The Diagnosis Academy** — seven sample flights: Daniel's real
+  Bell 222UT recording ("Try a Sample Flight", one click) plus six
+  practice flights, each with one known planted problem and a
+  reveal to check your diagnosis against. Recordings for the app —
+  not firmware; they cannot be flashed to anything.
+- **PDF flight reports** — verdict, priorities, the Change Pack,
+  every lab and the charts in one compact, shareable PDF, worded
+  exactly as the app.
 - **Log Quality Gate** — before analysis, the app tells you what
   this log can and cannot answer, and which logging settings to
-  enable for more.
-- **Charts, all laid out** — gyro, headspeed & governor, throttle,
-  battery & current, and per-axis tuning presets for Roll, Pitch
-  and Yaw: tracking, feedforward check and term balance. Drag to
-  zoom; live min/max readouts follow the zoom window.
-- **Noise spectrum** — built-in FFT shows vibration by frequency
-  in the Filter Lab.
-- **Filter Advisor** — peaks classified against rotor harmonics,
-  filter attenuation measured unfiltered-vs-filtered, with
-  concrete RPM-filter recommendations — mechanics first.
-- **PID & Filter analysis** — scores, findings, confidence and
-  recommendations in plain language. Missing telemetry gives an
-  honest "could not be measured", never a fake score.
-- **Governor, ESC & Battery Labs** — droop analysis, throttle
-  headroom & saturation, voltage sag, estimated pack internal
-  resistance and consumed capacity.
-- **Compare Flights** — before vs after: "your change made the
-  biggest vibration peak 86% better."
-- **Health Record** — every analyzed flight is filed per craft
-  (locally); rising vibration or droop across flights triggers a
-  warning before something breaks. Individual flights can be
-  removed from the record.
-- **PDF flight reports** — verdict, priorities, the Change Pack,
-  findings and charts in one compact, shareable PDF.
-- **Beginner & Advanced modes** — calm by default, everything
-  laid out when you switch.
+  enable for more. Missing telemetry reads "not measured", never a
+  fake score.
+- **Beginner & Advanced modes** — calm by default, everything laid
+  out when you switch; any single page can show its advanced data
+  temporarily.
 - **Update check** — a quiet banner when a newer release exists.
 - **Community log sharing** — strictly opt-in and anonymized:
-  contributed logs help make the analysis smarter for everyone.
-  Off until you say yes; details in
+  contributed logs calibrate the analysis for everyone. Off until
+  you say yes; details in
   [Documentation/CONTRIBUTED-DATA.md](Documentation/CONTRIBUTED-DATA.md).
-- **Sample flights** — ready-made logs in `samples/` (with
-  documented ground truth), including the Diagnosis Academy's
-  practice flights, so you can explore without a log at hand
-  ("Try a Sample Flight" — one click). These are recordings for
-  the app — not firmware; they cannot be flashed to anything.
 
 ## On the Roadmap
 
