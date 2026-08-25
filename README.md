@@ -1,3 +1,5 @@
+@start.png
+
 # Blackbox Lab
 
 **Understand the flight. Follow the evidence. Make the next change for a reason.**
@@ -28,6 +30,8 @@ Every change happens through the pilot's explicit confirmation.
 ---
 
 ## Watch the tour
+
+@youtube-thumbnail
 
 Seven minutes, the whole app in motion:
 
@@ -87,6 +91,8 @@ The exact path depends on what the flight actually shows.
 
 ## What Blackbox Lab does
 
+@home.png
+
 ### Flight Verdict
 
 The Home page gives you a high-level view of the flight before you dive into the details.
@@ -138,6 +144,8 @@ That makes every flight part of the tuning process rather than another pile of u
 
 ---
 
+@filter-lab (image 16)
+
 ## Filter Lab
 
 Filter Lab examines vibration before and after Rotorflight filtering.
@@ -163,6 +171,8 @@ A filter can hide vibration from the gyro.
 It cannot remove vibration from the helicopter.
 
 ---
+
+@pid-lab (image 17)
 
 ## PID Lab
 
@@ -203,6 +213,8 @@ No gain change fixes a control surface that has run out of arm.
 
 ---
 
+@governor-lab (image 18)
+
 ## Governor Lab
 
 Governor Lab examines how well rotor speed is being maintained throughout the flight.
@@ -222,6 +234,8 @@ Analysis can include:
 The goal is to distinguish a governor problem from a power-system limitation or a normal transient event.
 
 ---
+
+@esc-lab (image 19)
 
 ## ESC Lab
 
@@ -243,6 +257,8 @@ Blackbox Lab also tells you when the data required for a conclusion was *not rec
 
 ---
 
+@battery-lab (image 20)
+
 ## Battery Lab
 
 Battery Lab evaluates the electrical behavior visible during the flight.
@@ -263,6 +279,8 @@ Missing current telemetry is reported as missing data rather than silently estim
 
 ---
 
+@signal-lab (image 21)
+
 ## Signal Lab
 
 Signal Lab examines the radio link during the flight.
@@ -280,6 +298,8 @@ A helicopter cannot be tuned around a link that keeps letting go of it.
 If no signal telemetry was recorded, Signal Lab says exactly that — and still reports what the firmware's flags reveal.
 
 ---
+
+@bec-lab (image 22)
 
 ## BEC Lab
 
@@ -341,6 +361,8 @@ The system can identify when:
 The goal is to build confidence gradually rather than manufacture certainty from too little data.
 
 ---
+
+@Replay (image 23)
 
 ## Replay
 
