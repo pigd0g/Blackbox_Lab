@@ -121,11 +121,12 @@ Blackbox Lab explains what happened during the flight using plain English and pr
 
 ## On the Roadmap
 
-- Servo Activity Reports
-- Flight Playback
-- Rotorflight Configuration Review
+- Video Overlay Export
+- Direct FBL Access
+- Setup Wizard / Configuration
+- Web App
 
-The longer list of ideas lives in
+The longer list lives in
 [Documentation/BLACKBOX_LAB_ROADMAP.md](Documentation/BLACKBOX_LAB_ROADMAP.md).
 
 ---
