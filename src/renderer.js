@@ -7283,12 +7283,19 @@ if (craftCardSave) {
       });
 
       if (stagedCraftDump) {
+        const savedFor = craftCardTarget;
+        const savedCount = stagedCraftDump?.stats?.kept ?? null;
         saveCraftDump(localStorage, craftCardTarget, stagedCraftDump);
         // The Governor Lab's settings card and the change pack both
         // read from this dump — reflect a fresh save without
         // needing a reload.
         renderGovernorSettings(currentDataset);
         refreshPackCard();
+        if (fileStatus) {
+          fileStatus.textContent = `Settings dump saved for ${savedFor}${
+            Number.isFinite(savedCount) ? ` — ${savedCount} settings on file` : ""
+          }.`;
+        }
       }
     }
     craftCardAsk.hidden = true;

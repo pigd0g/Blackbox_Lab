@@ -554,6 +554,17 @@ pre {
   font-style: italic;
 }
 
+.card p.pack-dump-warning,
+.pack-dump-warning {
+  font-size: var(--text-small, 13px);
+  color: var(--watch);
+  border-left: 3px solid var(--watch);
+  background: color-mix(in srgb, var(--watch) 9%, transparent);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 6px 0 2px;
+}
+
 .chart-hint {
   color: var(--ink-muted);
   font-size: var(--font-ui);
