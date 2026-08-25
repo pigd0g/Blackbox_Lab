@@ -40,8 +40,10 @@ src/
     dsp/
       fft.js          FFT + Welch noise spectrum
   contribute/         Anonymized log sharing (consent-gated;
-                      see Documentation/CONTRIBUTED-DATA.md)
+                      see Documentation/CONTRIBUTED-DATA.md),
+                      including the ingest worker source
   profiles/           Craft profile storage
+  vendor/             uPlot (vendored, MIT-licensed)
 tools/
   generateSampleLog.mjs   Synthetic test flights (known truth)
 samples/                  Ready-made .bbl flights incl. the Academy set
