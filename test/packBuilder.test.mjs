@@ -206,14 +206,32 @@ test("forward and revert snippets carry real values and the safety lines", () =>
   assert.equal(revert.restorable, 1);
 });
 
-test("a directional member never becomes a guessed number in the snippet", () => {
+test("a direction-only pack has no CLI snippet at all", () => {
   const pack = buildPack({
     recommendations: { pid: [earned("Roll", "roll_d_gain")], governor: [] },
     firmwareRevision: FIRMWARE
   });
 
+  // No dump, no numeric target: comments plus a bare `save` would
+  // write nothing, so no snippet is offered — and no revert either,
+  // since nothing on file could be restored.
+  assert.equal(packSnippet(pack), null);
+  assert.equal(revertSnippet(pack), null);
+});
+
+test("a directional member rides as a comment when a real value anchors the snippet", () => {
+  const pack = buildPack({
+    recommendations: {
+      pid: [earned("Roll", "roll_d_gain"), earned("Pitch", "pitch_d_gain")],
+      governor: []
+    },
+    craftDumpParsed: { pitch_d_gain: "20" },
+    firmwareRevision: FIRMWARE
+  });
+
   const forward = packSnippet(pack);
-  assert.ok(!/^set /m.test(forward.split("\n").filter((l) => l.includes("roll_d_gain"))[0]));
+  assert.match(forward, /set pitch_d_gain = /);
+  assert.ok(!/^set roll_d_gain/m.test(forward));
   assert.match(forward, /# roll_d_gain: one small step up/);
 });
 

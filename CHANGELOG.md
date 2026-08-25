@@ -502,7 +502,7 @@ the helicopter and see things the CSV log doesn't show.
 ### Added
 
 - Native binary BBL decoder, implemented clean-room from the
-  published Blackbox format specification (MIT-safe): all
+  published Blackbox format specification, no code copied: all
   standard encodings and predictors, multi-flight files,
   corruption resync, end-of-log events. Validated against real
   Betaflight-family logs (24,893 frames, zero corruption) and
