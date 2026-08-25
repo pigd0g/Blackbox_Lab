@@ -53,14 +53,21 @@ Next, in no promised order:
 
 ## Video overlay export
 
-Render a flight's key traces (sticks, events, verdict moments) as
-an overlay track for flight video — the log and the footage telling
+The Replay dashboard is the design surface: arrange the graphs,
+stick overlay and playhead exactly as you want them — down to no
+graph overlay at all — and render that same configurable view as
+an overlay track for flight video. The log and the footage telling
 one story.
 
 ## Direct FBL access
 
 Read logs (and the configuration needed to explain them) straight
-from the flight controller over USB — no SD card shuffle.
+from the flight controller over USB — no SD card shuffle. And in
+the write direction: apply a flight's Change Pack to the FBL after
+explicit pilot confirmation, with the actual state and values of
+every setting verified over the CLI first, so a change is only
+ever applied against the configuration that is really on the
+helicopter.
 
 ## Setup Wizard / Configuration
 
