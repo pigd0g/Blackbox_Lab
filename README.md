@@ -37,8 +37,10 @@ it opens normally from then on. In Terminal:
 xattr -cr "/Applications/Blackbox Lab.app"
 ```
 
-(Adjust the path if you keep the app somewhere else.) On **Intel**
-Macs, right-click → Open on first launch is usually all it takes.
+(Move the app into Applications first, then run the command —
+cleared elsewhere, macOS may still show the same message again.)
+On **Intel** Macs, right-click → Open on first launch is usually
+all it takes.
 
 ---
 
@@ -104,8 +106,8 @@ Blackbox Lab explains what happened during the flight using plain English and pr
   (locally); rising vibration or droop across flights triggers a
   warning before something breaks. Individual flights can be
   removed from the record.
-- **One-file reports** — verdict, findings and charts in a single
-  shareable HTML file.
+- **PDF flight reports** — verdict, priorities, the Change Pack,
+  findings and charts in one compact, shareable PDF.
 - **Beginner & Advanced modes** — calm by default, everything
   laid out when you switch.
 - **Update check** — a quiet banner when a newer release exists.
@@ -113,11 +115,11 @@ Blackbox Lab explains what happened during the flight using plain English and pr
   contributed logs help make the analysis smarter for everyone.
   Off until you say yes; details in
   [Documentation/CONTRIBUTED-DATA.md](Documentation/CONTRIBUTED-DATA.md).
-- **Sample flights** — three ready-made logs in `samples/` (with
-  documented ground truth) so you can explore without a log at
-  hand ("Try a Sample Flight" — one click). These are recordings
-  for the app — not firmware, nothing is ever written to a
-  helicopter.
+- **Sample flights** — ready-made logs in `samples/` (with
+  documented ground truth), including the Diagnosis Academy's
+  practice flights, so you can explore without a log at hand
+  ("Try a Sample Flight" — one click). These are recordings for
+  the app — not firmware; they cannot be flashed to anything.
 
 ## On the Roadmap
 
