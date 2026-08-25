@@ -7174,7 +7174,7 @@ function stageCraftDump(text) {
     (filled.length > 0
       ? ` Filled in: ${filled.join(" + ")}.`
       : "") +
-    " Now check the values above and add what's missing. Save model closes the card.";
+    " Nothing is saved yet: press Save model below to keep these settings.";
 
   if (who && !matches) {
     showDumpResult(
