@@ -257,7 +257,7 @@ Blackbox Lab also tells you when the data required for a conclusion was *not rec
 
 ---
 
-<!-- battery-lab screenshot pending: the pasted image duplicated the ESC Lab shot -->
+![Battery Lab](Documentation/screenshots/battery-lab.png)
 
 ## Battery Lab
 
