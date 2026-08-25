@@ -8,8 +8,8 @@
 // directional suggestion.
 //
 // House rules, non-negotiable:
-//   · Blackbox Lab NEVER changes settings; it recommends
-//     and explains, the pilot decides.
+//   · Blackbox Lab NEVER silently changes anything; it
+//     recommends and explains, the pilot decides.
 //   · A directional suggestion needs HIGH confidence, a
 //     pattern of at least MINIMUM_EVENTS comparable events,
 //     and no conflicting higher-priority finding. Below the

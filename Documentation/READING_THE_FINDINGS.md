@@ -70,5 +70,5 @@ log and let **Compare Flights** judge — every suggestion in the app
 names the exact number that should improve. If it did not, change it
 back; the log will still be there.
 
-Blackbox Lab never writes settings to your helicopter. It recommends
-and explains; the pilot always makes the final decision.
+Blackbox Lab never silently changes anything on your helicopter. It
+recommends and explains; the pilot always makes the final decision.
