@@ -305,6 +305,36 @@ pre {
   border: 1px solid var(--line);
 }
 
+#stepResponseAnalyzeButton {
+  margin-left: auto;
+}
+
+#stepResponseControls .button-row {
+  align-items: center;
+}
+
+#stepResponseControls .flight-picker {
+  margin-top: 0;
+}
+
+#stepResponseControls .toggle-row {
+  align-items: center;
+}
+
+#stepResponseControls .toggle-row input {
+  margin-top: 0;
+}
+
+#stepResponseMinInput {
+  width: 180px;
+  padding: 8px 12px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 15px;
+}
+
 .secondary-button:hover {
   background: #17294a;
   transform: translateY(-1px);
@@ -635,6 +665,51 @@ body.advanced-mode .peek-advanced-row {
   color: var(--ink-muted);
   font-size: 13.5px;
   margin-top: 4px;
+}
+
+/* ---------------- step response per-flight comparison ---------------- */
+
+.compare-table {
+  margin-top: 12px;
+}
+
+.compare-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13.5px;
+}
+
+.compare-table th {
+  text-align: left;
+  color: var(--ink-muted);
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.compare-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.compare-table td.swatch {
+  width: 14px;
+  padding-right: 0;
+}
+
+.compare-table .swatch-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.compare-table td.label {
+  font-weight: 600;
+  color: var(--ink);
 }
 
 /* ---------------- health record ---------------- */

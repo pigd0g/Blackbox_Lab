@@ -243,6 +243,208 @@ function joinLinkGroup(groupName, chart, element) {
   });
 }
 
+// ------------------------------------------------------
+// Step response chart (time axis in milliseconds)
+//
+// Accepts either a single response (legacy shape):
+//   { timeMs, response, metrics }
+// or a list of per-flight series plus an optional average:
+//   { series: [{ label, timeMs, response, metrics, color }], average: { response, metrics } }
+// ------------------------------------------------------
+export function renderStepResponseChart(element, options = {}) {
+  destroyExistingChart(element);
+
+  const height = options.height ?? 260;
+  const seriesList = Array.isArray(options.series) && options.series.length > 0
+    ? options.series
+    : [
+        {
+          label: "Step response",
+          timeMs: options.timeMs,
+          response: options.response,
+          metrics: options.metrics,
+          color: CHART_COLORS[0]
+        }
+      ];
+
+  const average = options.average || null;
+
+  // Common time grid: every series shares the first one's x values.
+  const timeMs = seriesList[0].timeMs;
+
+  // Build the uPlot data: [x, avg?, s1, s2, ...].
+  const data = [Float64Array.from(timeMs)];
+  if (average && Array.isArray(average.response)) {
+    data.push(Float64Array.from(average.response));
+  }
+  for (const s of seriesList) {
+    data.push(Float64Array.from(s.response));
+  }
+
+  // Y axis max across every visible curve and overshoot lines.
+  let yMax = 1.15;
+  const allResponses = [];
+  if (average && Array.isArray(average.response)) allResponses.push(average.response);
+  for (const s of seriesList) allResponses.push(s.response);
+  for (const resp of allResponses) {
+    for (let i = 0; i < resp.length; i += 1) {
+      if (Number.isFinite(resp[i]) && resp[i] + 0.05 > yMax) yMax = resp[i] + 0.05;
+    }
+  }
+  for (const s of seriesList) {
+    if (s.metrics && s.metrics.maxOvershoot) {
+      const o = 1 + s.metrics.maxOvershoot;
+      if (o > yMax) yMax = o;
+    }
+  }
+  if (average && average.metrics && average.metrics.maxOvershoot) {
+    const o = 1 + average.metrics.maxOvershoot;
+    if (o > yMax) yMax = o;
+  }
+
+  // Markers: rise-time lines for the average (preferred) or first series.
+  const markerSource = average?.metrics || seriesList[0].metrics;
+  const markers = [];
+  if (markerSource && Number.isFinite(markerSource.riseTimeMs) && markerSource.riseTimeMs > 0) {
+    markers.push({ x: markerSource.riseTimeMs, label: `rise ${markerSource.riseTimeMs.toFixed(0)} ms` });
+  }
+
+  const overshootY = markerSource?.maxOvershoot ? 1 + markerSource.maxOvershoot : null;
+
+  // uPlot series definitions (x first, then optional average, then flights).
+  const uplotSeries = [
+    {
+      label: "ms",
+      value: (self, value) =>
+        value == null ? "--" : value.toFixed(0)
+    }
+  ];
+
+  const footerMeta = [];
+
+  if (average && Array.isArray(average.response)) {
+    uplotSeries.push({
+      label: "Average",
+      stroke: "rgba(127, 183, 255, 0.85)",
+      width: 2.4,
+      dash: [6, 4],
+      points: { show: false },
+      value: (self, value) =>
+        value == null ? "--" : value.toFixed(2)
+    });
+    footerMeta.push({ label: "Average", color: "rgba(127, 183, 255, 0.85)" });
+  }
+
+  seriesList.forEach((s, index) => {
+    const color = s.color || CHART_COLORS[index % CHART_COLORS.length];
+    uplotSeries.push({
+      label: s.label,
+      stroke: color,
+      width: 1.6,
+      points: { show: false },
+      value: (self, value) =>
+        value == null ? "--" : value.toFixed(2)
+    });
+    footerMeta.push({ label: s.label, color });
+  });
+
+  const chart = new uPlot(
+    {
+      width: element.clientWidth || 640,
+      height,
+      padding: [12, 8, 0, 0],
+      cursor: { drag: { x: true, y: false } },
+      scales: {
+        x: { time: false },
+        y: { range: [0, yMax] }
+      },
+      axes: [
+        {
+          ...AXIS_STYLE,
+          label: "Time (ms)",
+          labelSize: 22
+        },
+        {
+          ...AXIS_STYLE,
+          label: "Response",
+          labelSize: 22,
+          size: 62
+        }
+      ],
+      series: uplotSeries,
+      hooks: {
+        draw: [
+          (u) => {
+            const ctx = u.ctx;
+            ctx.save();
+
+            // y = 0 reference
+            ctx.strokeStyle = "rgba(127, 183, 255, 0.25)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            const y0 = u.valToPos(0, "y", true);
+            ctx.moveTo(u.bbox.left, y0);
+            ctx.lineTo(u.bbox.left + u.bbox.width, y0);
+            ctx.stroke();
+
+            // y = 1 target
+            ctx.strokeStyle = "rgba(127, 183, 255, 0.5)";
+            ctx.beginPath();
+            const y1 = u.valToPos(1, "y", true);
+            ctx.moveTo(u.bbox.left, y1);
+            ctx.lineTo(u.bbox.left + u.bbox.width, y1);
+            ctx.stroke();
+
+            // Overshoot line
+            if (overshootY != null && markerSource.maxOvershoot >= 0.01) {
+              ctx.strokeStyle = "rgba(255, 157, 92, 0.7)";
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              const yOver = u.valToPos(overshootY, "y", true);
+              ctx.moveTo(u.bbox.left, yOver);
+              ctx.lineTo(u.bbox.left + u.bbox.width, yOver);
+              ctx.stroke();
+            }
+
+            ctx.restore();
+          },
+          (u) => {
+            if (!markers.length) return;
+            const ctx = u.ctx;
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+            ctx.fillStyle = "#dce8ff";
+            ctx.setLineDash([4, 4]);
+            ctx.font = "13px sans-serif";
+            ctx.textAlign = "center";
+
+            for (const marker of markers) {
+              const x = u.valToPos(marker.x, "x", true);
+              if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) continue;
+              ctx.beginPath();
+              ctx.moveTo(x, u.bbox.top);
+              ctx.lineTo(x, u.bbox.top + u.bbox.height);
+              ctx.stroke();
+              ctx.fillText(marker.label, x, u.bbox.top + 14);
+            }
+
+            ctx.restore();
+          }
+        ]
+      }
+    },
+    data,
+    element
+  );
+
+  element.__blackboxLabChart = chart;
+  watchResize(element, chart);
+  buildChartFooter(element, chart, footerMeta, { withStats: true });
+
+  return chart;
+}
+
 export function renderTimeSeriesChart(element, options) {
   const {
     timeSeconds,
