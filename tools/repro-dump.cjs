@@ -41,5 +41,20 @@ const os = require("node:os"); const path = require("node:path"); const fs = req
   console.log("snippet fold hidden:", await w.evaluate(() => document.getElementById("packSnippetFold")?.hidden));
   console.log("note color:", await w.evaluate(() => getComputedStyle(document.getElementById("packDumpNote")).color));
   console.log("fileStatus:", await w.evaluate(() => document.getElementById("fileStatus")?.textContent ?? document.querySelector(".file-status")?.textContent ?? "(?)"));
+  // ---- act two: the FRESH dump clears the flag ----
+  const freshText = fs.readFileSync("samples/sample-academy-stale-dump.fresh.dump.txt", "utf8");
+  await w.evaluate(() => document.getElementById("packDumpUpdateButton")?.click());
+  await w.waitForTimeout(400);
+  await w.evaluate((text) => {
+    const ta = document.getElementById("craftDumpPaste");
+    ta.value = text;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  }, freshText);
+  await w.waitForTimeout(400);
+  await w.evaluate(() => document.getElementById("craftCardSave")?.click());
+  await w.waitForTimeout(800);
+  console.log("FRESH: dumpNote hidden:", await w.evaluate(() => document.getElementById("packDumpNote")?.hidden));
+  console.log("FRESH: fileStatus:", await w.evaluate(() => document.getElementById("fileStatus")?.textContent));
+  console.log("FRESH: pack:", (await txt("#packCard")).slice(0, 250));
   await app.close(); fs.rmSync(tmp, {recursive:true, force:true});
 })().catch(e => { console.error("FAILED:", e.message); process.exit(1); });

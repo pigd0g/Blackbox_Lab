@@ -164,6 +164,7 @@ export const ACADEMY_ENTRIES = [
     id: "stale-dump",
     file: "sample-academy-stale-dump.bbl",
     dumpFile: "sample-academy-stale-dump.dump.txt",
+    freshDumpFile: "sample-academy-stale-dump.fresh.dump.txt",
     title: "The dump that lied",
     teaser: "The saved settings and the flight disagree. Which do you believe?",
     brief:
@@ -185,9 +186,13 @@ export const ACADEMY_ENTRIES = [
       ],
       fix:
         "Save a fresh dump after every bench session and update it " +
-        "in the model card when the app asks. Once the app reads " +
-        "your settings live from the flight controller, this check " +
-        "happens by itself before anything is written."
+        "in the model card when the app asks. Try it here: copy the " +
+        "FRESH dump below — the one saved after the bench session — " +
+        "and paste it via Update the saved settings dump. The " +
+        "warning clears, because the file finally agrees with the " +
+        "flight. Once the app reads your settings live from the " +
+        "flight controller, this check happens by itself before " +
+        "anything is written."
     }
   }
 ];

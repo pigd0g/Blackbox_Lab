@@ -1,0 +1,25 @@
+# Rotorflight / SYNTHETIC (SIM) 4.6.0
+# This is a TEACHING dump for the Diagnosis Academy — the FRESH one,
+# saved after the bench session. It matches what the flight flew.
+board_name BLACKBOX_LAB_SIM
+set name = Sample academy-stale-dump
+set roll_p_gain = 52
+set roll_i_gain = 180
+set roll_d_gain = 42
+set roll_f_gain = 110
+set roll_b_gain = 0
+set pitch_p_gain = 56
+set pitch_i_gain = 190
+set pitch_d_gain = 45
+set pitch_f_gain = 115
+set pitch_b_gain = 0
+set yaw_p_gain = 70
+set yaw_i_gain = 120
+set yaw_d_gain = 20
+set yaw_f_gain = 60
+set yaw_b_gain = 0
+set gov_p_gain = 40
+set gov_i_gain = 25
+set gov_d_gain = 0
+set gov_f_gain = 0
+set gov_gain = 105
