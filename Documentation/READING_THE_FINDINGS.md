@@ -65,10 +65,13 @@ advice:
 
 ## The loop
 
-Change **one** thing. Fly the same kind of moves again. Open the new
-log and let **Compare Flights** judge — every suggestion in the app
-names the exact number that should improve. If it did not, change it
-back; the log will still be there.
+Apply the flight's **Change Pack** — at most three setting changes,
+each verified by its own instrument — together with any mechanical
+or vibration fixes it names. Fly the same kind of moves again. Open
+the new log and let the pack check and **Compare Flights** judge —
+every suggestion in the app names the exact number that should
+improve. If it did not, change it back; the log will still be
+there.
 
 Blackbox Lab never silently changes anything on your helicopter. It
 recommends and explains; the pilot always makes the final decision.

@@ -69,14 +69,15 @@ function goodPair() {
   return [mk(28, 40), mk(4, 70)];
 }
 
-test("several changed settings block the keeper credit", () => {
+test("several changed settings share the credit as a set", () => {
   const [before, after] = goodPair();
   const result = compareFlights(before, after, {
     setupDiff: { changedCount: 3, changedKeys: ["rollPID", "pitchPID", "gyro_lpf1_static_hz"] }
   });
   assert.doesNotMatch(result.summary, /That's a keeper/);
   assert.match(result.summary, /3 settings changed/);
-  assert.match(result.summary, /one change at a time/);
+  assert.match(result.summary, /belongs to the set/);
+  assert.match(result.summary, /verifying metric/);
 });
 
 test("exactly one changed setting is credited by name", () => {

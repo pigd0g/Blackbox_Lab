@@ -728,7 +728,7 @@ export function compareFlights(baseline, comparison, options = {}) {
                 : setupDiff && setupDiff.changedCount === 1
                   ? `Your change helped: nothing got worse, and the logs show exactly one setup change (${setupDiff.changedKeys[0]}). That's a keeper.`
                   : setupDiff && setupDiff.changedCount > 1
-                    ? `The later flight measured better and nothing got worse, but ${setupDiff.changedCount} settings changed between these flights (${setupDiff.changedKeys.slice(0, 3).join(", ")}${setupDiff.changedCount > 3 ? ", …" : ""}). No single change can take the credit: repeat with one change at a time to know which one earned it.`
+                    ? `The later flight measured better and nothing got worse, and ${setupDiff.changedCount} settings changed between these flights (${setupDiff.changedKeys.slice(0, 3).join(", ")}${setupDiff.changedCount > 3 ? ", …" : ""}). The win belongs to the set: each change's own verifying metric — the pack check runs these automatically for pack changes — tells which member earned it.`
                     : "Your change helped: nothing got worse. That's a keeper."
               : `The later flight measured better in ${better} area${better === 1 ? "" : "s"} and nothing measured got worse. Whether that is your change or the flying differing isn't settled yet: ${unlikeReason} Repeat the same maneuvers; if the gain returns, it's a keeper.`
             : better === 0 && worse > 0

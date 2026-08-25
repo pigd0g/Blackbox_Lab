@@ -313,7 +313,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       detail:
         "The helicopter lags or overshoots what the sticks ask for. The PID Lab lists the events behind this number.",
       action:
-        "Open the PID Lab and work through its recommendations one change at a time.",
+        "Open the PID Lab and let its recommendations fill this flight's Change Pack.",
       screen: "pid",
       evidence: "PID Lab findings"
     };
