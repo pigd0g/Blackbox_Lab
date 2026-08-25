@@ -21,7 +21,7 @@ Every change happens through the pilot's explicit confirmation.
 
 ## What Blackbox Lab is — and is not
 
-**Blackbox Lab is not an AI-driven flight-analysis system.** Its findings come from recorded Rotorflight log data processed through programmed formulas, thresholds, and rules. AI assisted during development, testing, wording, and interface work, but it does not analyze flights or decide what changes a helicopter needs.
+**Blackbox Lab is not an AI-driven flight-analysis system.** Its findings come from recorded Rotorflight log data processed through programmed formulas, thresholds, and rules.
 
 **You do not need to understand blackbox logs, filters, or PID tuning to use it.** Blackbox Lab turns complex flight data into clear, plain-language findings, while still allowing experienced users to inspect the deeper evidence.
 
