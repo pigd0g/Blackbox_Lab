@@ -7,12 +7,19 @@
 // from the values the craft's dump held). Both carry their
 // safety lines as comments — bench only, hover check first.
 // A member without a numeric value appears as a commented
-// instruction, never as a guessed number.
+// instruction, never as a guessed number — and a snippet
+// exists at all only when at least one member carries a real
+// number to set. A pack of direction-only advice is applied by
+// hand in the Configurator, not pasted: comments plus a bare
+// `save` would write nothing and read like it did.
 //
 // ======================================================
 
 export function packSnippet(pack, { packLabel = "change pack" } = {}) {
   if (!pack?.members?.length) {
+    return null;
+  }
+  if (!pack.members.some((member) => Number.isFinite(member.to))) {
     return null;
   }
 
@@ -55,6 +62,10 @@ export function revertSnippet(pack, { packLabel = "change pack" } = {}) {
         `# ${member.setting}: previous value not on file — restore from your saved dump`
       );
     }
+  }
+
+  if (restorable === 0) {
+    return null;
   }
 
   lines.push("save");
