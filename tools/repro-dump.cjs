@@ -39,5 +39,7 @@ const os = require("node:os"); const path = require("node:path"); const fs = req
   console.log("AFTER pack:", (await txt("#packCard")).slice(0, 500));
   console.log("dumpNote hidden:", await w.evaluate(() => document.getElementById("packDumpNote")?.hidden), "| text:", (await txt("#packDumpNote")).slice(0,200));
   console.log("snippet fold hidden:", await w.evaluate(() => document.getElementById("packSnippetFold")?.hidden));
+  console.log("note color:", await w.evaluate(() => getComputedStyle(document.getElementById("packDumpNote")).color));
+  console.log("fileStatus:", await w.evaluate(() => document.getElementById("fileStatus")?.textContent ?? document.querySelector(".file-status")?.textContent ?? "(?)"));
   await app.close(); fs.rmSync(tmp, {recursive:true, force:true});
 })().catch(e => { console.error("FAILED:", e.message); process.exit(1); });
