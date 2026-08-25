@@ -167,6 +167,21 @@ export const KNOWLEDGE_CARDS = {
     range: { min: 0, max: 250 },
     fleetBand: { p10: 50, p90: 60 },
     step: 5
+  },
+  // Measured 2026-08-25 on the contributed fleet's governed crafts:
+  // collective precomp clusters tightly (p10 10 / median 10 / p90 12,
+  // nobody at zero) — the fleet flies the firmware's neighborhood and
+  // rarely touches it. The tight band makes the p90 guardrail bite
+  // early by design: precomp is stepped in small moves, verified by
+  // the rise-droop read, never chased.
+  gov_f_gain: {
+    meaning:
+      "Governor collective feedforward — power asked for as collective load arrives, before droop appears.",
+    up: "asks for the power before the load lands — shrinks rise-side droop",
+    down: "calms rotor overspeed after collective drops",
+    range: { min: 0, max: 250 },
+    fleetBand: { p10: 10, p90: 12 },
+    step: 5
   }
 };
 

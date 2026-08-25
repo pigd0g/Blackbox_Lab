@@ -1,0 +1,26 @@
+# Rotorflight / SYNTHETIC (SIM) 4.6.0
+# This is a TEACHING dump for the Diagnosis Academy.
+# It matches the flight exactly — with it on file, the earned
+# recommendation carries the exact target value.
+board_name BLACKBOX_LAB_SIM
+set name = Sample academy-governor-droop
+set roll_p_gain = 50
+set roll_i_gain = 182
+set roll_d_gain = 42
+set roll_f_gain = 112
+set roll_b_gain = 0
+set pitch_p_gain = 54
+set pitch_i_gain = 192
+set pitch_d_gain = 48
+set pitch_f_gain = 116
+set pitch_b_gain = 0
+set yaw_p_gain = 70
+set yaw_i_gain = 122
+set yaw_d_gain = 20
+set yaw_f_gain = 60
+set yaw_b_gain = 0
+set gov_p_gain = 18
+set gov_i_gain = 10
+set gov_d_gain = 0
+set gov_f_gain = 0
+set gov_gain = 62

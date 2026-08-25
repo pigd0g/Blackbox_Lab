@@ -106,12 +106,16 @@ export const ACADEMY_ENTRIES = [
   {
     id: "governor-droop",
     file: "sample-academy-governor-droop.bbl",
+    dumpFile: "sample-academy-governor-droop.dump.txt",
     title: "The headspeed that gave way",
     teaser: "Every climb costs rotor speed. How much, and what pays it back?",
     brief:
       "Open the Governor lab and watch headspeed against its " +
       "target through the collective climbs. When you can say what " +
-      "happens under load — and roughly how much — reveal the answer.",
+      "happens under load — and roughly how much — reveal the " +
+      "answer. This flight also comes WITH its saved CLI dump: " +
+      "paste it via Add CLI settings and the earned recommendation " +
+      "turns into an exact value with a paste-ready CLI snippet.",
     reveal: {
       diagnosis: [
         "Headspeed sags several percent every time collective load " +
