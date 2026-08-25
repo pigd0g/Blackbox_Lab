@@ -6308,9 +6308,17 @@ function refreshCompareButtons() {
   compareOpenButton.disabled = !ready;
   compareSampleButton.disabled = !ready || !window.blackboxLab;
 
+  // Name the flight, not just the file: a multi-flight file must
+  // never leave doubt about which flight plays Before.
   compareBaselineInfo.textContent = ready
-    ? `Before: ${summaryFileName.textContent}`
+    ? `Before: ${summaryFileName.textContent}` +
+      (currentFlightSummary ? `, ${currentFlightSummary}` : "")
     : 'No baseline yet: open a log first (Home screen).';
+
+  const sameFileHint = el("compareSameFileHint");
+  if (sameFileHint) {
+    sameFileHint.hidden = !(ready && loadedLog?.flights?.length > 1);
+  }
 }
 
 // Which side plays "Before" is decided by the logs' own clocks
