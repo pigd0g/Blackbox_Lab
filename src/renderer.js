@@ -7403,6 +7403,8 @@ const academyRevealChain = el("academyRevealChain");
 const academyRevealFix = el("academyRevealFix");
 const academyDumpRow = el("academyDumpRow");
 const academyDumpCopyButton = el("academyDumpCopyButton");
+const academyFreshDumpRow = el("academyFreshDumpRow");
+const academyFreshDumpButton = el("academyFreshDumpButton");
 
 let activeAcademyEntry = null;
 
@@ -7421,6 +7423,9 @@ function setAcademyEntry(entry) {
   academyCardBrief.textContent = entry.brief;
   setAcademyRevealOpen(false);
   academyDumpRow.hidden = !entry.dumpFile;
+  if (academyFreshDumpRow) {
+    academyFreshDumpRow.hidden = !entry.freshDumpFile;
+  }
   const nextShelf = el("academyNextShelf");
   if (nextShelf) nextShelf.open = false;
   renderAcademyLists();
@@ -7478,6 +7483,26 @@ if (academyDumpCopyButton) {
     await navigator.clipboard.writeText(text);
     academyDumpCopyButton.textContent =
       "Copied — paste it via Add CLI settings";
+  });
+}
+
+if (academyFreshDumpButton) {
+  academyFreshDumpButton.addEventListener("click", async () => {
+    const entry = activeAcademyEntry;
+    if (!entry?.freshDumpFile || !window.blackboxLab?.readSampleText) {
+      return;
+    }
+    const text = await window.blackboxLab.readSampleText(
+      entry.freshDumpFile
+    );
+    if (!text) {
+      academyFreshDumpButton.textContent =
+        "Could not read the fresh dump";
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    academyFreshDumpButton.textContent =
+      "Copied — paste it via Update the saved settings dump";
   });
 }
 
