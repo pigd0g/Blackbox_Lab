@@ -1565,6 +1565,14 @@ current demand; the steady downward slope is normal discharge.
           <div class="decode-info" id="compareBaselineInfo">
             No baseline yet. Open a log first (Home screen).
           </div>
+          <!-- Only when the open file holds several flights: the
+               After flight may well live in the same file, and the
+               way to reach it is not obvious. -->
+          <p class="chart-hint" id="compareSameFileHint" hidden>
+            To compare against another flight from the same
+            (multi-flight) file, click <strong>Open "After" Log</strong>
+            and select the same file again, then pick the flight.
+          </p>
 
           <input type="file" id="compareFileInput" accept=".csv,.bbl,.bfl,.txt,.log" hidden />
 
