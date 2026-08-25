@@ -18,7 +18,7 @@ import {
   estimateSampleRate
 } from "./flightPhase.js";
 
-// Fleet-calibrated scoring (247 contributed flights, 2026-08-07).
+// Fleet-calibrated scoring (contributed fleet, 2026-08-07).
 // The fleet's stable sustained droop runs p25 2.57% / p50 4.09% /
 // p90 6.44%; RMS tracking error p25 9.3 rpm / p50 16.6 / p90 40.
 // The previous linear deductions (droop×12 + rms×0.5) put the

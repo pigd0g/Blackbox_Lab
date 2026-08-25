@@ -8,7 +8,7 @@
 // whole job is honesty about the input — a chip that
 // promises "fully measurable" for an empty column teaches
 // exactly the wrong thing. In the contributed corpus,
-// 40 of 247 flights (16 %) carry at least one dead column.
+// 16 % of contributed flights carry at least one dead column.
 //
 // ======================================================
 

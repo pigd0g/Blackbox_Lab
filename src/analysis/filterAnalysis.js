@@ -25,7 +25,7 @@ const LOW_REDUCTION_PERCENT = 15;
 
 // Remaining vibration high enough to be worth deducting for.
 //
-// Measured against 190 contributed flights rather than chosen: the
+// Measured against the contributed fleet rather than chosen: the
 // fleet's per-profile filtered level runs a median of 15.5 and an
 // upper quartile of 30.5. Deducting from PROFILE_MONITOR_LEVEL would
 // charge the median helicopter for being ordinary, which tells a pilot

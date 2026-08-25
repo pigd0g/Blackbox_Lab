@@ -32,8 +32,8 @@ import {
   detectInFlightSamples
 } from "./flightPhase.js";
 
-// Fleet-validated 2026-08-12 (247 contributed flights, 134 with a
-// governor target and enough collective activity to read): the
+// Fleet-validated 2026-08-12 (contributed flights with a governor
+// target and enough collective activity to read): the
 // transient detector finds a median of 50 collective moves per real
 // flight, and at these thresholds the fleet reads 81% balanced /
 // 7% low / 7% high / 4% lagging — the balance verdicts are rare,

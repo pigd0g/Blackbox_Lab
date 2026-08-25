@@ -1,7 +1,7 @@
-## v1.6.7 — Faster, Clearer, Auditable
+## v1.8.0 — The 180 Edition
 
-Everything between v1.3.7 and here, in one entry — a field-feedback
-release series: every item below was shaped, retested and signed off
+Everything between v1.3.0 and here, in one entry — a
+field-feedback release series: every item below was shaped, retested and signed off
 by the community test round.
 
 ### The big ones
@@ -50,6 +50,9 @@ by the community test round.
   finding.
 - The Diagnosis Academy: six practice flights with a known planted
   problem, reachable before and after loading a log.
+- A declared type scale and a full legibility pass: reading text
+  never below 16px, results uniformly emphasized, shorter sentences
+  and cleaner paragraphs throughout.
 - Sidebar and report credit: a passion project by Daniel Sink and
   Vincent Offenbeck.
 

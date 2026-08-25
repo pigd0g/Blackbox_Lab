@@ -45,8 +45,7 @@ export const RECOMMENDATION_GATE = {
   // yaw settles slow as its nature, roll fast). Bars sit at each
   // axis's fleet p90, yaw at p95: Roll p90 0.125, Pitch p90
   // 0.118, Yaw p95 0.219.
-  // Yaw re-read 2026-08-23 on the post-ghost-fix fleet (742
-  // flights): yaw pirouettes are the long ramps the ghost events
+  // Yaw re-read 2026-08-23 on the post-ghost-fix fleet: yaw pirouettes are the long ramps the ghost events
   // rode on; with them gone yaw's p95 slow share reads 0.18.
   SLOW_SETTLE_SHARE_MINIMUM: {
     Roll: 0.13,
@@ -59,8 +58,8 @@ export const RECOMMENDATION_GATE = {
   // is already a strong pattern.
   GOVERNOR_HIGH_CONFIDENCE_EVENTS: 3,
   // Overshoot: re-calibrated 2026-08-18 after the reversal-
-  // termination refinement (370 contributed flights, 748 axes
-  // with >=5 clean responses — compound slurred-command events no
+  // termination refinement (contributed-fleet axes with >=5
+  // clean responses — compound slurred-command events no
   // longer inflate the tail). Same doctrine as always: bars at
   // the fleet's p90, so a card names a machine, not the formula.
   // Share of clean commands overshooting >=25% AND >=10 deg/s at

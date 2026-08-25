@@ -233,7 +233,7 @@ export const SATURATION_REVIEW_BARS = {
   Yaw: { sharePercent: 0.35, runMs: 185 }
 };
 
-// Re-read 2026-08-23 on the full fleet (742 flights) after the
+// Re-read 2026-08-23 on the full contributed fleet after the
 // ramp-ghost fix changed the event population: bounce-back and
 // settling bars held their percentile (flag share 11-13 %); the
 // ringing bars had drifted to ~p79 (ghost duplicates measured from

@@ -28,7 +28,7 @@
 
 export const CROSS_AXIS_TAIL_SECONDS = 0.6;
 
-// Per-pair Review bars, measured on the 742-flight fleet sweep of
+// Per-pair Review bars, measured on the full-fleet sweep of
 // 2026-08-22 (fleet-calibration discipline — bars are measured,
 // never guessed). A pair reads Review only when its strongest
 // event clears ALL THREE legs:

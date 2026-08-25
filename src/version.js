@@ -7,7 +7,7 @@
 // just means silence, never an error for the pilot.
 // ======================================================
 
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.8.0";
 
 const RELEASES_API =
   "https://api.github.com/repos/hillbilly1975/Blackbox_Lab/releases/latest";

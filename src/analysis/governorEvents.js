@@ -28,8 +28,8 @@ import {
   detectInFlightSamples
 } from "./flightPhase.js";
 
-// Fleet-calibrated 2026-08-12 (247 contributed flights, 146 with a
-// usable governor target, five candidate bands probed): at 6%/3%
+// Fleet-calibrated 2026-08-12 (contributed flights with a usable
+// governor target, five candidate bands probed): at 6%/3%
 // the MEDIAN governed machine reads zero events and the 90th
 // percentile reads 7, while 6–7% excursions — the kind pilots
 // actually ask about — stay visible. The band also lines up with

@@ -2,8 +2,8 @@
 // TESTS — the governor score is calibrated on the fleet
 // ======================================================
 //
-// The old deductions assumed sub-2% droop is normal; 247
-// contributed flights say ~4% is the middle of the road
+// The old deductions assumed sub-2% droop is normal; the
+// contributed fleet says ~4% is the middle of the road
 // (p25 2.57 / p50 4.09 / p90 6.44 % stable droop; RMS
 // p25 9.3 / p50 16.6 / p90 40 rpm). These tests pin the
 // score to that reality: the median machine earns a good
