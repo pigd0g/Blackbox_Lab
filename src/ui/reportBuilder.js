@@ -136,7 +136,7 @@ function buildRecommendationsHtml(recommendations) {
     .join("");
 
   return `<h2>What To Try Next</h2>
-  <p class="summary">One change at a time, then fly the same moves again: the numbers each card names are the judge.</p>
+  <p class="summary">These ride in the flight's pack — at most three, each verified by its own instrument. Fly the same moves again: the numbers each card names are the judge.</p>
   <div class="card-grid">${blocks}</div>`;
 }
 

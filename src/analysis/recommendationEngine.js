@@ -23,8 +23,9 @@
 //     concern silences PID suggestions (filters come before
 //     PIDs), and a power-limit event silences governor
 //     suggestions (hardware before tune).
-//   · Every suggestion ends with its verify plan: change
-//     the one thing, fly again, let Compare Flights and the
+//   · Every suggestion ends with its verify plan: it rides
+//     in the flight's pack (at most PACK_CAP changes, one per
+//     instrument), fly again, let the pack check and the
 //     named metric be the judge.
 //
 // ======================================================

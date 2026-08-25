@@ -12,7 +12,7 @@
 //      remove (unfiltered vs filtered gyro)
 //   4. recommend, in plain language, what to change
 //
-// It never touches settings — it explains and points.
+// It never silently changes anything — it explains and points.
 //
 // ======================================================
 
