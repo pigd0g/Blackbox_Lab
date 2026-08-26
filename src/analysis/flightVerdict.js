@@ -617,6 +617,231 @@ function powerVerdictFromLab(escLab) {
 }
 
 // ------------------------------------------------------
+// Step response verdict — closed-loop response shape
+// ------------------------------------------------------
+
+// All thresholds live in one place so a future calibration
+// pass can dial them without hunting through branches.
+const STEP_RESPONSE_THRESHOLDS = {
+  overshootGood: 15, // %  — below this the axis tracks cleanly
+  overshootWatch: 30, // %  — 15-30 is workable but worth a look
+  settlingGood: 250, // ms — at or below, the response settles promptly
+  settlingWatch: 450, // ms — 250-450 is a long settle; above 450 rings
+  riseGood: 90, // ms — below this the axis is snappy
+  riseWatch: 130 // ms — 90-130 is sluggish; above 130 is very slow
+};
+
+// A settling time of 0 means the response never left the ±2%
+// band — it was inside tolerance from the start, which is good.
+function settlingStatusMs(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "good";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.settlingWatch) {
+    return "attention";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.settlingGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+function overshootStatusPercent(percent) {
+  if (!Number.isFinite(percent)) {
+    return "good";
+  }
+  if (percent > STEP_RESPONSE_THRESHOLDS.overshootWatch) {
+    return "attention";
+  }
+  if (percent > STEP_RESPONSE_THRESHOLDS.overshootGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+function riseStatusMs(value) {
+  if (!Number.isFinite(value)) {
+    return "good";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.riseWatch) {
+    return "attention";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.riseGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+const STATUS_RANK = { good: 0, watch: 1, attention: 2 };
+
+function worstStatus(...statuses) {
+  return statuses.reduce(
+    (worst, current) =>
+      STATUS_RANK[current] > STATUS_RANK[worst] ? current : worst,
+    "good"
+  );
+}
+
+// Confidence from how many command segments fed the average.
+// Few segments mean the recovered response rests on thin
+// evidence, so an "attention" finding is softened to "watch".
+function stepResponseConfidence(totalSegments) {
+  if (!Number.isFinite(totalSegments) || totalSegments <= 0) {
+    return "insufficient";
+  }
+  if (totalSegments < 5) {
+    return "low";
+  }
+  if (totalSegments < 20) {
+    return "medium";
+  }
+  return "high";
+}
+
+// Names the metric that drove the verdict so the headline can
+// point the pilot straight at it.
+function worstMetricForAxis(axisResult) {
+  const overshootPercent = (axisResult.metrics.maxOvershoot || 0) * 100;
+  const settlingMs = axisResult.metrics.settlingTimeMs || 0;
+  const riseMs = axisResult.metrics.riseTimeMs || 0;
+
+  const candidates = [
+    {
+      name: "overshoot",
+      status: overshootStatusPercent(overshootPercent),
+      label: `${overshootPercent.toFixed(1)}% overshoot`
+    },
+    {
+      name: "settling",
+      status: settlingStatusMs(settlingMs),
+      label:
+        settlingMs > 0
+          ? `${settlingMs.toFixed(0)} ms to settle`
+          : "settled within tolerance"
+    },
+    {
+      name: "rise",
+      status: riseStatusMs(riseMs),
+      label: `${riseMs.toFixed(0)} ms rise time`
+    }
+  ];
+
+  return candidates.reduce(
+    (worst, current) =>
+      STATUS_RANK[current.status] > STATUS_RANK[worst.status]
+        ? current
+        : worst,
+    candidates[0]
+  );
+}
+
+function tuningAction(axisName, worstMetric) {
+  if (worstMetric.name === "overshoot") {
+    return `Lower ${axisName} P or raise ${axisName} D, then re-fly and compare.`;
+  }
+  if (worstMetric.name === "settling") {
+    return `Raise ${axisName} D to damp the ringing, or lower ${axisName} P if the response is also overshooting.`;
+  }
+  return `Raise ${axisName} P and feed-forward (${axisName} FF) so the axis follows the sticks sooner.`;
+}
+
+function stepResponseVerdict(stepResponseResult) {
+  const aggregated = stepResponseResult?.aggregated;
+
+  if (!aggregated || !Array.isArray(aggregated.axes)) {
+    return null;
+  }
+
+  const availableAxes = aggregated.axes.filter((axis) => axis.available);
+
+  if (availableAxes.length === 0) {
+    return null;
+  }
+
+  // Total segments across every available axis drives confidence.
+  const totalSegments = availableAxes.reduce(
+    (sum, axis) => sum + (axis.numSegments || 0),
+    0
+  );
+
+  const confidence = stepResponseConfidence(totalSegments);
+
+  // Each axis gets a status from the worst of its three metrics.
+  const assessed = availableAxes.map((axis) => {
+    const overshootPercent = (axis.metrics.maxOvershoot || 0) * 100;
+    const axisStatus = worstStatus(
+      overshootStatusPercent(overshootPercent),
+      settlingStatusMs(axis.metrics.settlingTimeMs || 0),
+      riseStatusMs(axis.metrics.riseTimeMs || 0)
+    );
+    return {
+      axis,
+      status: axisStatus,
+      worstMetric: worstMetricForAxis(axis)
+    };
+  });
+
+  // The card follows the worst axis.
+  const worst = assessed.reduce(
+    (lead, entry) =>
+      STATUS_RANK[entry.status] > STATUS_RANK[lead.status] ? entry : lead,
+    assessed[0]
+  );
+
+  // Low confidence softens an attention to watch — a 2-segment
+  // overshoot is not the same claim as a 20-segment one.
+  let cardStatus = worst.status;
+  if (cardStatus === "attention" && confidence === "low") {
+    cardStatus = "watch";
+  }
+
+  const axisName = worst.axis.axis.toLowerCase();
+  const metric = worst.worstMetric;
+
+  const headline =
+    cardStatus === "good"
+      ? "Step response looks clean across all axes"
+      : `${worst.axis.axis} ${metric.label}${
+          metric.status === "attention" ? " — needs work" : " — worth a look"
+        }`;
+
+  const detail =
+    cardStatus === "good"
+      ? `Rise, overshoot and settling are within healthy ranges across roll, pitch and yaw.`
+      : `${worst.axis.axis} ${metric.label}. ${
+          assessed.length > 1
+            ? `${assessed.length - 1} other ${
+                assessed.length - 1 === 1 ? "axis" : "axes"
+              } ${
+                assessed.some((a) => a.status === "attention")
+                  ? "also need attention"
+                  : "are in better shape"
+              }. `
+            : ""
+        }Recovered from ${totalSegments} command segment${
+          totalSegments === 1 ? "" : "s"
+        }${
+          confidence === "low"
+            ? " — few segments, so treat this as a hint rather than a verdict"
+            : ""
+        }.`;
+
+  return {
+    key: "stepResponse",
+    title: "Step Response",
+    status: cardStatus,
+    headline,
+    detail,
+    action:
+      cardStatus === "good"
+        ? "Nothing to do — this is what a healthy closed-loop response looks like."
+        : tuningAction(axisName, metric),
+    screen: "stepResponse",
+    evidence: "Step Response chart, Step Response Lab"
+  };
+}
+
+// ------------------------------------------------------
 // buildFlightVerdict — the one call the renderer makes
 // ------------------------------------------------------
 export function buildFlightVerdict({
@@ -627,7 +852,8 @@ export function buildFlightVerdict({
   pidAnalysis,
   labs,
   anchorHeadspeedRpm,
-  filterAdvice = null
+  filterAdvice = null,
+  stepResponseResult = null
 }) {
   // Peak naming needs the rotor speed the machine flew at. The
   // caller passes the stable-flight mean when one exists; the
@@ -645,7 +871,8 @@ export function buildFlightVerdict({
   rotorSpeedVerdictFromLab(labs?.governor),
   tuningVerdict(pidAnalysis),
   powerVerdictFromLab(labs?.esc),
-  batteryVerdictFromLab(labs?.battery)
+  batteryVerdictFromLab(labs?.battery),
+  stepResponseVerdict(stepResponseResult)
 ].filter(Boolean);
 
   const worst = cards.some((card) => card.status === "attention")

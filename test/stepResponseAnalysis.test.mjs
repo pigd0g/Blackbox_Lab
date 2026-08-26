@@ -158,3 +158,61 @@ test("returns unavailable result when setpoint or gyro columns are missing", () 
   const result = analyzeFlightStepResponse(lines);
   assert.equal(result.axes.length, 0);
 });
+
+test("extracts PID values from CSV-shaped header lines", () => {
+  const sampleRate = 1000;
+  const durationSeconds = 6;
+  const commands = randomWalkCommands(sampleRate, sampleRate * durationSeconds, 120);
+
+  const lines = [
+    '"rollPID","52,105,0,100,0"',
+    '"pitchPID","64,111,40,100,0"',
+    '"yawPID","315,145,29,3,1"',
+    ...buildCsvLines({
+      sampleRate,
+      durationSeconds,
+      setpointGenerator: (i) => [commands[0][i], commands[1][i], commands[2][i]],
+      gyroGenerator: (i, setpoint) => [
+        applyFirstOrderModel([setpoint[0]], sampleRate, 40)[0],
+        applyFirstOrderModel([setpoint[1]], sampleRate, 60)[0],
+        applyFirstOrderModel([setpoint[2]], sampleRate, 80)[0]
+      ]
+    })
+  ];
+
+  const result = analyzeFlightStepResponse(lines, {
+    smoothFactor: 1,
+    yCorrection: true,
+    minInput: 20
+  });
+
+  const roll = result.axes.find((axis) => axis.axis === "Roll");
+  assert.deepEqual(roll.pid, {
+    p: 52,
+    i: 105,
+    d: 0,
+    f: 100,
+    boost: 0,
+    dMin: null
+  });
+
+  const pitch = result.axes.find((axis) => axis.axis === "Pitch");
+  assert.deepEqual(pitch.pid, {
+    p: 64,
+    i: 111,
+    d: 40,
+    f: 100,
+    boost: 0,
+    dMin: null
+  });
+
+  const yaw = result.axes.find((axis) => axis.axis === "Yaw");
+  assert.deepEqual(yaw.pid, {
+    p: 315,
+    i: 145,
+    d: 29,
+    f: 3,
+    boost: 1,
+    dMin: null
+  });
+});

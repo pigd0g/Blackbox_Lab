@@ -49,6 +49,15 @@ function destroyExistingChart(element) {
       element.__blackboxLabLinkGroup = null;
     }
 
+    const seriesGroup = element.__blackboxLabSeriesSyncGroup
+      ? seriesSyncGroups.get(element.__blackboxLabSeriesSyncGroup)
+      : null;
+
+    if (seriesGroup) {
+      seriesGroup.delete(element.__blackboxLabChart);
+      element.__blackboxLabSeriesSyncGroup = null;
+    }
+
     element.__blackboxLabChart.destroy();
     element.__blackboxLabChart = null;
   }
@@ -239,6 +248,55 @@ function joinLinkGroup(groupName, chart, element) {
       }
     } finally {
       broadcastingLinkGroup = false;
+    }
+  });
+}
+
+// Charts in the same series-sync group share legend toggles:
+// hiding a flight in one axis hides it in the others too.
+// Series are matched by label, not index, because the axes
+// can have different flight counts.
+const seriesSyncGroups = new Map();
+let broadcastingSeriesSync = false;
+
+function joinSeriesSyncGroup(groupName, chart, element) {
+  if (!seriesSyncGroups.has(groupName)) {
+    seriesSyncGroups.set(groupName, new Set());
+  }
+
+  const group = seriesSyncGroups.get(groupName);
+  group.add(chart);
+  element.__blackboxLabSeriesSyncGroup = groupName;
+
+  chart.hooks.setSeries = chart.hooks.setSeries || [];
+  chart.hooks.setSeries.push((u, seriesIdx, opts) => {
+    if (broadcastingSeriesSync || seriesIdx <= 0 || opts.show == null) {
+      return;
+    }
+
+    const label = u.series[seriesIdx]?.label;
+    if (!label) {
+      return;
+    }
+
+    broadcastingSeriesSync = true;
+
+    try {
+      for (const sibling of group) {
+        if (sibling === u) {
+          continue;
+        }
+
+        const match = sibling.series.findIndex(
+          (s, i) => i > 0 && s.label === label
+        );
+
+        if (match >= 0) {
+          sibling.setSeries(match, { show: opts.show }, true, false);
+        }
+      }
+    } finally {
+      broadcastingSeriesSync = false;
     }
   });
 }
@@ -441,6 +499,7 @@ export function renderStepResponseChart(element, options = {}) {
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
   buildChartFooter(element, chart, footerMeta, { withStats: true });
+  joinSeriesSyncGroup("stepResponse", chart, element);
 
   return chart;
 }

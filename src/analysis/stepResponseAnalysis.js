@@ -488,68 +488,88 @@ function extractPidParams(lines, axisIndex) {
   const result = { p: null, i: null, d: null, f: null, boost: null, dMin: null };
   const axisLower = AXIS_LOWER_NAMES[axisIndex];
 
-  function findHeaderValue(labelPatterns) {
-    for (const line of lines) {
-      const lower = String(line).toLowerCase();
-      for (const pattern of labelPatterns) {
-        if (lower.includes(pattern)) {
-          const match = line.match(/:\s*(.+)/);
-          if (match) {
-            return match[1].trim();
-          }
-        }
+  // Header lines arrive in two shapes: the classic CSV export
+  // ("rollPID","52,105,0,100,0") and the raw header ("rollPID: 52,105,0,100,0").
+  function parseKeyValue(line) {
+    const trimmed = String(line).trim();
+    if (trimmed.startsWith('"')) {
+      const parts = trimmed.split(",");
+      if (parts.length < 2) {
+        return null;
       }
+      return {
+        key: parts[0].replace(/^"|"$/g, "").trim(),
+        value: parts
+          .slice(1)
+          .join(",")
+          .replace(/^"|"$/g, "")
+          .trim()
+      };
     }
-    return null;
-  }
-
-  function findSingleValue(labelPatterns) {
-    for (const line of lines) {
-      const lower = String(line).toLowerCase();
-      for (const pattern of labelPatterns) {
-        if (lower.includes(pattern)) {
-          const match = line.match(/:\s*([+-]?[\d.]+)/);
-          if (match) {
-            return match[1].trim();
-          }
-        }
-      }
+    const separator = trimmed.indexOf(":");
+    if (separator > 0) {
+      return {
+        key: trimmed.slice(0, separator).trim(),
+        value: trimmed.slice(separator + 1).trim()
+      };
     }
     return null;
   }
 
   // Per-axis PID header, e.g. "rollPID: 45,80,35,0,0" or "Roll PID: 45,80,35".
-  const axisPids = findHeaderValue([
-    `${axisLower} pid`,
+  const axisPidPatterns = [
     `${axisLower}pid`,
-    `pid ${axisLower}`,
-    `pid${axisLower}`
-  ]);
-  if (axisPids) {
-    const parts = axisPids.split(",").map((value) => Number(value.trim()));
-    if (parts.length >= 3) {
-      [result.p, result.i, result.d] = parts.slice(0, 3);
-      if (parts.length >= 5) {
-        result.f = parts[3];
-        result.boost = parts[4];
-      } else if (parts.length === 4) {
-        result.f = parts[3];
+    `${axisLower} pid`,
+    `pid${axisLower}`,
+    `pid ${axisLower}`
+  ];
+
+  for (const line of lines) {
+    const kv = parseKeyValue(line);
+    if (!kv) {
+      continue;
+    }
+    const keyLower = kv.key.toLowerCase();
+    if (axisPidPatterns.some((pattern) => keyLower.includes(pattern))) {
+      const parts = kv.value.split(",").map((value) => Number(value.trim()));
+      if (parts.length >= 3) {
+        [result.p, result.i, result.d] = parts.slice(0, 3);
+        if (parts.length >= 5) {
+          result.f = parts[3];
+          result.boost = parts[4];
+        } else if (parts.length === 4) {
+          result.f = parts[3];
+        }
       }
+      break;
     }
   }
 
   // Individual coefficient headers as a fallback.
-  if (result.p === null) {
-    const pVal = findSingleValue([`${axisLower}_p`, `${axisLower}p`, `p_term_${axisLower}`]);
-    if (pVal !== null) result.p = Number(pVal);
-  }
-  if (result.i === null) {
-    const iVal = findSingleValue([`${axisLower}_i`, `${axisLower}i`, `i_term_${axisLower}`]);
-    if (iVal !== null) result.i = Number(iVal);
-  }
-  if (result.d === null) {
-    const dVal = findSingleValue([`${axisLower}_d`, `${axisLower}d`, `d_term_${axisLower}`]);
-    if (dVal !== null) result.d = Number(dVal);
+  const singlePatterns = {
+    p: [`${axisLower}_p`, `${axisLower}p`, `p_term_${axisLower}`],
+    i: [`${axisLower}_i`, `${axisLower}i`, `i_term_${axisLower}`],
+    d: [`${axisLower}_d`, `${axisLower}d`, `d_term_${axisLower}`]
+  };
+
+  for (const term of ["p", "i", "d"]) {
+    if (result[term] !== null) {
+      continue;
+    }
+    for (const line of lines) {
+      const kv = parseKeyValue(line);
+      if (!kv) {
+        continue;
+      }
+      const keyLower = kv.key.toLowerCase();
+      if (singlePatterns[term].some((pattern) => keyLower.includes(pattern))) {
+        const match = kv.value.match(/[+-]?[\d.]+/);
+        if (match) {
+          result[term] = Number(match[0]);
+        }
+        break;
+      }
+    }
   }
 
   return result;

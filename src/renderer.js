@@ -1796,6 +1796,21 @@ if (sampleRate && hasSpectrumRuns) {
 })
   };
 
+  // Step response for the verdict uses the same defaults the
+  // Step Response Lab opens with (Low smoothing, Y-correction
+  // on). It runs on this flight's own lines so the verdict
+  // describes the flight the pilot is about to read about.
+  const stepResponseResult = (() => {
+    try {
+      return analyzeAllFlightsStepResponse(
+        { flights: [{ label: "Flight 1", lines }] },
+        { smoothFactor: 2, yCorrection: true, minInput: 20 }
+      );
+    } catch {
+      return null;
+    }
+  })();
+
   const verdict = buildFlightVerdict({
   spectra,
   headspeed,
@@ -1804,7 +1819,8 @@ if (sampleRate && hasSpectrumRuns) {
   pidAnalysis,
   labs,
   anchorHeadspeedRpm: governedHeadspeed,
-  filterAdvice
+  filterAdvice,
+  stepResponseResult
 });
 
   // Evidence that zooms to the moment: attach a focus
@@ -2136,7 +2152,8 @@ function showEventDetail(event) {
 function renderLabVerdictStories(verdict) {
   const stories = [
     { key: "vibration", element: el("filterVerdictStory") },
-    { key: "tuning", element: el("pidVerdictStory") }
+    { key: "tuning", element: el("pidVerdictStory") },
+    { key: "stepResponse", element: el("stepResponseVerdictStory") }
   ];
 
   for (const { key, element } of stories) {
