@@ -7,10 +7,12 @@ import { initNavigation } from "./ui/navigation.js";
 import {
   renderTimeSeriesChart,
   renderSpectrumChart,
+  renderStepResponseChart,
   CHART_COLORS
 } from "./ui/charts.js";
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
+import { analyzeAllFlightsStepResponse } from "./analysis/stepResponseAnalysis.js";
 import {
   buildContributionV1,
   describeContribution
@@ -240,6 +242,25 @@ const governorStory = el("governorStory");
 const governorMetrics = el("governorMetrics");
 const escStory = el("escStory");
 const escMetrics = el("escMetrics");
+
+// ---- Step Response Lab ----
+const stepResponseAnalyzeButton = el("stepResponseAnalyzeButton");
+const stepResponseFlightSelect = el("stepResponseFlightSelect");
+const stepResponseSmoothSelect = el("stepResponseSmoothSelect");
+const stepResponseYCorrection = el("stepResponseYCorrection");
+const stepResponseMinInput = el("stepResponseMinInput");
+const stepResponseStatus = el("stepResponseStatus");
+const chartStepResponseRoll = el("chartStepResponseRoll");
+const chartStepResponsePitch = el("chartStepResponsePitch");
+const chartStepResponseYaw = el("chartStepResponseYaw");
+const stepResponseRollMetrics = el("stepResponseRollMetrics");
+const stepResponsePitchMetrics = el("stepResponsePitchMetrics");
+const stepResponseYawMetrics = el("stepResponseYawMetrics");
+const stepResponseRollCompare = el("stepResponseRollCompare");
+const stepResponsePitchCompare = el("stepResponsePitchCompare");
+const stepResponseYawCompare = el("stepResponseYawCompare");
+
+let currentStepResponseResults = null;
 
 // ---- pilot-input (stick) insets ----
 // One reading of the rcCommand columns per flight; each inset
@@ -5870,6 +5891,9 @@ function analyzeFlight(flightIndex) {
   compareResultCard.hidden = true;
   compareChartCard.hidden = true;
 
+  populateStepResponseFlightPicker();
+  resetStepResponseView();
+
   // ---- community data sharing (opt-in, anonymized) ----
   // Text exports carry no decoded flight, so they skip this
   // and sharing stays native-.bbl only.
@@ -6604,12 +6628,361 @@ compareSampleButton.addEventListener("click", async () => {
 });
 
 // ======================================================
-// 09. HEALTH RECORD (per-craft history)
+// 09. STEP RESPONSE LAB
+// ======================================================
+//
+// Unlike the other Labs, step response analysis is expensive
+// (FFT deconvolution per 2-second window), so it runs on
+// demand the first time the tab is shown after a log load or
+// a control change — not eagerly for every flight. The flight
+// picker doubles as the comparison selector: "All flights"
+// overlays every flight as its own coloured line (with the
+// average dashed), and a single flight shows just that one.
+
+function populateStepResponseFlightPicker() {
+  if (!stepResponseFlightSelect || !loadedLog) return;
+
+  stepResponseFlightSelect.innerHTML = "";
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = `All flights (${loadedLog.flights.length})`;
+  stepResponseFlightSelect.appendChild(allOption);
+
+  for (let i = 0; i < loadedLog.flights.length; i += 1) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = loadedLog.flights[i].label;
+    stepResponseFlightSelect.appendChild(option);
+  }
+}
+
+function resetStepResponseView() {
+  currentStepResponseResults = null;
+
+  if (stepResponseAnalyzeButton) {
+    stepResponseAnalyzeButton.disabled = !loadedLog;
+  }
+
+  if (stepResponseStatus) {
+    stepResponseStatus.textContent = loadedLog
+      ? "Click Analyze to compute step response."
+      : "Open a log to begin.";
+  }
+
+  for (const element of [
+    chartStepResponseRoll,
+    chartStepResponsePitch,
+    chartStepResponseYaw
+  ]) {
+    if (element) {
+      element.innerHTML =
+        '<p class="chart-empty">Analyze to see the step response.</p>';
+    }
+  }
+
+  for (const metricsElement of [
+    stepResponseRollMetrics,
+    stepResponsePitchMetrics,
+    stepResponseYawMetrics
+  ]) {
+    if (metricsElement) {
+      metricsElement.innerHTML = "";
+    }
+  }
+
+  for (const compareElement of [
+    stepResponseRollCompare,
+    stepResponsePitchCompare,
+    stepResponseYawCompare
+  ]) {
+    if (compareElement) {
+      compareElement.innerHTML = "";
+    }
+  }
+}
+
+function getStepResponseOptions() {
+  return {
+    smoothFactor: Math.max(
+      1,
+      Math.min(
+        4,
+        Number(stepResponseSmoothSelect?.value || 1)
+      )
+    ),
+    yCorrection: stepResponseYCorrection?.checked ?? true,
+    minInput: Math.max(
+      5,
+      Number(stepResponseMinInput?.value || 20)
+    )
+  };
+}
+
+function formatStepResponseMetric(value, suffix = "") {
+  return Number.isFinite(value)
+    ? `${value.toFixed(1)}${suffix}`
+    : "—";
+}
+
+function formatPid(pid) {
+  if (!pid) return "—";
+  const parts = [];
+  if (Number.isFinite(pid.p)) parts.push(`P=${pid.p}`);
+  if (Number.isFinite(pid.i)) parts.push(`I=${pid.i}`);
+  if (Number.isFinite(pid.d)) parts.push(`D=${pid.d}`);
+  if (Number.isFinite(pid.f)) parts.push(`FF=${pid.f}`);
+  return parts.length > 0 ? parts.join(" ") : "—";
+}
+
+function renderStepResponseMetrics(metricsElement, axisResult) {
+  if (!metricsElement) return;
+
+  if (!axisResult.available) {
+    metricsElement.innerHTML = `
+      <div class="metric-tile">
+        <span class="label">Status</span>
+        <strong>${axisResult.reason || "No data"}</strong>
+      </div>
+    `;
+    return;
+  }
+
+  const overshootPercent = axisResult.metrics.maxOvershoot * 100;
+
+  metricsElement.innerHTML = `
+    <div class="metric-tile">
+      <span class="label">Rise time</span>
+      <strong>${formatStepResponseMetric(axisResult.metrics.riseTimeMs, " ms")}</strong>
+    </div>
+    <div class="metric-tile">
+      <span class="label">Overshoot</span>
+      <strong>${formatStepResponseMetric(overshootPercent, "%")}</strong>
+    </div>
+    <div class="metric-tile">
+      <span class="label">Settling time</span>
+      <strong>${formatStepResponseMetric(axisResult.metrics.settlingTimeMs, " ms")}</strong>
+    </div>
+    <div class="metric-tile">
+      <span class="label">Segments</span>
+      <strong>${axisResult.numSegments}</strong>
+    </div>
+  `;
+}
+
+// Build the per-flight comparison table for one axis: one row
+// per flight with its colour swatch, PID gains and metrics so a
+// tuner can read the step-response shape against the gains that
+// produced it.
+function renderStepResponseCompareTable(compareElement, axisResult) {
+  if (!compareElement) return;
+
+  const series = Array.isArray(axisResult.series) ? axisResult.series : [];
+  if (series.length === 0) {
+    compareElement.innerHTML = "";
+    return;
+  }
+
+  const rows = series.map((s, index) => {
+    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const overshoot = s.metrics.maxOvershoot * 100;
+    return `
+      <tr>
+        <td class="swatch"><span class="swatch-dot" style="background:${color}"></span></td>
+        <td class="label">${s.label}</td>
+        <td>${formatPid(s.pid)}</td>
+        <td>${formatStepResponseMetric(s.metrics.riseTimeMs, " ms")}</td>
+        <td>${formatStepResponseMetric(overshoot, "%")}</td>
+        <td>${formatStepResponseMetric(s.metrics.settlingTimeMs, " ms")}</td>
+        <td>${s.numSegments}</td>
+      </tr>
+    `;
+  }).join("");
+
+  compareElement.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Flight</th>
+          <th>PID</th>
+          <th>Rise</th>
+          <th>Overshoot</th>
+          <th>Settling</th>
+          <th>Segs</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderStepResponseResults(result) {
+  if (!result) return;
+
+  const axisByName = new Map(
+    result.axes.map((axis) => [axis.axis, axis])
+  );
+
+  const roll = axisByName.get("Roll");
+  const pitch = axisByName.get("Pitch");
+  const yaw = axisByName.get("Yaw");
+
+  if (roll) {
+    renderStepResponseMetrics(stepResponseRollMetrics, roll);
+    if (roll.available) {
+      const series = (roll.series || []).map((s, index) => ({
+        label: s.label,
+        timeMs: s.timeMs,
+        response: s.stepResponse,
+        metrics: s.metrics,
+        color: CHART_COLORS[index % CHART_COLORS.length]
+      }));
+      renderStepResponseChart(chartStepResponseRoll, {
+        series,
+        average: { response: roll.stepResponse, metrics: roll.metrics },
+        height: 260
+      });
+    }
+    renderStepResponseCompareTable(stepResponseRollCompare, roll);
+  }
+
+  if (pitch) {
+    renderStepResponseMetrics(stepResponsePitchMetrics, pitch);
+    if (pitch.available) {
+      const series = (pitch.series || []).map((s, index) => ({
+        label: s.label,
+        timeMs: s.timeMs,
+        response: s.stepResponse,
+        metrics: s.metrics,
+        color: CHART_COLORS[index % CHART_COLORS.length]
+      }));
+      renderStepResponseChart(chartStepResponsePitch, {
+        series,
+        average: { response: pitch.stepResponse, metrics: pitch.metrics },
+        height: 260
+      });
+    }
+    renderStepResponseCompareTable(stepResponsePitchCompare, pitch);
+  }
+
+  if (yaw) {
+    renderStepResponseMetrics(stepResponseYawMetrics, yaw);
+    if (yaw.available) {
+      const series = (yaw.series || []).map((s, index) => ({
+        label: s.label,
+        timeMs: s.timeMs,
+        response: s.stepResponse,
+        metrics: s.metrics,
+        color: CHART_COLORS[index % CHART_COLORS.length]
+      }));
+      renderStepResponseChart(chartStepResponseYaw, {
+        series,
+        average: { response: yaw.stepResponse, metrics: yaw.metrics },
+        height: 260
+      });
+    }
+    renderStepResponseCompareTable(stepResponseYawCompare, yaw);
+  }
+
+  const availableCount = result.axes.filter((axis) => axis.available).length;
+  if (stepResponseStatus) {
+    stepResponseStatus.textContent =
+      availableCount > 0
+        ? `Analyzed ${availableCount} axis${availableCount === 1 ? "" : "es"}.`
+        : "No axes had enough command activity to analyze.";
+  }
+}
+
+function runStepResponseAnalysis() {
+  if (!loadedLog) {
+    if (stepResponseStatus) {
+      stepResponseStatus.textContent = "Open a log first.";
+    }
+    return;
+  }
+
+  if (stepResponseStatus) {
+    stepResponseStatus.textContent = "Analyzing...";
+  }
+
+  const options = getStepResponseOptions();
+  const selected = stepResponseFlightSelect?.value || "all";
+
+  requestIdleCallback
+    ? requestIdleCallback(() => {
+        computeAndRenderStepResponse(selected, options);
+      }, { timeout: 500 })
+    : setTimeout(() => computeAndRenderStepResponse(selected, options), 30);
+}
+
+function computeAndRenderStepResponse(selected, options) {
+  try {
+    if (selected === "all") {
+      currentStepResponseResults = analyzeAllFlightsStepResponse(
+        loadedLog,
+        options
+      );
+      renderStepResponseResults(currentStepResponseResults.aggregated);
+    } else {
+      const flightIndex = Number(selected);
+      const flight = loadedLog.flights[flightIndex];
+      if (!flight) {
+        stepResponseStatus.textContent = "Selected flight not found.";
+        return;
+      }
+      const singleResult = analyzeAllFlightsStepResponse(
+        { flights: [flight] },
+        options
+      );
+      currentStepResponseResults = singleResult;
+      renderStepResponseResults(singleResult.aggregated);
+    }
+  } catch (error) {
+    if (stepResponseStatus) {
+      stepResponseStatus.textContent = "Analysis failed: " + error.message;
+    }
+  }
+}
+
+stepResponseAnalyzeButton?.addEventListener("click", () => {
+  noteAction("running step response analysis");
+  runStepResponseAnalysis();
+});
+
+stepResponseFlightSelect?.addEventListener("change", () => {
+  if (currentStepResponseResults) {
+    noteAction("changed step response flight filter");
+    runStepResponseAnalysis();
+  }
+});
+
+[
+  stepResponseSmoothSelect,
+  stepResponseYCorrection,
+  stepResponseMinInput
+].forEach((control) => {
+  control?.addEventListener("change", () => {
+    if (currentStepResponseResults) {
+      noteAction("changed step response controls");
+      runStepResponseAnalysis();
+    }
+  });
+});
+
+
+// ======================================================
+// 10. HEALTH RECORD (per-craft history)
 // ======================================================
 
 // Records written by earlier builds may already hold the same
 // flight twice; fold those once, before the record is first shown.
 migrateHistory(localStorage);
+
+// Keep section numbering sequential.
+// 09. Step Response Lab is above.
 
 function refreshHistoryScreen(selectedCraft) {
   const history = loadHistory(localStorage);

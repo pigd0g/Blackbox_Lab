@@ -21,6 +21,7 @@
       <button class="nav-button" data-target="replay">Replay</button>
       <button class="nav-button" data-target="filter">Filter Lab</button>
       <button class="nav-button" data-target="pid">PID Lab</button>
+      <button class="nav-button" data-target="stepResponse">Step Response</button>
       <button class="nav-button" data-target="governor">Governor Lab</button>
       <button class="nav-button" data-target="esc">ESC Lab</button>
       <button class="nav-button" data-target="battery">Battery Lab</button>
@@ -1026,6 +1027,95 @@
             No recommendations available.
           </div>
           </details>
+        </section>
+      </section>
+
+      <!-- ============ STEP RESPONSE ============ -->
+      <section data-screen="stepResponse">
+        <section class="hero">
+          <h2>Step Response</h2>
+          <p>Closed-loop response to your stick inputs.</p>
+        </section>
+
+        <div class="screen-intro">
+          <p>This page recovers the helicopter's step response from
+            setpoint and gyro data using FFT-based deconvolution. It
+            averages many short command windows, so the curve is
+            robust to varying stick inputs.</p>
+          <details>
+            <summary>What am I looking at?</summary>
+            <p>Each axis shows the step response: 0 to 1 is the
+              ideal target. Rise time is when the response first reaches
+              50% of the final value. Overshoot is how far the response
+              passes 1.0 before settling. Settling time is the last
+              moment the response leaves a ±2% band around the final
+              value. When a file contains several flights, every flight
+              is drawn as its own coloured line so you can compare them
+              by their PID gains; the dashed line is the average. Use the
+              picker to focus on a single flight.</p>
+          </details>
+        </div>
+
+        <section class="card" id="stepResponseControls">
+          <h3>Controls</h3>
+          <div class="button-row">
+            <div class="flight-picker" id="stepResponseFlightPicker">
+              <span class="label">Flight</span>
+              <select id="stepResponseFlightSelect"></select>
+            </div>
+
+            <div class="flight-picker">
+              <span class="label">Smoothing</span>
+              <select id="stepResponseSmoothSelect">
+                <option value="1">Off</option>
+                <option value="2" selected>Low</option>
+                <option value="3">Medium</option>
+                <option value="4">High</option>
+              </select>
+            </div>
+
+            <label class="toggle-row">
+              <input type="checkbox" id="stepResponseYCorrection" checked />
+              <span>Y-correction</span>
+            </label>
+
+            <div class="flight-picker">
+              <span class="label">Min input (°/s)</span>
+              <input type="number" id="stepResponseMinInput" value="20" min="5" max="200" />
+            </div>
+
+            <button class="primary-button" id="stepResponseAnalyzeButton" disabled>
+              Analyze
+            </button>
+          </div>
+          <p class="lab-story" id="stepResponseStatus">Open a log to begin.</p>
+        </section>
+
+        <section class="card" id="stepResponseRollCard">
+          <h3>Roll</h3>
+          <div class="metric-grid" id="stepResponseRollMetrics"></div>
+          <div class="chart-container" id="chartStepResponseRoll">
+            <p class="chart-empty">Open a log to see the roll step response.</p>
+          </div>
+          <div class="compare-table" id="stepResponseRollCompare"></div>
+        </section>
+
+        <section class="card" id="stepResponsePitchCard">
+          <h3>Pitch</h3>
+          <div class="metric-grid" id="stepResponsePitchMetrics"></div>
+          <div class="chart-container" id="chartStepResponsePitch">
+            <p class="chart-empty">Open a log to see the pitch step response.</p>
+          </div>
+          <div class="compare-table" id="stepResponsePitchCompare"></div>
+        </section>
+
+        <section class="card" id="stepResponseYawCard">
+          <h3>Yaw</h3>
+          <div class="metric-grid" id="stepResponseYawMetrics"></div>
+          <div class="chart-container" id="chartStepResponseYaw">
+            <p class="chart-empty">Open a log to see the yaw step response.</p>
+          </div>
+          <div class="compare-table" id="stepResponseYawCompare"></div>
         </section>
       </section>
 

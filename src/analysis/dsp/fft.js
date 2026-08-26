@@ -11,7 +11,7 @@
 // ======================================================
 
 // In-place iterative radix-2 FFT on interleaved buffers.
-function fftInPlace(real, imag) {
+export function fftInPlace(real, imag) {
   const n = real.length;
 
   // Bit-reversal permutation
