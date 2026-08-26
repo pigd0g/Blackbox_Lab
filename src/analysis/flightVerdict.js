@@ -73,14 +73,19 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     const ratio = peakHz / oneRev;
 
     if (Math.abs(ratio - 1) < 0.15) {
-      source = "the MAIN ROTOR turning once per revolution, usually blade balance or head damping";
-      sourceAction = "Balance and track the main blades, and check the head damping.";
+      source =
+        "the MAIN ROTOR turning once per revolution, usually blade balance or head damping";
+      sourceAction =
+        "Balance and track the main blades, and check the head damping.";
     } else if (Math.abs(ratio - 2) < 0.2) {
-      source = "twice-per-revolution of the main rotor, often blade tracking or head play";
+      source =
+        "twice-per-revolution of the main rotor, often blade tracking or head play";
       sourceAction = "Check the blade tracking and the head for play.";
     } else if (ratio > 3.5 && ratio < 6.5) {
-      source = "the TAIL rotor region: check tail blades, belt/shaft and bearings";
-      sourceAction = "Check the tail blades, the belt or shaft tension, and the tail bearings.";
+      source =
+        "the TAIL rotor region: check tail blades, belt/shaft and bearings";
+      sourceAction =
+        "Check the tail blades, the belt or shaft tension, and the tail bearings.";
     } else if (ratio > 6.5) {
       source = "a high-frequency source: motor, pinion or bearing territory";
       sourceAction = "Check the motor mount, the pinion mesh and the bearings.";
@@ -93,9 +98,7 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
   // Filtering evidence for THIS peak, when the advisor measured it:
   // raw amplitude alone never decides the verdict again.
   const advisorRow =
-    filterAdvice?.rows?.find(
-      (row) => Math.abs(row.hz - peakHz) <= 3
-    ) ?? null;
+    filterAdvice?.rows?.find((row) => Math.abs(row.hz - peakHz) <= 3) ?? null;
 
   // The verdict's peak and the advisor's rows come from separate
   // peak-finders, so a peak the advisor kept no row for is normal
@@ -105,21 +108,14 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
   let reductionPercent = advisorRow?.reductionPercent ?? null;
   let residualMagnitude = advisorRow?.filteredMagnitude ?? null;
 
-  if (
-    !advisorRow &&
-    filterAdvice?.filteredSpectrum &&
-    peakMagnitude > 0
-  ) {
-    const residual = magnitudeNear(
-      filterAdvice.filteredSpectrum,
-      peakHz
-    );
+  if (!advisorRow && filterAdvice?.filteredSpectrum && peakMagnitude > 0) {
+    const residual = magnitudeNear(filterAdvice.filteredSpectrum, peakHz);
 
     if (Number.isFinite(residual)) {
       residualMagnitude = residual;
       reductionPercent = Math.max(
         0,
-        ((peakMagnitude - residual) / peakMagnitude) * 100
+        ((peakMagnitude - residual) / peakMagnitude) * 100,
       );
     }
   }
@@ -132,7 +128,7 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
     residualMagnitude,
     trackingConcern: Number.isFinite(pidAnalysis?.score)
       ? pidAnalysis.score < 70
-      : null
+      : null,
   });
 
   // Detection stays sensitive; the card's status follows the
@@ -178,10 +174,10 @@ function vibrationVerdict(spectra, headspeedRpm, filterAdvice, pidAnalysis) {
         ? Math.round(reductionPercent)
         : null,
       managed: conclusion.managed === true,
-      identified: source !== "an unidentified source"
+      identified: source !== "an unidentified source",
     },
     screen: "filter",
-    evidence: "Noise Spectrum chart, Filter Lab"
+    evidence: "Noise Spectrum chart, Filter Lab",
   };
 }
 
@@ -231,9 +227,10 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
       status: "attention",
       headline: `Headspeed sags up to ${Math.round(maximumDroop)} rpm under load`,
       detail: `That is ${droopPercent.toFixed(1)}% below target. The governor needs more gain or the power system more headroom.`,
-      action: "In Rotorflight Configurator, raise governor gain in small steps, or check the ESC Lab for missing power headroom.",
+      action:
+        "In Rotorflight Configurator, raise governor gain in small steps, or check the ESC Lab for missing power headroom.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -246,7 +243,7 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
       detail: `${droopPercent.toFixed(1)}% droop is flyable; a touch more governor gain could tighten it.`,
       action: "Optional: a small governor gain increase next session.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -258,7 +255,7 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
     detail: `Worst droop only ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%): the governor is doing its job.`,
     action: "Nothing to do. This is what good looks like.",
     screen: "governor",
-    evidence: "Headspeed vs Target chart, Governor Lab"
+    evidence: "Headspeed vs Target chart, Governor Lab",
   };
 }
 
@@ -267,8 +264,7 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
 // ------------------------------------------------------
 function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
   const score = pidAnalysis?.score;
-  const overallStatus =
-    pidAnalysis?.overallStatus ?? null;
+  const overallStatus = pidAnalysis?.overallStatus ?? null;
   const confidenceLevel = pidAnalysis?.confidence?.level ?? null;
   const thinEvidence =
     confidenceLevel === "Low" || confidenceLevel === "Insufficient";
@@ -281,10 +277,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
 
   const demandSuffix = hoverDemand ? " at gentle demand" : "";
 
-  if (
-    overallStatus === "Insufficient Data" ||
-    !Number.isFinite(score)
-  ) {
+  if (overallStatus === "Insufficient Data" || !Number.isFinite(score)) {
     return {
       key: "tuning",
       title: "Tuning",
@@ -295,7 +288,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       action:
         "Do not change PID values from this result. Open PID Lab to review the missing evidence.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -315,7 +308,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       action:
         "Open the PID Lab and let its recommendations fill this flight's Change Pack.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -337,7 +330,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       action:
         "Fix the vibration first (see the Vibration card), fly again, and read this score fresh on that flight.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -355,7 +348,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       action:
         "Open the PID Lab and read its review items: they say exactly where to look.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -372,7 +365,7 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       action:
         "Fly 4–6 deliberate stops and reversals on each axis at one headspeed; the PID Lab then has the evidence to rate the tune.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -384,10 +377,9 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       headline: `Tracking score ${score}/100: decent, not crisp${demandSuffix}`,
       detail:
         "Response mostly follows the sticks; the PID Lab shows where it loosens.",
-      action:
-        "If you want it sharper, the PID Lab shows where to look.",
+      action: "If you want it sharper, the PID Lab shows where to look.",
       screen: "pid",
-      evidence: "PID Lab findings"
+      evidence: "PID Lab findings",
     };
   }
 
@@ -401,16 +393,9 @@ function tuningVerdict(pidAnalysis, { vibrationConcern = false } = {}) {
       : "The machine follows the sticks faithfully.",
     action: "Nothing to do. Enjoy it.",
     screen: "pid",
-    evidence: "PID Lab findings"
+    evidence: "PID Lab findings",
   };
 }
-  
-
-  
-
-  
-  
-
 
 // ------------------------------------------------------
 // Battery verdict — voltage sag over the flight
@@ -437,9 +422,10 @@ function batteryVerdict(vbat) {
       status: "attention",
       headline: `Voltage fell ${sagPercent.toFixed(0)}% during the flight`,
       detail: `${start.toFixed(1)} V → ${end.toFixed(1)} V: an aging pack or a flight flown long/hard.`,
-      action: "Land earlier, or move this pack to gentler duty. The Battery Lab has the details.",
+      action:
+        "Land earlier, or move this pack to gentler duty. The Battery Lab has the details.",
       screen: "viewer",
-      evidence: "Motor & Power chart, Log Viewer"
+      evidence: "Motor & Power chart, Log Viewer",
     };
   }
 
@@ -451,7 +437,7 @@ function batteryVerdict(vbat) {
     detail: `${start.toFixed(1)} V → ${end.toFixed(1)} V over the flight.`,
     action: "Nothing to do.",
     screen: "viewer",
-    evidence: "Motor & Power chart, Log Viewer"
+    evidence: "Motor & Power chart, Log Viewer",
   };
 }
 function rotorSpeedVerdictFromLab(governorLab) {
@@ -480,17 +466,17 @@ function rotorSpeedVerdictFromLab(governorLab) {
         governorLab.status === "good"
           ? `Headspeed held steady near ${governorLab.averageHeadspeed} rpm`
           : `Headspeed swung ${Math.round(
-              governorLab.droopRpm
+              governorLab.droopRpm,
             )} rpm short-term`,
       detail: `No governor target is logged, so hold is judged against the rotor's own trend: largest short-term swing ${Math.round(
-        governorLab.droopRpm
+        governorLab.droopRpm,
       )} rpm (${governorLab.droopPercent.toFixed(1)}%).`,
       action:
         governorLab.status === "good"
           ? "Nothing to change from this result."
           : "Worth a look at that moment in the Governor Lab chart. Deliberate headspeed changes are not counted against this.",
       screen: "governor",
-      evidence: "Headspeed Over Time chart, Governor Lab"
+      evidence: "Headspeed Over Time chart, Governor Lab",
     };
   }
 
@@ -532,7 +518,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
             ? "Nothing to fix in the log. Fit and enable an RPM sensor if you want governor scoring."
             : "Do not change governor settings from this flight.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -557,14 +543,14 @@ function rotorSpeedVerdictFromLab(governorLab) {
       title: "Rotor Speed",
       status: "attention",
       headline: `Rotor fell ${Math.round(
-        governorLab.flightDroopRpm
+        governorLab.flightDroopRpm,
       )} rpm under load`,
       detail: `A sustained ${governorLab.flightDroopPercent.toFixed(
-        1
+        1,
       )}% dip below target${
         Number.isFinite(governorLab.flightDroopOutputPercent)
           ? ` with the motor output at ${Math.round(
-              governorLab.flightDroopOutputPercent
+              governorLab.flightDroopOutputPercent,
             )}%`
           : ""
       }.`,
@@ -572,7 +558,7 @@ function rotorSpeedVerdictFromLab(governorLab) {
         ? "The output was already at its ceiling, so more governor gain cannot help. Lower the headspeed, take some pitch out, or adjust the gearing/Kv to match your target headspeed. The ESC Lab shows the moment."
         : "Review the worst-droop event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -581,16 +567,14 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: "attention",
-      headline: `Sustained dip of ${Math.round(
-        droopRpm
-      )} rpm in stable flight`,
+      headline: `Sustained dip of ${Math.round(droopRpm)} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
-        1
+        1,
       )}% below target, held for a quarter second or longer.`,
       action:
         "Review the matching event in Governor Lab before changing gain or power-system settings.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -599,16 +583,14 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: "watch",
-      headline: `Sustained dip of ${Math.round(
-        droopRpm
-      )} rpm in stable flight`,
+      headline: `Sustained dip of ${Math.round(droopRpm)} rpm in stable flight`,
       detail: `${droopPercent.toFixed(
-        1
+        1,
       )}% below target. Review the event before making a governor change.`,
       action:
         "No automatic change recommended. Confirm that the dip occurred during a real airborne load.",
       screen: "governor",
-      evidence: "Headspeed vs Target chart, Governor Lab"
+      evidence: "Headspeed vs Target chart, Governor Lab",
     };
   }
 
@@ -618,11 +600,11 @@ function rotorSpeedVerdictFromLab(governorLab) {
     status: "good",
     headline: "Rock-solid headspeed",
     detail: `Largest sustained dip was ${Math.round(
-      droopRpm
+      droopRpm,
     )} rpm (${droopPercent.toFixed(1)}%).`,
     action: "Nothing to change from this result.",
     screen: "governor",
-    evidence: "Headspeed vs Target chart, Governor Lab"
+    evidence: "Headspeed vs Target chart, Governor Lab",
   };
 }
 
@@ -638,8 +620,7 @@ function batteryVerdictFromLab(batteryLab) {
     return {
       key: "battery",
       title: "Battery",
-      status:
-        batteryLab.hasRotorSpeedData === false ? "unavailable" : "watch",
+      status: batteryLab.hasRotorSpeedData === false ? "unavailable" : "watch",
       statusLabel:
         batteryLab.hasRotorSpeedData === false ? "not measurable" : null,
       headline:
@@ -655,12 +636,11 @@ function batteryVerdictFromLab(batteryLab) {
           ? "Nothing to fix in the log. Use the Voltage Over the Flight chart to view the pack directly."
           : "Do not judge the pack from this flight alone.",
       screen: "battery",
-      evidence: "Voltage Over the Flight chart, Battery Lab"
+      evidence: "Voltage Over the Flight chart, Battery Lab",
     };
   }
 
-  const minimumPerCell =
-    batteryLab.minimumVoltsPerCell;
+  const minimumPerCell = batteryLab.minimumVoltsPerCell;
 
   if (batteryLab.status === "attention") {
     return {
@@ -669,12 +649,11 @@ function batteryVerdictFromLab(batteryLab) {
       status: "attention",
       headline: "Low voltage observed during stable flight",
       detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
-        2
+        2,
       )} V per cell.`,
-      action:
-        "Review the matching current and throttle event in Battery Lab.",
+      action: "Review the matching current and throttle event in Battery Lab.",
       screen: "battery",
-      evidence: "Voltage Over the Flight chart, Battery Lab"
+      evidence: "Voltage Over the Flight chart, Battery Lab",
     };
   }
 
@@ -685,12 +664,11 @@ function batteryVerdictFromLab(batteryLab) {
       status: "watch",
       headline: "Loaded voltage is worth reviewing",
       detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
-        2
+        2,
       )} V per cell. This alone does not prove the pack is weak.`,
-      action:
-        "Compare the voltage dip with current demand in Battery Lab.",
+      action: "Compare the voltage dip with current demand in Battery Lab.",
       screen: "battery",
-      evidence: "Voltage Over the Flight chart, Battery Lab"
+      evidence: "Voltage Over the Flight chart, Battery Lab",
     };
   }
 
@@ -700,11 +678,11 @@ function batteryVerdictFromLab(batteryLab) {
     status: "good",
     headline: "Battery held up well",
     detail: `Lowest in-flight voltage was ${minimumPerCell.toFixed(
-      2
+      2,
     )} V per cell. No clear evidence of a weak or tired pack.`,
     action: "Nothing to change from this result.",
     screen: "battery",
-    evidence: "Voltage Over the Flight chart, Battery Lab"
+    evidence: "Voltage Over the Flight chart, Battery Lab",
   };
 }
 // ------------------------------------------------------
@@ -737,7 +715,230 @@ function powerVerdictFromLab(escLab) {
     detail: escLab.story,
     action,
     screen: "esc",
-    evidence: "Throttle Output chart, ESC Lab"
+    evidence: "Throttle Output chart, ESC Lab",
+  };
+}
+
+// ------------------------------------------------------
+// Step response verdict — closed-loop response shape
+// ------------------------------------------------------
+
+// All thresholds live in one place so a future calibration
+// pass can dial them without hunting through branches.
+const STEP_RESPONSE_THRESHOLDS = {
+  overshootGood: 15, // %  — below this the axis tracks cleanly
+  overshootWatch: 30, // %  — 15-30 is workable but worth a look
+  settlingGood: 250, // ms — at or below, the response settles promptly
+  settlingWatch: 450, // ms — 250-450 is a long settle; above 450 rings
+  riseGood: 90, // ms — below this the axis is snappy
+  riseWatch: 130, // ms — 90-130 is sluggish; above 130 is very slow
+};
+
+// A settling time of 0 means the response never left the ±2%
+// band — it was inside tolerance from the start, which is good.
+function settlingStatusMs(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "good";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.settlingWatch) {
+    return "attention";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.settlingGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+function overshootStatusPercent(percent) {
+  if (!Number.isFinite(percent)) {
+    return "good";
+  }
+  if (percent > STEP_RESPONSE_THRESHOLDS.overshootWatch) {
+    return "attention";
+  }
+  if (percent > STEP_RESPONSE_THRESHOLDS.overshootGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+function riseStatusMs(value) {
+  if (!Number.isFinite(value)) {
+    return "good";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.riseWatch) {
+    return "attention";
+  }
+  if (value > STEP_RESPONSE_THRESHOLDS.riseGood) {
+    return "watch";
+  }
+  return "good";
+}
+
+const STATUS_RANK = { good: 0, watch: 1, attention: 2 };
+
+function worstStatus(...statuses) {
+  return statuses.reduce(
+    (worst, current) =>
+      STATUS_RANK[current] > STATUS_RANK[worst] ? current : worst,
+    "good",
+  );
+}
+
+// Confidence from how many command segments fed the average.
+// Few segments mean the recovered response rests on thin
+// evidence, so an "attention" finding is softened to "watch".
+function stepResponseConfidence(totalSegments) {
+  if (!Number.isFinite(totalSegments) || totalSegments <= 0) {
+    return "insufficient";
+  }
+  if (totalSegments < 5) {
+    return "low";
+  }
+  if (totalSegments < 20) {
+    return "medium";
+  }
+  return "high";
+}
+
+// Names the metric that drove the verdict so the headline can
+// point the pilot straight at it.
+function worstMetricForAxis(axisResult) {
+  const overshootPercent = (axisResult.metrics.maxOvershoot || 0) * 100;
+  const settlingMs = axisResult.metrics.settlingTimeMs || 0;
+  const riseMs = axisResult.metrics.riseTimeMs || 0;
+
+  const candidates = [
+    {
+      name: "overshoot",
+      status: overshootStatusPercent(overshootPercent),
+      label: `${overshootPercent.toFixed(1)}% overshoot`,
+    },
+    {
+      name: "settling",
+      status: settlingStatusMs(settlingMs),
+      label:
+        settlingMs > 0
+          ? `${settlingMs.toFixed(0)} ms to settle`
+          : "settled within tolerance",
+    },
+    {
+      name: "rise",
+      status: riseStatusMs(riseMs),
+      label: `${riseMs.toFixed(0)} ms rise time`,
+    },
+  ];
+
+  return candidates.reduce(
+    (worst, current) =>
+      STATUS_RANK[current.status] > STATUS_RANK[worst.status] ? current : worst,
+    candidates[0],
+  );
+}
+
+function tuningAction(axisName, worstMetric) {
+  if (worstMetric.name === "overshoot") {
+    return `Lower ${axisName} P or raise ${axisName} D, then re-fly and compare.`;
+  }
+  if (worstMetric.name === "settling") {
+    return `Raise ${axisName} D to damp the ringing, or lower ${axisName} P if the response is also overshooting.`;
+  }
+  return `Raise ${axisName} P and feed-forward (${axisName} FF) so the axis follows the sticks sooner.`;
+}
+
+function stepResponseVerdict(stepResponseResult) {
+  const aggregated = stepResponseResult?.aggregated;
+
+  if (!aggregated || !Array.isArray(aggregated.axes)) {
+    return null;
+  }
+
+  const availableAxes = aggregated.axes.filter((axis) => axis.available);
+
+  if (availableAxes.length === 0) {
+    return null;
+  }
+
+  // Total segments across every available axis drives confidence.
+  const totalSegments = availableAxes.reduce(
+    (sum, axis) => sum + (axis.numSegments || 0),
+    0,
+  );
+
+  const confidence = stepResponseConfidence(totalSegments);
+
+  // Each axis gets a status from the worst of its three metrics.
+  const assessed = availableAxes.map((axis) => {
+    const overshootPercent = (axis.metrics.maxOvershoot || 0) * 100;
+    const axisStatus = worstStatus(
+      overshootStatusPercent(overshootPercent),
+      settlingStatusMs(axis.metrics.settlingTimeMs || 0),
+      riseStatusMs(axis.metrics.riseTimeMs || 0),
+    );
+    return {
+      axis,
+      status: axisStatus,
+      worstMetric: worstMetricForAxis(axis),
+    };
+  });
+
+  // The card follows the worst axis.
+  const worst = assessed.reduce(
+    (lead, entry) =>
+      STATUS_RANK[entry.status] > STATUS_RANK[lead.status] ? entry : lead,
+    assessed[0],
+  );
+
+  // Low confidence softens an attention to watch — a 2-segment
+  // overshoot is not the same claim as a 20-segment one.
+  let cardStatus = worst.status;
+  if (cardStatus === "attention" && confidence === "low") {
+    cardStatus = "watch";
+  }
+
+  const axisName = worst.axis.axis.toLowerCase();
+  const metric = worst.worstMetric;
+
+  const headline =
+    cardStatus === "good"
+      ? "Step response looks clean across all axes"
+      : `${worst.axis.axis} ${metric.label}${
+          metric.status === "attention" ? " — needs work" : " — worth a look"
+        }`;
+
+  const detail =
+    cardStatus === "good"
+      ? `Rise, overshoot and settling are within healthy ranges across roll, pitch and yaw.`
+      : `${worst.axis.axis} ${metric.label}. ${
+          assessed.length > 1
+            ? `${assessed.length - 1} other ${
+                assessed.length - 1 === 1 ? "axis" : "axes"
+              } ${
+                assessed.some((a) => a.status === "attention")
+                  ? "also need attention"
+                  : "are in better shape"
+              }. `
+            : ""
+        }Recovered from ${totalSegments} command segment${
+          totalSegments === 1 ? "" : "s"
+        }${
+          confidence === "low"
+            ? " — few segments, so treat this as a hint rather than a verdict"
+            : ""
+        }.`;
+
+  return {
+    key: "stepResponse",
+    title: "Step Response",
+    status: cardStatus,
+    headline,
+    detail,
+    action:
+      cardStatus === "good"
+        ? "Nothing to do — this is what a healthy closed-loop response looks like."
+        : tuningAction(axisName, metric),
+    screen: "stepResponse",
+    evidence: "Step Response chart, Step Response Lab",
   };
 }
 
@@ -772,7 +973,7 @@ function signalVerdict(signalLab) {
         ? "Nothing to do."
         : "Open the Signal Lab: the events name each moment.",
     screen: "signal",
-    evidence: "Signal Lab events"
+    evidence: "Signal Lab events",
   };
 }
 
@@ -799,7 +1000,7 @@ function becVerdict(becLab) {
         ? "Nothing to do."
         : "Open the BEC Lab: each dip carries its servo context.",
     screen: "bec",
-    evidence: "BEC Lab events"
+    evidence: "BEC Lab events",
   };
 }
 
@@ -823,7 +1024,7 @@ const CARD_CAPABILITY = {
   power: "Battery & ESC",
   battery: "Battery & ESC",
   signal: "Signal & link",
-  bec: "BEC output"
+  bec: "BEC output",
 };
 
 const UNAVAILABLE_CARDS = {
@@ -833,13 +1034,13 @@ const UNAVAILABLE_CARDS = {
     screen: "filter",
     evidence: "Filter Lab",
     fallbackNote:
-      "The flight never held steady long enough for a spectrum, or the log carries no gyro data."
+      "The flight never held steady long enough for a spectrum, or the log carries no gyro data.",
   },
   rotor: {
     title: "Rotor Speed",
     headline: "Headspeed not logged",
     screen: "governor",
-    evidence: "Governor Lab"
+    evidence: "Governor Lab",
   },
   power: {
     title: "Power & ESC",
@@ -847,26 +1048,26 @@ const UNAVAILABLE_CARDS = {
     screen: "esc",
     evidence: "ESC Lab",
     fallbackNote:
-      "Output headroom needs motor or ESC-throttle output and rotor speed in the log."
+      "Output headroom needs motor or ESC-throttle output and rotor speed in the log.",
   },
   battery: {
     title: "Battery",
     headline: "Voltage not logged",
     screen: "battery",
-    evidence: "Battery Lab"
+    evidence: "Battery Lab",
   },
   signal: {
     title: "Signal",
     headline: "Link telemetry not logged",
     screen: "signal",
-    evidence: "Signal Lab"
+    evidence: "Signal Lab",
   },
   bec: {
     title: "BEC Output",
     headline: "BEC voltage not logged",
     screen: "bec",
-    evidence: "BEC Lab"
-  }
+    evidence: "BEC Lab",
+  },
 };
 
 // What to DO about a gap — the sensor to check or the telemetry
@@ -891,8 +1092,10 @@ export function gapAdvice(key, capability) {
     case "bec":
       return "No BEC voltage logged. Enable BEC voltage telemetry to watch the power your receiver and servos run on.";
     case "vibration":
-      return capability?.note ??
-        "No noise reading: fly a longer steady stretch, or log the gyro at a healthy rate.";
+      return (
+        capability?.note ??
+        "No noise reading: fly a longer steady stretch, or log the gyro at a healthy rate."
+      );
     default:
       return capability?.note ?? null;
   }
@@ -925,9 +1128,7 @@ export function gapShort(key, capability) {
 
 function capabilityFor(capabilities, key) {
   const name = CARD_CAPABILITY[key];
-  return (
-    (capabilities ?? []).find((entry) => entry.name === name) ?? null
-  );
+  return (capabilities ?? []).find((entry) => entry.name === name) ?? null;
 }
 
 function unavailableCard(key, capability, { rotorMissing = false } = {}) {
@@ -936,14 +1137,13 @@ function unavailableCard(key, capability, { rotorMissing = false } = {}) {
   // Power and battery are read over steady flight, which is found
   // from rotor speed: with no headspeed logged THAT is the blocker,
   // not the current sensor.
-  const rotorBlocked =
-    rotorMissing && (key === "power" || key === "battery");
+  const rotorBlocked = rotorMissing && (key === "power" || key === "battery");
   const note = rotorBlocked
     ? "Measured over steady flight, which is found from rotor speed — and this log records none."
-    : capability?.note ?? spec.fallbackNote ?? "Not logged.";
+    : (capability?.note ?? spec.fallbackNote ?? "Not logged.");
   const advice = rotorBlocked
     ? "No headspeed logged: output headroom and pack condition are read over steady flight found from rotor speed. Enable RPM telemetry to unlock them."
-    : gapAdvice(key, capability) ?? note;
+    : (gapAdvice(key, capability) ?? note);
   return {
     key,
     title: spec.title,
@@ -961,7 +1161,7 @@ function unavailableCard(key, capability, { rotorMissing = false } = {}) {
     gap: note,
     gapAction: advice,
     screen: spec.screen,
-    evidence: spec.evidence
+    evidence: spec.evidence,
   };
 }
 
@@ -975,7 +1175,7 @@ function withCapabilityGap(card, capability) {
     ...card,
     gap: capability.note,
     gapShort: gapShort(card.key, capability),
-    gapAction: gapAdvice(card.key, capability)
+    gapAction: gapAdvice(card.key, capability),
   };
 }
 
@@ -990,7 +1190,8 @@ export function buildFlightVerdict({
   filterAdvice = null,
   signalLab = null,
   becLab = null,
-  capabilities = null
+  capabilities = null,
+  stepResponseResult = null,
 }) {
   // Peak naming needs the rotor speed the machine flew at. The
   // caller passes the stable-flight mean when one exists; the
@@ -1007,7 +1208,7 @@ export function buildFlightVerdict({
     spectra,
     governedHeadspeed,
     filterAdvice,
-    pidAnalysis
+    pidAnalysis,
   );
 
   // Every card slot is filled: a lab that measured speaks its
@@ -1029,7 +1230,7 @@ export function buildFlightVerdict({
         return {
           ...card,
           gap: card.gap ?? filled?.gap ?? null,
-          gapAction: card.gapAction ?? filled?.gapAction ?? card.action ?? null
+          gapAction: card.gapAction ?? filled?.gapAction ?? card.action ?? null,
         };
       }
       return withCapabilityGap(card, capability);
@@ -1040,16 +1241,17 @@ export function buildFlightVerdict({
   };
 
   const cards = [
-  slot("vibration", vibration),
-  slot("rotor", rotorSpeedVerdictFromLab(labs?.governor)),
-  tuningVerdict(pidAnalysis, {
-    vibrationConcern: vibration?.status === "attention"
-  }),
-  slot("power", powerVerdictFromLab(labs?.esc)),
-  slot("battery", batteryVerdictFromLab(labs?.battery)),
-  slot("signal", signalVerdict(signalLab)),
-  slot("bec", becVerdict(becLab))
-].filter(Boolean);
+    slot("vibration", vibration),
+    slot("rotor", rotorSpeedVerdictFromLab(labs?.governor)),
+    tuningVerdict(pidAnalysis, {
+      vibrationConcern: vibration?.status === "attention",
+    }),
+    slot("power", powerVerdictFromLab(labs?.esc)),
+    slot("battery", batteryVerdictFromLab(labs?.battery)),
+    slot("signal", signalVerdict(signalLab)),
+    slot("bec", becVerdict(becLab)),
+    stepResponseVerdict(stepResponseResult),
+  ].filter(Boolean);
 
   // Unavailable cards never color the flight: not-logged is not
   // unhealthy.

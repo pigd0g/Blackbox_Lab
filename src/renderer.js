@@ -8,29 +8,29 @@ import {
   renderTimeSeriesChart,
   renderSpectrumChart,
   renderStepResponseChart,
-  CHART_COLORS
+  CHART_COLORS,
 } from "./ui/charts.js";
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import { analyzeAllFlightsStepResponse } from "./analysis/stepResponseAnalysis.js";
 import {
   buildContributionV1,
-  describeContribution
+  describeContribution,
 } from "./contribute/contributionBuilder.js";
 import { uploadContributionV1 } from "./contribute/uploader.js";
 import {
   scrubDump,
   looksLikeDump,
-  readDumpIdentity
+  readDumpIdentity,
 } from "./contribute/dumpScrubber.js";
 import { buildFingerprint } from "./contribute/fingerprint.js";
 import {
   hasContributed,
-  recordContributed
+  recordContributed,
 } from "./contribute/uploadLedger.js";
 import {
   CONTRIBUTE_ENDPOINT,
-  CONTRIBUTE_APP_VERSION
+  CONTRIBUTE_APP_VERSION,
 } from "./contribute/config.js";
 import { APP_VERSION, checkForUpdate } from "./version.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
@@ -39,36 +39,33 @@ import { getColumnValues } from "./analysis/mathHelpers.js";
 import {
   getMetadataValue,
   isPlausibleFlightDate,
-  resolveFlightDateMs
+  resolveFlightDateMs,
 } from "./analysis/metadataReader.js";
 import {
   isSettingsDumpFile,
-  LARGEST_PLAUSIBLE_DUMP_BYTES
+  LARGEST_PLAUSIBLE_DUMP_BYTES,
 } from "./analysis/fileIdentification.js";
 import {
   computeNoiseSpectrum,
   computeNoiseSpectrumOverRuns,
   estimateSampleRate,
-  peakMagnitudeAbove
+  peakMagnitudeAbove,
 } from "./analysis/dsp/fft.js";
 import {
   isUsableGovernorTarget,
   detectStableFlightPhase,
   detectInFlightSamples,
-  qualifiedLoadEnvelope
+  qualifiedLoadEnvelope,
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import {
   compareFlights,
   extractComparableSetup,
   diffSetups,
-  chronologicalOrder
+  chronologicalOrder,
 } from "./analysis/compareFlights.js";
 import { longestFlightIndex } from "./analysis/flightSelection.js";
-import {
-  assessLogQuality,
-  columnCarriesData
-} from "./analysis/logQuality.js";
+import { assessLogQuality, columnCarriesData } from "./analysis/logQuality.js";
 import {
   buildErrorBundle,
   bundleFingerprint,
@@ -76,7 +73,7 @@ import {
   installErrorCapture,
   alreadySent,
   markSent,
-  sendErrorReport
+  sendErrorReport,
 } from "./errorReport.js";
 
 // What the pilot last asked for — one line of context that turns
@@ -86,25 +83,28 @@ let lastUserAction = null;
 function noteAction(action) {
   lastUserAction = action;
 }
-import { buildFlightEvents, eventChartWindow } from "./analysis/flightEvents.js";
+import {
+  buildFlightEvents,
+  eventChartWindow,
+} from "./analysis/flightEvents.js";
 import {
   columnTableFor,
   finiteColumnValues,
-  alignedColumnValues as alignedColumnValuesFromTable
+  alignedColumnValues as alignedColumnValuesFromTable,
 } from "./analysis/columnTable.js";
 import {
   groupLogFields,
   fieldNameFromKey,
   fieldMatchesSearch,
   fieldHeading,
-  describeField
+  describeField,
 } from "./ui/replayFields.js";
 import {
   readPilotInput,
   createStickDisplay,
   getStickMode,
   setStickMode,
-  timeToRowIndex
+  timeToRowIndex,
 } from "./ui/stickDisplay.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
@@ -123,13 +123,16 @@ import {
   prefillCraftCard,
   craftCardFromDump,
   getCraftDump,
-  saveCraftDump
+  saveCraftDump,
 } from "./analysis/craftHistory.js";
-import { analyzeGovernorLab, describeBank } from "./analysis/governorLabAnalysis.js";
+import {
+  analyzeGovernorLab,
+  describeBank,
+} from "./analysis/governorLabAnalysis.js";
 import { ACADEMY_ENTRIES } from "./academy.js";
 import {
   detectGovernorEvents,
-  governorEventWindow
+  governorEventWindow,
 } from "./analysis/governorEvents.js";
 import { buildRecommendations } from "./analysis/recommendationEngine.js";
 import { buildPack } from "./analysis/packBuilder.js";
@@ -138,21 +141,21 @@ import { packSnippet, revertSnippet } from "./analysis/packSnippet.js";
 import {
   fileAnalysis,
   latestPack,
-  openConfirmations
+  openConfirmations,
 } from "./analysis/confirmationLedger.js";
 import {
   assessAppliedState,
-  assessDumpFreshness
+  assessDumpFreshness,
 } from "./analysis/appliedState.js";
 import { gradeAppliedPack } from "./analysis/verificationAutopilot.js";
 import {
   analyzeServoLimits,
-  servoDisplayName
+  servoDisplayName,
 } from "./analysis/servoLimitAnalysis.js";
 import { analyzeSignalLab } from "./analysis/signalLabAnalysis.js";
 import {
   analyzeBecLab,
-  correlateSignalAndPower
+  correlateSignalAndPower,
 } from "./analysis/becLabAnalysis.js";
 import { analyzePrecomp } from "./analysis/precompAnalysis.js";
 import { chooseVoltageSource } from "./analysis/batteryLabAnalysis.js";
@@ -164,7 +167,7 @@ import {
   isCollectiveDriven,
   groupByGovernorTarget,
   longestConsecutiveRun,
-  allConsecutiveRuns
+  allConsecutiveRuns,
 } from "./analysis/evidenceViews.js";
 import { analyzeProfileResponse } from "./analysis/profilePidBreakdown.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
@@ -269,7 +272,13 @@ let currentStepResponseResults = null;
 let currentPilotInput = null;
 const stickControllers = new Map();
 
-function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom }) {
+function mountStickInset({
+  wrapId,
+  canvasId,
+  chartElements,
+  anchorTime,
+  playFrom,
+}) {
   const wrap = el(wrapId);
   const canvas = el(canvasId);
 
@@ -278,14 +287,18 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
   stickControllers.get(canvasId)?.controller.stop();
   stickControllers.delete(canvasId);
 
-  if (!currentPilotInput?.available || !currentDataset || !Number.isFinite(anchorTime)) {
+  if (
+    !currentPilotInput?.available ||
+    !currentDataset ||
+    !Number.isFinite(anchorTime)
+  ) {
     wrap.hidden = true;
     return;
   }
 
   const controller = createStickDisplay(canvas, {
     dataset: currentDataset,
-    pilotInput: currentPilotInput
+    pilotInput: currentPilotInput,
   });
 
   if (!controller) {
@@ -303,11 +316,13 @@ function mountStickInset({ wrapId, canvasId, chartElements, anchorTime, playFrom
   stickControllers.set(canvasId, {
     controller,
     anchorTime,
-    replayWindow
+    replayWindow,
   });
 
   if (playFrom) {
-    controller.playWindow(replayWindow.min, replayWindow.max, { restTime: anchorTime });
+    controller.playWindow(replayWindow.min, replayWindow.max, {
+      restTime: anchorTime,
+    });
   } else {
     controller.showTime(anchorTime);
   }
@@ -350,13 +365,10 @@ document.addEventListener("click", (event) => {
   const entry = stickControllers.get(button.dataset.stickReplay);
   if (!entry) return;
 
-  entry.controller.playWindow(
-    entry.replayWindow.min,
-    entry.replayWindow.max,
-    { restTime: entry.anchorTime }
-  );
+  entry.controller.playWindow(entry.replayWindow.min, entry.replayWindow.max, {
+    restTime: entry.anchorTime,
+  });
 });
-
 
 // ======================================================
 // REPLAY — fly the log again (Log Viewer transport)
@@ -371,7 +383,6 @@ document.addEventListener("click", (event) => {
 // the charts, never their owner.
 // ======================================================
 
-
 // ------------------------------------------------------
 // Replay graph stack — the pilot builds the working view.
 // Curated presets, one shared timeline (linked zoom), the
@@ -380,91 +391,133 @@ document.addEventListener("click", (event) => {
 // ------------------------------------------------------
 
 const REPLAY_LAYOUT_KEY = "blackboxLabReplayLayout";
-const REPLAY_DEFAULT_LAYOUT = ["tracking-roll", "headspeed", "throttle", "power"];
+const REPLAY_DEFAULT_LAYOUT = [
+  "tracking-roll",
+  "headspeed",
+  "throttle",
+  "power",
+];
 
 const REPLAY_GRAPH_PRESETS = [
   {
     key: "tracking-roll",
     label: "Roll: target vs gyro",
     yLabel: "deg/s",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^setpoint\[0\]$/i], color: PRESET_COLORS.setpoint },
-      { patterns: [/^gyroADC\[0\]$/i], color: PRESET_COLORS.gyro }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        { patterns: [/^setpoint\[0\]$/i], color: PRESET_COLORS.setpoint },
+        { patterns: [/^gyroADC\[0\]$/i], color: PRESET_COLORS.gyro },
+      ]),
   },
   {
     key: "tracking-pitch",
     label: "Pitch: target vs gyro",
     yLabel: "deg/s",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^setpoint\[1\]$/i], color: PRESET_COLORS.setpoint },
-      { patterns: [/^gyroADC\[1\]$/i], color: PRESET_COLORS.gyro }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        { patterns: [/^setpoint\[1\]$/i], color: PRESET_COLORS.setpoint },
+        { patterns: [/^gyroADC\[1\]$/i], color: PRESET_COLORS.gyro },
+      ]),
   },
   {
     key: "tracking-yaw",
     label: "Yaw: target vs gyro",
     yLabel: "deg/s",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^setpoint\[2\]$/i], color: PRESET_COLORS.setpoint },
-      { patterns: [/^gyroADC\[2\]$/i], color: PRESET_COLORS.gyro }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        { patterns: [/^setpoint\[2\]$/i], color: PRESET_COLORS.setpoint },
+        { patterns: [/^gyroADC\[2\]$/i], color: PRESET_COLORS.gyro },
+      ]),
   },
   {
     key: "gyro",
     label: "Gyro (filtered, all axes)",
     yLabel: "deg/s",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^gyroADC\[0\]$/i], color: CHART_COLORS[0] },
-      { patterns: [/^gyroADC\[1\]$/i], color: CHART_COLORS[1] },
-      { patterns: [/^gyroADC\[2\]$/i], color: CHART_COLORS[2] }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        { patterns: [/^gyroADC\[0\]$/i], color: CHART_COLORS[0] },
+        { patterns: [/^gyroADC\[1\]$/i], color: CHART_COLORS[1] },
+        { patterns: [/^gyroADC\[2\]$/i], color: CHART_COLORS[2] },
+      ]),
   },
   {
     key: "gyro-raw",
     label: "Gyro (unfiltered)",
     yLabel: "deg/s",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^gyroUnfilt\[0\]$/i, /^gyroRAW\[0\]$/i], color: CHART_COLORS[0] },
-      { patterns: [/^gyroUnfilt\[1\]$/i, /^gyroRAW\[1\]$/i], color: CHART_COLORS[1] },
-      { patterns: [/^gyroUnfilt\[2\]$/i, /^gyroRAW\[2\]$/i], color: CHART_COLORS[2] }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        {
+          patterns: [/^gyroUnfilt\[0\]$/i, /^gyroRAW\[0\]$/i],
+          color: CHART_COLORS[0],
+        },
+        {
+          patterns: [/^gyroUnfilt\[1\]$/i, /^gyroRAW\[1\]$/i],
+          color: CHART_COLORS[1],
+        },
+        {
+          patterns: [/^gyroUnfilt\[2\]$/i, /^gyroRAW\[2\]$/i],
+          color: CHART_COLORS[2],
+        },
+      ]),
   },
   {
     key: "headspeed",
     label: "Headspeed & governor target",
     yLabel: "rpm",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^governorTarget$/i, /^govTarget$/i], color: CHART_COLORS[0] },
-      { patterns: [/^headspeed$/i, /^erpm/i], color: CHART_COLORS[1] }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        {
+          patterns: [/^governorTarget$/i, /^govTarget$/i],
+          color: CHART_COLORS[0],
+        },
+        { patterns: [/^headspeed$/i, /^erpm/i], color: CHART_COLORS[1] },
+      ]),
   },
   {
     key: "collective",
     label: "Collective",
     yLabel: "collective",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^setpoint\[3\]$/i], color: CHART_COLORS[5] }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        { patterns: [/^setpoint\[3\]$/i], color: CHART_COLORS[5] },
+      ]),
   },
   {
     key: "throttle",
     label: "Motor output (%)",
     yLabel: "output (%)",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: [/^motor\[0\]$/i], color: CHART_COLORS[3], convert: toThrottlePercent },
-      { patterns: [/^motor\[1\]$/i], color: CHART_COLORS[4], convert: toThrottlePercent }
-    ])
+    series: (dataset) =>
+      presetSeries(dataset, [
+        {
+          patterns: [/^motor\[0\]$/i],
+          color: CHART_COLORS[3],
+          convert: toThrottlePercent,
+        },
+        {
+          patterns: [/^motor\[1\]$/i],
+          color: CHART_COLORS[4],
+          convert: toThrottlePercent,
+        },
+      ]),
   },
   {
     key: "power",
     label: "Voltage & current",
     yLabel: "V · A",
-    series: (dataset) => presetSeries(dataset, [
-      { patterns: dataset.voltagePatterns, color: CHART_COLORS[0], convert: toVolts },
-      { patterns: [/^EscI$/i, /^amperageLatest$/i], color: CHART_COLORS[1], convert: toAmps }
-    ])
-  }
+    series: (dataset) =>
+      presetSeries(dataset, [
+        {
+          patterns: dataset.voltagePatterns,
+          color: CHART_COLORS[0],
+          convert: toVolts,
+        },
+        {
+          patterns: [/^EscI$/i, /^amperageLatest$/i],
+          color: CHART_COLORS[1],
+          convert: toAmps,
+        },
+      ]),
+  },
 ];
 
 function presetSeries(dataset, entries) {
@@ -478,7 +531,7 @@ function presetSeries(dataset, entries) {
     series.push({
       label: column,
       values: decimate(entry.convert ? entry.convert(raw) : raw),
-      color: entry.color
+      color: entry.color,
     });
   }
 
@@ -495,7 +548,7 @@ function loadReplayLayout() {
       return stored.filter(
         (key) =>
           REPLAY_GRAPH_PRESETS.some((preset) => preset.key === key) ||
-          fieldNameFromKey(key) !== null
+          fieldNameFromKey(key) !== null,
       );
     }
   } catch {
@@ -548,22 +601,21 @@ function renderReplayStack(dataset) {
 
     if (!preset && fieldName === null) continue;
 
-    const fieldEntry = fieldName !== null
-      ? fieldByKey.get(key) ?? {
-          name: fieldName,
-          key,
-          alias: describeField(fieldName).alias,
-          unit: describeField(fieldName).unit
-        }
-      : null;
+    const fieldEntry =
+      fieldName !== null
+        ? (fieldByKey.get(key) ?? {
+            name: fieldName,
+            key,
+            alias: describeField(fieldName).alias,
+            unit: describeField(fieldName).unit,
+          })
+        : null;
 
     const series = preset
       ? preset.series(dataset)
       : fieldSeries(dataset, fieldEntry);
 
-    const heading = preset
-      ? preset.label
-      : fieldHeading(fieldEntry);
+    const heading = preset ? preset.label : fieldHeading(fieldEntry);
 
     const row = document.createElement("div");
     row.className = "replay-graph-row";
@@ -594,7 +646,7 @@ function renderReplayStack(dataset) {
       series,
       yLabel: preset ? preset.yLabel : fieldEntry.unit,
       height: 170,
-      linkGroup: "replayStack"
+      linkGroup: "replayStack",
     });
   }
 
@@ -620,7 +672,10 @@ function replayHeaderNames(dataset) {
 function fieldSeries(dataset, fieldEntry) {
   if (!fieldEntry) return [];
   const column = dataset.findColumnsIn([
-    new RegExp(`^${fieldEntry.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+    new RegExp(
+      `^${fieldEntry.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+      "i",
+    ),
   ])[0];
   if (!column) return [];
   const values = dataset.columnValues(column);
@@ -633,8 +688,8 @@ function fieldSeries(dataset, fieldEntry) {
       label: fieldEntry.alias ?? fieldEntry.name,
       exactLabel: true,
       values: decimate(values),
-      color: CHART_COLORS[0]
-    }
+      color: CHART_COLORS[0],
+    },
   ];
 }
 
@@ -674,7 +729,7 @@ function renderReplayFieldBrowser(layout, fieldGroups) {
 
   const totalFields = fieldGroups.reduce(
     (sum, group) => sum + group.fields.length,
-    0
+    0,
   );
   browser.hidden = totalFields === 0;
   if (totalFields === 0) return;
@@ -690,7 +745,7 @@ function renderReplayFieldBrowser(layout, fieldGroups) {
 
   for (const group of fieldGroups) {
     const matching = group.fields.filter((entry) =>
-      fieldMatchesSearch(entry, replayFieldSearchQuery)
+      fieldMatchesSearch(entry, replayFieldSearchQuery),
     );
     if (matching.length === 0) continue;
 
@@ -754,7 +809,7 @@ el("replayFieldSearch")?.addEventListener("input", (event) => {
   renderReplayAddMenu(
     addSelect,
     loadReplayLayout(),
-    groupLogFields(replayHeaderNames(currentDataset))
+    groupLogFields(replayHeaderNames(currentDataset)),
   );
 });
 
@@ -782,7 +837,9 @@ el("replayGraphStack")?.addEventListener("click", (event) => {
   const layout = loadReplayLayout();
 
   if (remove) {
-    saveReplayLayout(layout.filter((key) => key !== remove.dataset.stackRemove));
+    saveReplayLayout(
+      layout.filter((key) => key !== remove.dataset.stackRemove),
+    );
   } else {
     const key = move.dataset.stackKey;
     const delta = Number(move.dataset.stackMove);
@@ -797,7 +854,6 @@ el("replayGraphStack")?.addEventListener("click", (event) => {
   replay.playheads = [];
 });
 
-
 const replay = {
   time: 0,
   duration: 0,
@@ -807,7 +863,7 @@ const replay = {
   lastTick: null,
   sticks: null,
   readout: null,
-  playheads: []
+  playheads: [],
 };
 
 function replayElements() {
@@ -819,7 +875,7 @@ function replayElements() {
     readout: el("replayReadout"),
     scrub: el("replayScrub"),
     ticks: el("replayTicks"),
-    sticksCanvas: el("replaySticks")
+    sticksCanvas: el("replaySticks"),
   };
 }
 
@@ -832,7 +888,11 @@ function setupReplay(dataset, pilotInput, flightEvents) {
   replay.time = 0;
   replay.playheads = [];
 
-  if (!dataset || !Array.isArray(dataset.timeSeconds) || dataset.timeSeconds.length < 2) {
+  if (
+    !dataset ||
+    !Array.isArray(dataset.timeSeconds) ||
+    dataset.timeSeconds.length < 2
+  ) {
     ui.card.hidden = true;
     return;
   }
@@ -844,20 +904,20 @@ function setupReplay(dataset, pilotInput, flightEvents) {
 
   // The sticks follow when the log recorded the pilot's hands;
   // without rcCommand the transport still runs, sticks hidden.
-  replay.sticks =
-    pilotInput?.available
-      ? createStickDisplay(ui.sticksCanvas, { dataset, pilotInput })
-      : null;
+  replay.sticks = pilotInput?.available
+    ? createStickDisplay(ui.sticksCanvas, { dataset, pilotInput })
+    : null;
 
   const stickCol = ui.sticksCanvas?.closest(".stick-col");
   if (stickCol) stickCol.hidden = !replay.sticks;
 
   // Live readouts: headspeed and pack voltage at the playhead.
-  const voltageColumn = dataset.findColumnsIn(dataset.voltagePatterns)[0] ?? null;
+  const voltageColumn =
+    dataset.findColumnsIn(dataset.voltagePatterns)[0] ?? null;
   replay.readout = {
     headspeed: Array.isArray(dataset.headspeed) ? dataset.headspeed : null,
     volts: voltageColumn ? toVolts(dataset.columnValues(voltageColumn)) : null,
-    timeSeconds: dataset.timeSeconds
+    timeSeconds: dataset.timeSeconds,
   };
 
   // Flight events as timeline ticks — the debrief on the scrub bar.
@@ -928,7 +988,8 @@ function replayUpdateUI() {
     const rpm = replay.readout.headspeed?.[row];
     const volts = replay.readout.volts?.[row];
     if (Number.isFinite(rpm) && rpm > 0) parts.push(`${Math.round(rpm)} rpm`);
-    if (Number.isFinite(volts) && volts > 0) parts.push(`${volts.toFixed(1)} V`);
+    if (Number.isFinite(volts) && volts > 0)
+      parts.push(`${volts.toFixed(1)} V`);
     ui.readout.textContent = parts.join(" · ");
   }
 
@@ -1001,12 +1062,10 @@ el("replaySpeed")?.addEventListener("change", () => {
 
 el("replayScrub")?.addEventListener("input", () => {
   if (replay.duration <= 0) return;
-  replay.time =
-    (Number(el("replayScrub").value) / 1000) * replay.duration;
+  replay.time = (Number(el("replayScrub").value) / 1000) * replay.duration;
   if (replay.playheads.length === 0) replayCollectPlayheads();
   replayUpdateUI();
 });
-
 
 const droopContextCard = el("droopContextCard");
 const droopContextTitle = el("droopContextTitle");
@@ -1086,7 +1145,6 @@ el("sidebarVersion").textContent = `v${APP_VERSION}`;
 // switch and the Settings checkbox both go through here,
 // so they can never disagree.
 const sidebarAdvancedToggle = el("sidebarAdvancedToggle");
-
 
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
@@ -1249,8 +1307,8 @@ const loadStayHere = el("loadStayHere");
 
 function currentScreenName() {
   return (
-    document.querySelector("[data-screen].screen-active")?.dataset
-      .screen ?? "home"
+    document.querySelector("[data-screen].screen-active")?.dataset.screen ??
+    "home"
   );
 }
 
@@ -1327,7 +1385,7 @@ async function looksLikeSettingsDump(file) {
   return isSettingsDumpFile({
     name: file.name,
     size: file.size,
-    head: await file.slice(0, DUMP_SNIFF_BYTES).text()
+    head: await file.slice(0, DUMP_SNIFF_BYTES).text(),
   });
 }
 
@@ -1346,7 +1404,7 @@ async function routeSettingsDump(file) {
   // attach them to, and no way to know which helicopter they belong to.
   if (!currentCraftName) {
     setLoadStatus(
-      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home. The settings are filed against that helicopter.`
+      `${file.name} looks like a Rotorflight settings dump. Open the flight it belongs to first, then add the dump from the model card on Home. The settings are filed against that helicopter.`,
     );
     finishLoadProgress(false);
     return true;
@@ -1359,7 +1417,7 @@ async function routeSettingsDump(file) {
   navigation.showScreen("home");
 
   setLoadStatus(
-    `${file.name} read into your ${currentCraftName} model card. The flight stays open.`
+    `${file.name} read into your ${currentCraftName} model card. The flight stays open.`,
   );
   finishLoadProgress(true);
   return true;
@@ -1386,9 +1444,7 @@ async function loadFromFile(file) {
   const logData = await readLogFile(file);
 
   if (!logData || logData.flights.length === 0) {
-    setLoadStatus(
-      "Could not read any flight data from this file."
-    );
+    setLoadStatus("Could not read any flight data from this file.");
     finishLoadProgress(false);
     return;
   }
@@ -1412,9 +1468,7 @@ async function loadFromFile(file) {
 
   flightPicker.hidden = logData.flights.length < 2;
 
-  setLoadStatus(
-    "Analyzing flight... (big logs take a few seconds)"
-  );
+  setLoadStatus("Analyzing flight... (big logs take a few seconds)");
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   // Multi-flight files open on the LONGEST flight — the same
@@ -1444,9 +1498,7 @@ logFileInput.addEventListener("change", async () => {
     try {
       await loadFromFile(logFileInput.files[0]);
     } catch (error) {
-      setLoadStatus(
-        "Something went wrong reading this log: " + error.message
-      );
+      setLoadStatus("Something went wrong reading this log: " + error.message);
       finishLoadProgress(false);
       // A file the decoder cannot read is exactly the failure the
       // project most needs to hear about.
@@ -1467,19 +1519,14 @@ trySampleButton.addEventListener("click", async () => {
 
   fileStatus.textContent = "Loading sample flight...";
 
-  const bytes = await window.blackboxLab.readSampleLog(
-    "sample-bell-222ut.bbl"
-  );
+  const bytes = await window.blackboxLab.readSampleLog("sample-bell-222ut.bbl");
 
   if (!bytes) {
     fileStatus.textContent = "Could not load the sample flight.";
     return;
   }
 
-  const file = new File(
-    [new Uint8Array(bytes)],
-    "sample-bell-222ut.bbl"
-  );
+  const file = new File([new Uint8Array(bytes)], "sample-bell-222ut.bbl");
 
   await loadFromFile(file);
 
@@ -1506,17 +1553,9 @@ function hasOwnUnfiltered(headerLine) {
 function findColumns(headerLine, patterns) {
   const names = headerLine
     .split(",")
-    .map((name) =>
-      name
-        .trim()
-        .replace(/^"|"$/g, "")
-    );
+    .map((name) => name.trim().replace(/^"|"$/g, ""));
 
-  return names.filter((name) =>
-    patterns.some((pattern) =>
-      pattern.test(name)
-    )
-  );
+  return names.filter((name) => patterns.some((pattern) => pattern.test(name)));
 }
 
 function decimate(values, maximumPoints = 60000) {
@@ -1554,11 +1593,7 @@ function averageOf(values) {
 function buildColumnTable(lines, headerIndex) {
   const names = lines[headerIndex]
     .split(",")
-    .map((name) =>
-      name
-        .trim()
-        .replace(/^"|"$/g, "")
-    );
+    .map((name) => name.trim().replace(/^"|"$/g, ""));
   const table = new Map();
   const indexesByName = new Map();
   names.forEach((name, index) => {
@@ -1600,34 +1635,28 @@ function buildDataset(lines, pidAnalysis) {
   const columnTable = buildColumnTable(lines, headerIndex);
   const columnValues = (name) => columnTable.get(name) ?? [];
   const alignedColumnValues = (columnName) => {
-  if (!columnName) {
-    return [];
-  }
+    if (!columnName) {
+      return [];
+    }
 
-  const headers = headerLine
-    .split(",")
-    .map((header) =>
-      header
-        .trim()
-        .replace(/^"|"$/g, "")
-    );
+    const headers = headerLine
+      .split(",")
+      .map((header) => header.trim().replace(/^"|"$/g, ""));
 
-  const normalizedColumnName =
-    String(columnName)
+    const normalizedColumnName = String(columnName)
       .trim()
       .replace(/^"|"$/g, "");
 
-  const columnIndex =
-    headers.indexOf(normalizedColumnName);
+    const columnIndex = headers.indexOf(normalizedColumnName);
 
-  if (columnIndex < 0) {
-    return [];
-  }
+    if (columnIndex < 0) {
+      return [];
+    }
 
-  // One value per row, null where the cell was blank or not numeric
-  // — from the shared table, not another pass over the text.
-  return alignedColumnValuesFromTable(lines, headerIndex, columnIndex);
-};
+    // One value per row, null where the cell was blank or not numeric
+    // — from the shared table, not another pass over the text.
+    return alignedColumnValuesFromTable(lines, headerIndex, columnIndex);
+  };
   const firstColumn = (patterns) => {
     const matches = findColumns(headerLine, patterns);
 
@@ -1648,27 +1677,28 @@ function buildDataset(lines, pidAnalysis) {
   const timeMicroseconds = columnValues(timeColumnName);
   const startTime = timeMicroseconds[0] ?? 0;
   const timeSeconds = timeMicroseconds.map(
-    (value) => (value - startTime) / 1_000_000
+    (value) => (value - startTime) / 1_000_000,
   );
 
   const headspeed = firstColumn([/headspeed/i, /^rpm/i]);
-  const governorTargetRaw = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
+  const governorTargetRaw = firstColumn([
+    /governorTarget/i,
+    /govTarget/i,
+    /governor/i,
+  ]);
   // DIRECT-mode / passthrough targets are not rotor-speed targets —
   // treat them as absent so every consumer (labs, events, precomp,
   // phase detection, verdict) falls back to headspeed-only reads.
   // The Log Viewer still charts the raw column as recorded.
-  const governorTarget = isUsableGovernorTarget(
-    headspeed,
-    governorTargetRaw
-  )
+  const governorTarget = isUsableGovernorTarget(headspeed, governorTargetRaw)
     ? governorTargetRaw
     : [];
   const vbat = firstColumn([/^vbat/i]);
-const escVoltage = firstColumn([/^EscV$/i]);
-const amperage = firstColumn([/^amperage/i, /^Ibat/i, /^current/i]);
-const escCurrent = firstColumn([/^EscI$/i]);
-const escThrottle = firstColumn([/^EscThr$/i]);
- const motor = firstColumn([/^motor\[0\]/i]);
+  const escVoltage = firstColumn([/^EscV$/i]);
+  const amperage = firstColumn([/^amperage/i, /^Ibat/i, /^current/i]);
+  const escCurrent = firstColumn([/^EscI$/i]);
+  const escThrottle = firstColumn([/^EscThr$/i]);
+  const motor = firstColumn([/^motor\[0\]/i]);
 
   // ---- spectra + labelled peaks ----
   // Analyze the governed part of the flight only: during
@@ -1688,144 +1718,113 @@ const escThrottle = firstColumn([/^EscThr$/i]);
 
   const fftWindowSize = 4096;
 
-const headspeedColumnName =
-  findColumns(
-    headerLine,
-    [/headspeed/i, /^rpm$/i]
-  )[0] ?? null;
+  const headspeedColumnName =
+    findColumns(headerLine, [/headspeed/i, /^rpm$/i])[0] ?? null;
 
-const governorTargetColumnName =
-  findColumns(
-    headerLine,
-    [
+  const governorTargetColumnName =
+    findColumns(headerLine, [
       /governorTarget/i,
       /govTarget/i,
-      /governor/i
-    ]
-  )[0] ?? null;
+      /governor/i,
+    ])[0] ?? null;
 
-const alignedTimeMicroseconds =
-  alignedColumnValues(timeColumnName);
+  const alignedTimeMicroseconds = alignedColumnValues(timeColumnName);
 
-const alignedHeadspeed =
-  alignedColumnValues(headspeedColumnName);
+  const alignedHeadspeed = alignedColumnValues(headspeedColumnName);
 
-const alignedGovernorTarget =
-  alignedColumnValues(
-    governorTargetColumnName
-  );
+  const alignedGovernorTarget = alignedColumnValues(governorTargetColumnName);
 
-const firstAlignedTime =
-  alignedTimeMicroseconds.find(
-    Number.isFinite
-  ) ?? 0;
+  const firstAlignedTime = alignedTimeMicroseconds.find(Number.isFinite) ?? 0;
 
-const alignedTimeSeconds =
-  alignedTimeMicroseconds.map((value) =>
+  const alignedTimeSeconds = alignedTimeMicroseconds.map((value) =>
     Number.isFinite(value)
-      ? (
-          value -
-          firstAlignedTime
-        ) / 1_000_000
-      : Number.NaN
+      ? (value - firstAlignedTime) / 1_000_000
+      : Number.NaN,
   );
 
-const spectrumFlightPhase =
-  detectStableFlightPhase({
+  const spectrumFlightPhase = detectStableFlightPhase({
     timeSeconds: alignedTimeSeconds,
     headspeed: alignedHeadspeed,
-    governorTarget:
-      alignedGovernorTarget
+    governorTarget: alignedGovernorTarget,
   });
 
-// The noise picture is averaged across EVERY stable run of the
-// flight, not read from one slice. A single window makes the
-// spectrum hostage to where the slice happens to land: an
-// intermittent shake scores very differently between two flights
-// of the same machine purely by window luck.
-const minimumSpectrumRun = 1024;
+  // The noise picture is averaged across EVERY stable run of the
+  // flight, not read from one slice. A single window makes the
+  // spectrum hostage to where the slice happens to land: an
+  // intermittent shake scores very differently between two flights
+  // of the same machine purely by window luck.
+  const minimumSpectrumRun = 1024;
 
-const stableSpectrumRuns = (columnName) => {
-  if (!columnName) {
-    return [];
-  }
-
-  const values = alignedColumnValues(columnName);
-  const runs = [];
-
-  for (const segment of spectrumFlightPhase.segments ?? []) {
-    if (
-      !Number.isInteger(segment.startIndex) ||
-      segment.sampleCount < minimumSpectrumRun
-    ) {
-      continue;
+  const stableSpectrumRuns = (columnName) => {
+    if (!columnName) {
+      return [];
     }
 
-    const run = values.slice(
-      segment.startIndex,
-      segment.startIndex + segment.sampleCount
-    );
+    const values = alignedColumnValues(columnName);
+    const runs = [];
 
-    if (run.every(Number.isFinite)) {
-      runs.push(run);
+    for (const segment of spectrumFlightPhase.segments ?? []) {
+      if (
+        !Number.isInteger(segment.startIndex) ||
+        segment.sampleCount < minimumSpectrumRun
+      ) {
+        continue;
+      }
+
+      const run = values.slice(
+        segment.startIndex,
+        segment.startIndex + segment.sampleCount,
+      );
+
+      if (run.every(Number.isFinite)) {
+        runs.push(run);
+      }
     }
+
+    return runs;
+  };
+
+  const hasSpectrumRuns = (spectrumFlightPhase.segments ?? []).some(
+    (segment) =>
+      Number.isInteger(segment.startIndex) &&
+      segment.sampleCount >= minimumSpectrumRun,
+  );
+
+  const spectra = [];
+
+  // When the chart cannot be drawn, the empty state must name the
+  // actual gate that failed — telling a pilot with 300k gyro samples
+  // that there is "not enough gyro data" contradicts the verdict
+  // sitting right above the chart.
+  let spectraUnavailableReason = null;
+
+  if (gyroColumnNames.length === 0) {
+    spectraUnavailableReason = "no-gyro";
+  } else if (!sampleRate) {
+    spectraUnavailableReason = "no-rate";
+  } else if (!hasSpectrumRuns) {
+    spectraUnavailableReason = "no-stable-run";
   }
 
-  return runs;
-};
-
-const hasSpectrumRuns = (
-  spectrumFlightPhase.segments ?? []
-).some(
-  (segment) =>
-    Number.isInteger(segment.startIndex) &&
-    segment.sampleCount >= minimumSpectrumRun
-);
-
-const spectra = [];
-
-// When the chart cannot be drawn, the empty state must name the
-// actual gate that failed — telling a pilot with 300k gyro samples
-// that there is "not enough gyro data" contradicts the verdict
-// sitting right above the chart.
-let spectraUnavailableReason = null;
-
-if (gyroColumnNames.length === 0) {
-  spectraUnavailableReason = "no-gyro";
-} else if (!sampleRate) {
-  spectraUnavailableReason = "no-rate";
-} else if (!hasSpectrumRuns) {
-  spectraUnavailableReason = "no-stable-run";
-}
-
-if (sampleRate && hasSpectrumRuns) {
-  gyroColumnNames.forEach(
-    (name, index) => {
-      const spectrum =
-        computeNoiseSpectrumOverRuns(
-          stableSpectrumRuns(name),
-          sampleRate,
-          {
-            segmentSize: fftWindowSize
-          }
-        );
+  if (sampleRate && hasSpectrumRuns) {
+    gyroColumnNames.forEach((name, index) => {
+      const spectrum = computeNoiseSpectrumOverRuns(
+        stableSpectrumRuns(name),
+        sampleRate,
+        {
+          segmentSize: fftWindowSize,
+        },
+      );
 
       if (spectrum) {
         spectra.push({
           label: name,
           spectrum,
-          color:
-            CHART_COLORS[
-              index %
-                CHART_COLORS.length
-            ]
+          color: CHART_COLORS[index % CHART_COLORS.length],
         });
       }
-    }
-  );
-}
-
- 
+    });
+  }
 
   // Anchor rotor-harmonic classification to the rotor speed the
   // machine actually flew at. The stable-flight samples are the
@@ -1872,37 +1871,34 @@ if (sampleRate && hasSpectrumRuns) {
   let filteredSpectrumStrongest = null;
 
   if (
-  sampleRate &&
-  unfilteredColumns.length > 0 &&
-  filteredColumns.length > 0
-) {
-  // Match the axis of the strongest unfiltered spectrum
-  // so attenuation is measured apples-to-apples.
-  let strongestIndex = 0;
-  let strongestValue = 0;
+    sampleRate &&
+    unfilteredColumns.length > 0 &&
+    filteredColumns.length > 0
+  ) {
+    // Match the axis of the strongest unfiltered spectrum
+    // so attenuation is measured apples-to-apples.
+    let strongestIndex = 0;
+    let strongestValue = 0;
 
-  spectra.forEach((entry, index) => {
-    const peak = spectrumPeakValue(entry.spectrum);
+    spectra.forEach((entry, index) => {
+      const peak = spectrumPeakValue(entry.spectrum);
 
-    if (peak > strongestValue) {
-      strongestValue = peak;
-      strongestIndex = index;
-    }
-  });
+      if (peak > strongestValue) {
+        strongestValue = peak;
+        strongestIndex = index;
+      }
+    });
 
-  const filteredName =
-    filteredColumns[strongestIndex] ??
-    filteredColumns[0];
+    const filteredName = filteredColumns[strongestIndex] ?? filteredColumns[0];
 
-  filteredSpectrumStrongest =
-    computeNoiseSpectrumOverRuns(
+    filteredSpectrumStrongest = computeNoiseSpectrumOverRuns(
       stableSpectrumRuns(filteredName),
       sampleRate,
       {
-        segmentSize: fftWindowSize
-      }
+        segmentSize: fftWindowSize,
+      },
     );
-}
+  }
   const unfilteredSpectrumStrongest = (() => {
     if (spectra.length === 0) {
       return null;
@@ -1927,7 +1923,7 @@ if (sampleRate && hasSpectrumRuns) {
     filteredSpectrum: hasOwnUnfiltered(headerLine)
       ? filteredSpectrumStrongest
       : null,
-    headspeedRpm: governedHeadspeed
+    headspeedRpm: governedHeadspeed,
   });
 
   // ---- filter behavior per headspeed bank ----
@@ -1937,7 +1933,7 @@ if (sampleRate && hasSpectrumRuns) {
   const perBankFilter = (() => {
     const banks = groupByGovernorTarget({
       governorTarget: alignedGovernorTarget,
-      sampleIndexes: spectrumFlightPhase.stableIndexes ?? []
+      sampleIndexes: spectrumFlightPhase.stableIndexes ?? [],
     });
 
     if (banks.length < 2 || !sampleRate) {
@@ -1973,9 +1969,7 @@ if (sampleRate && hasSpectrumRuns) {
 
       return runs
         .filter((run) => run.length >= minimumSpectrumRun)
-        .map((run) =>
-          values.slice(run.startIndex, run.startIndex + run.length)
-        )
+        .map((run) => values.slice(run.startIndex, run.startIndex + run.length))
         .filter((run) => run.every(Number.isFinite));
     };
 
@@ -1987,21 +1981,21 @@ if (sampleRate && hasSpectrumRuns) {
         return {
           targetRpm: bank.targetRpm,
           stableSampleCount: bank.indexes.length,
-          insufficient: true
+          insufficient: true,
         };
       }
 
       const unfilteredSpectrum = computeNoiseSpectrumOverRuns(
         bankRunSamples(unfilteredName, runs),
         sampleRate,
-        { segmentSize: fftWindowSize }
+        { segmentSize: fftWindowSize },
       );
 
       if (!unfilteredSpectrum) {
         return {
           targetRpm: bank.targetRpm,
           stableSampleCount: bank.indexes.length,
-          insufficient: true
+          insufficient: true,
         };
       }
 
@@ -2009,7 +2003,7 @@ if (sampleRate && hasSpectrumRuns) {
         ? computeNoiseSpectrumOverRuns(
             bankRunSamples(filteredName, runs),
             sampleRate,
-            { segmentSize: fftWindowSize }
+            { segmentSize: fftWindowSize },
           )
         : null;
 
@@ -2040,23 +2034,23 @@ if (sampleRate && hasSpectrumRuns) {
           {
             label: `${unfilteredName} (raw)`,
             spectrum: unfilteredSpectrum,
-            color: CHART_COLORS[1]
+            color: CHART_COLORS[1],
           },
           ...(filteredSpectrum
             ? [
                 {
                   label: `${filteredName} (filtered)`,
                   spectrum: filteredSpectrum,
-                  color: CHART_COLORS[0]
-                }
+                  color: CHART_COLORS[0],
+                },
               ]
-            : [])
+            : []),
         ],
         advice: adviseFilters({
           unfilteredSpectrum,
           filteredSpectrum,
-          headspeedRpm: bankRpm
-        })
+          headspeedRpm: bankRpm,
+        }),
       };
     });
   })();
@@ -2072,8 +2066,7 @@ if (sampleRate && hasSpectrumRuns) {
 
   // ---- labs + verdict ----
   const motorOutputForGovernor =
-    Array.isArray(escThrottle) &&
-    escThrottle.some((value) => Number(value) > 0)
+    Array.isArray(escThrottle) && escThrottle.some((value) => Number(value) > 0)
       ? escThrottle
       : motor;
 
@@ -2086,28 +2079,28 @@ if (sampleRate && hasSpectrumRuns) {
       governorTarget,
       // Output context for the worst-droop event: a dip with the
       // throttle at its ceiling is a power limit, not a gain issue.
-      motorOutput: motorOutputForGovernor
+      motorOutput: motorOutputForGovernor,
     }),
-   esc: analyzeEscLab({
-  timeSeconds,
-  motor,
-  escThrottle,
-  amperage,
-  escCurrent,
-  vbat,
-  escVoltage,
-  headspeed,
-  governorTarget
-}),
+    esc: analyzeEscLab({
+      timeSeconds,
+      motor,
+      escThrottle,
+      amperage,
+      escCurrent,
+      vbat,
+      escVoltage,
+      headspeed,
+      governorTarget,
+    }),
     battery: analyzeBatteryLab({
-  timeSeconds,
-  vbat,
-  escVoltage,
-  amperage,
-  escCurrent,
-  headspeed,
-  governorTarget
-})
+      timeSeconds,
+      vbat,
+      escVoltage,
+      amperage,
+      escCurrent,
+      headspeed,
+      governorTarget,
+    }),
   };
 
   // Radio-link and receiver-power health, computed before the
@@ -2115,9 +2108,9 @@ if (sampleRate && hasSpectrumRuns) {
   // Signal lab's conclusion: a "brownout" on the voltage trace
   // while the receiver demonstrably kept flying is a
   // measurement-path story, not a power-loss story.
-  const servoColumnsForLabs = findColumns(headerLine, [
-    /^servo\[\d\]$/i
-  ]).map((name) => ({ name, values: columnValues(name) }));
+  const servoColumnsForLabs = findColumns(headerLine, [/^servo\[\d\]$/i]).map(
+    (name) => ({ name, values: columnValues(name) }),
+  );
 
   const signalLab = analyzeSignalLab({
     timeSeconds,
@@ -2125,7 +2118,7 @@ if (sampleRate && hasSpectrumRuns) {
     failsafePhase: firstColumn([/^failsafePhase$/i]),
     rxSignalReceived: firstColumn([/^rxSignalReceived$/i]),
     rxFlightChannelsValid: firstColumn([/^rxFlightChannelsValid$/i]),
-    headspeed
+    headspeed,
   });
 
   const becLab = analyzeBecLab({
@@ -2134,9 +2127,8 @@ if (sampleRate && hasSpectrumRuns) {
     servos: servoColumnsForLabs,
     headspeed,
     receiverStayedAlive: signalLab
-      ? signalLab.counts.failsafe === 0 &&
-        signalLab.counts.linkLoss === 0
-      : null
+      ? signalLab.counts.failsafe === 0 && signalLab.counts.linkLoss === 0
+      : null,
   });
 
   // What this log can and cannot tell — decided ONCE, here, and
@@ -2149,34 +2141,49 @@ if (sampleRate && hasSpectrumRuns) {
     hasHeadspeed: columnCarriesData(headspeed),
     hasGovernorTarget: columnCarriesData(governorTarget),
     hasVbat: columnCarriesData(vbat) || columnCarriesData(escVoltage),
-    hasAmperage:
-      columnCarriesData(amperage) || columnCarriesData(escCurrent),
+    hasAmperage: columnCarriesData(amperage) || columnCarriesData(escCurrent),
     // The labs already decided what their telemetry supports —
     // the chips repeat that decision, never re-derive it.
     hasRssi: signalLab?.capability === "full",
     hasLinkFlags: Boolean(signalLab),
-    hasVbec: Boolean(becLab)
+    hasVbec: Boolean(becLab),
   };
 
   const quality = assessLogQuality({
     sampleRateHz: sampleRate,
     durationSeconds: timeSeconds[timeSeconds.length - 1],
-    ...columnPresence
+    ...columnPresence,
   });
 
+  // Step response for the verdict uses the same defaults the
+  // Step Response Lab opens with (Low smoothing, Y-correction
+  // on). It runs on this flight's own lines so the verdict
+  // describes the flight the pilot is about to read about.
+  const stepResponseResult = (() => {
+    try {
+      return analyzeAllFlightsStepResponse(
+        { flights: [{ label: "Flight 1", lines }] },
+        { smoothFactor: 2, yCorrection: true, minInput: 20 },
+      );
+    } catch {
+      return null;
+    }
+  })();
+
   const verdict = buildFlightVerdict({
-  spectra,
-  headspeed,
-  governorTarget,
-  vbat,
-  pidAnalysis,
-  labs,
-  anchorHeadspeedRpm: governedHeadspeed,
-  filterAdvice,
-  signalLab,
-  becLab,
-  capabilities: quality.capabilities
-});
+    spectra,
+    headspeed,
+    governorTarget,
+    vbat,
+    pidAnalysis,
+    labs,
+    anchorHeadspeedRpm: governedHeadspeed,
+    filterAdvice,
+    signalLab,
+    becLab,
+    capabilities: quality.capabilities,
+    stepResponseResult,
+  });
 
   // Evidence that zooms to the moment: attach a focus
   // window (chart + x-range) to the cards that have one.
@@ -2185,7 +2192,7 @@ if (sampleRate && hasSpectrumRuns) {
       card.focus = {
         chartId: "chartSpectrum",
         min: Math.max(0, markers[0].hz - 30),
-        max: markers[0].hz + 30
+        max: markers[0].hz + 30,
       };
     }
 
@@ -2193,7 +2200,7 @@ if (sampleRate && hasSpectrumRuns) {
       card.focus = {
         chartId: "chartGovernor",
         min: Math.max(0, labs.governor.droopTimeSeconds - 3),
-        max: labs.governor.droopTimeSeconds + 3
+        max: labs.governor.droopTimeSeconds + 3,
       };
     }
   }
@@ -2219,10 +2226,10 @@ if (sampleRate && hasSpectrumRuns) {
         (axisResult) => [
           axisResult.axis,
           (axisResult.events ?? []).filter((event) =>
-            Number.isFinite(event.responsePeak)
-          ).length
-        ]
-      )
+            Number.isFinite(event.responsePeak),
+          ).length,
+        ],
+      ),
     ),
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     filterAdvice,
@@ -2257,7 +2264,7 @@ if (sampleRate && hasSpectrumRuns) {
       headspeed,
       governorTarget,
       motorOutput: motorOutputForGovernor,
-      collective
+      collective,
     }),
     // How the anticipation worked: collective transients against
     // headspeed error (governor precomp) and yaw error (tail
@@ -2268,7 +2275,7 @@ if (sampleRate && hasSpectrumRuns) {
       governorTarget,
       collective,
       yawSetpoint: firstColumn([/^setpoint\[2\]$/i]),
-      yawGyro: firstColumn([/^gyroADC\[2\]$/i])
+      yawGyro: firstColumn([/^gyroADC\[2\]$/i]),
     }),
     signalLab,
     becLab,
@@ -2278,20 +2285,20 @@ if (sampleRate && hasSpectrumRuns) {
     servoLimits: analyzeServoLimits({
       timeSeconds,
       headspeed,
-      servos: findColumns(headerLine, [/^servo\[\d\]$/i]).map(
-        (name) => ({ name, values: columnValues(name) })
-      )
+      servos: findColumns(headerLine, [/^servo\[\d\]$/i]).map((name) => ({
+        name,
+        values: columnValues(name),
+      })),
     }),
     // The stick-command event layer lives ON the dataset so every
     // consumer — the PID page, Compare Flights, contributions —
     // reads the same list.
     flightEvents: buildFlightEvents({
-      trackingAnalysis:
-        pidAnalysis?.detectedColumns?.trackingAnalysis,
+      trackingAnalysis: pidAnalysis?.detectedColumns?.trackingAnalysis,
       timeSeconds,
-      dataRowOffset: headerIndex + 1
+      dataRowOffset: headerIndex + 1,
     }),
-    verdict
+    verdict,
   };
 }
 
@@ -2312,7 +2319,9 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
   let strongest = spectra[0];
 
   for (const entry of spectra) {
-    if (spectrumPeakValue(entry.spectrum) > spectrumPeakValue(strongest.spectrum)) {
+    if (
+      spectrumPeakValue(entry.spectrum) > spectrumPeakValue(strongest.spectrum)
+    ) {
       strongest = entry;
     }
   }
@@ -2367,7 +2376,7 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
       hz: peak.hz,
       label: name,
       magnitude: peak.magnitude,
-      classification
+      classification,
     };
   });
 }
@@ -2379,7 +2388,7 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
 const STATUS_WORDS = {
   good: "Looks good",
   watch: "Worth watching",
-  attention: "Needs attention"
+  attention: "Needs attention",
 };
 
 // The Flight Events card: every stick command as one row,
@@ -2388,7 +2397,7 @@ const STATUS_WORDS = {
 const EVENT_CHART_BY_AXIS = {
   roll: "chartTracking",
   pitch: "chartTrackingPitch",
-  yaw: "chartTrackingYaw"
+  yaw: "chartTrackingYaw",
 };
 
 let currentFlightEvents = null;
@@ -2461,7 +2470,7 @@ function renderFlightEvents(flightEvents) {
       // event's evidence under its own label.
       const canonical =
         currentFlightEvents?.events.find(
-          (candidate) => candidate.id === event.id
+          (candidate) => candidate.id === event.id,
         ) ?? null;
 
       if (canonical) {
@@ -2503,7 +2512,7 @@ function showGovernorEventDetail(event) {
     currentDataset.timeSeconds,
     (eventWindow.min + eventWindow.max) / 2,
     (eventWindow.max - eventWindow.min) / 2,
-    (eventWindow.max - eventWindow.min) / 2
+    (eventWindow.max - eventWindow.min) / 2,
   );
 
   if (!window) {
@@ -2514,10 +2523,7 @@ function showGovernorEventDetail(event) {
 
   const markers = [{ x: event.t, label: "excursion" }];
 
-  if (
-    Number.isFinite(event.tPeak) &&
-    event.tPeak - event.t > 0.15
-  ) {
+  if (Number.isFinite(event.tPeak) && event.tPeak - event.t > 0.15) {
     markers.push({ x: event.tPeak, label: "peak" });
   }
 
@@ -2530,9 +2536,9 @@ function showGovernorEventDetail(event) {
     window,
     [
       { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
-      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] }
+      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
     ],
-    { yLabel: "rpm", markers, linkGroup: "governorEventSync" }
+    { yLabel: "rpm", markers, linkGroup: "governorEventSync" },
   );
 
   // One output series, picked the way the ANALYSIS picked it — by
@@ -2559,15 +2565,15 @@ function showGovernorEventDetail(event) {
         patterns: outputPatterns,
         label: "Motor output (%)",
         convert: toThrottlePercent,
-        color: CHART_COLORS[3]
+        color: CHART_COLORS[3],
       },
       {
         patterns: [/^setpoint\[3\]$/i],
         label: "Collective target",
-        color: CHART_COLORS[5]
-      }
+        color: CHART_COLORS[5],
+      },
     ],
-    { yLabel: "% · collective", markers, linkGroup: "governorEventSync" }
+    { yLabel: "% · collective", markers, linkGroup: "governorEventSync" },
   );
 
   mountStickInset({
@@ -2575,7 +2581,7 @@ function showGovernorEventDetail(event) {
     canvasId: "governorEventSticks",
     chartElements: [rpmChart, driveChart],
     anchorTime: event.tPeak ?? event.t,
-    playFrom: { min: eventWindow.min, max: eventWindow.max }
+    playFrom: { min: eventWindow.min, max: eventWindow.max },
   });
 
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -2605,8 +2611,8 @@ function renderGovernorEvents(dataset) {
   // Folded for beginners (the verdict already carries the summary
   // sentence); excursions found — or advanced mode — open it.
   card.open =
-    (governorEvents.summary.totalFound ?? governorEvents.summary.total ?? 0) > 0 ||
-    document.body.classList.contains("advanced-mode");
+    (governorEvents.summary.totalFound ?? governorEvents.summary.total ?? 0) >
+      0 || document.body.classList.contains("advanced-mode");
 
   list.innerHTML = "";
   list.className = "events-timeline";
@@ -2653,7 +2659,7 @@ function renderGovernorEvents(dataset) {
 
       const canonical =
         currentDataset?.governorEvents?.events.find(
-          (candidate) => candidate.id === event.id
+          (candidate) => candidate.id === event.id,
         ) ?? null;
 
       if (canonical) {
@@ -2698,7 +2704,7 @@ function recommendationFirstStep(rec) {
   if (rec.suggestion) {
     return {
       text: `Try one ${rec.suggestion.magnitudeClass} ${rec.suggestion.direction === "up" ? "up" : "down"} on ${rec.suggestion.family}. Change only this, fly the same moves again, and watch ${rec.verifyMetric ?? "the same finding"}. Compare Flights is the judge.`,
-      tone: "action"
+      tone: "action",
     };
   }
 
@@ -2738,7 +2744,7 @@ function refreshPackCard() {
     lastPackRender.dataset,
     lastPackRender.nextSteps,
     lastPackRender.firmwareRevision,
-    { ...lastPackRender.context, refreshOnly: true }
+    { ...lastPackRender.context, refreshOnly: true },
   );
 }
 
@@ -2779,7 +2785,7 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     // unless recorded profile switches let the pack attribute
     // changes per profile instead.
     headspeedBanks: dataset?.labs?.governor?.perBank ?? null,
-    profileSegments: dataset?.profileSegments ?? null
+    profileSegments: dataset?.profileSegments ?? null,
   });
 
   const dumpNote = el("packDumpNote");
@@ -2799,7 +2805,9 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
         } (${dumpFreshness.mismatches
           .slice(0, 3)
           .map((m) => m.setting)
-          .join(", ")}${dumpFreshness.mismatches.length > 3 ? ", \u2026" : ""}) — the configuration changed since it was read. ` +
+          .join(
+            ", ",
+          )}${dumpFreshness.mismatches.length > 3 ? ", \u2026" : ""}) — the configuration changed since it was read. ` +
         "This flight's own values are used where the log carries them; refresh the dump for the rest.";
       const updateButton = el("packDumpUpdateButton");
       if (updateButton) {
@@ -2816,17 +2824,17 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
   let openItems = [];
   if (!context.isSample && context.craftKey && context.sourceHash) {
     const previous = latestPack(localStorage, context.craftKey, {
-      excludeSourceHash: context.sourceHash
+      excludeSourceHash: context.sourceHash,
     });
     if (previous) {
       appliedAssessment = assessAppliedState({
         packMembers: previous.members,
         getHeaderValue: (header) =>
-          getMetadataValue(currentFlightLines, header)
+          getMetadataValue(currentFlightLines, header),
       });
       appliedAssessment.grading = gradeAppliedPack({
         pack: previous,
-        appliedState: appliedAssessment
+        appliedState: appliedAssessment,
       });
     }
     openItems = context.refreshOnly
@@ -2834,10 +2842,12 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       : fileAnalysis(localStorage, context.craftKey, {
           sourceHash: context.sourceHash,
           dateMs: context.dateMs ?? 0,
-          confirms: [...(nextSteps?.pid ?? []), ...(nextSteps?.governor ?? [])]
-            .filter((rec) => rec.level === "confirm"),
+          confirms: [
+            ...(nextSteps?.pid ?? []),
+            ...(nextSteps?.governor ?? []),
+          ].filter((rec) => rec.level === "confirm"),
           axisEvidence: context.axisEvidence ?? {},
-          pack
+          pack,
         });
   }
 
@@ -2878,7 +2888,7 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       queued: [],
       prescriptions: [],
       headspeedNote: null,
-      empty: true
+      empty: true,
     };
     el("packMembers").innerHTML = "";
     el("packHeadspeedNote").hidden = true;
@@ -2916,9 +2926,7 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       ? `${member.from} \u2192 ${member.to}`
       : `one ${member.magnitudeClass} ${member.direction}`;
     const noteText = member.freshnessNote ?? member.numericNote;
-    const note = noteText
-      ? `<div class="chart-hint">${noteText}</div>`
-      : "";
+    const note = noteText ? `<div class="chart-hint">${noteText}</div>` : "";
     const earnedIn =
       member.profile !== undefined
         ? `<div class="chart-hint">Earned in: ${profileName(member.profile)}</div>`
@@ -2953,7 +2961,7 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
     el("packQueuedList").innerHTML = pack.queued
       .map(
         (entry) =>
-          `<p class="chart-hint"><code>${entry.rec.suggestion?.family ?? ""}</code> \u2014 ${entry.reason}</p>`
+          `<p class="chart-hint"><code>${entry.rec.suggestion?.family ?? ""}</code> \u2014 ${entry.reason}</p>`,
       )
       .join("");
   }
@@ -2972,17 +2980,17 @@ function renderPackCard(dataset, nextSteps, firmwareRevision, context = {}) {
       finding: member.finding ?? null,
       instrument: member.instrument ?? null,
       expectedResult: member.expectedResult ?? null,
-      note: member.freshnessNote ?? member.numericNote ?? null
+      note: member.freshnessNote ?? member.numericNote ?? null,
     })),
     queued: pack.queued.map((entry) => ({
       family: entry.rec?.suggestion?.family ?? "",
-      reason: entry.reason
+      reason: entry.reason,
     })),
     prescriptions: [...pack.prescriptions],
     headspeedNote: pack.requiresHeadspeedHold
-      ? el("packHeadspeedNote")?.textContent?.trim() ?? null
+      ? (el("packHeadspeedNote")?.textContent?.trim() ?? null)
       : null,
-    empty: false
+    empty: false,
   };
 
   const prescriptions = el("packPrescriptions");
@@ -3020,30 +3028,36 @@ function packEmptyStory(pack, context) {
 
   if (context.vibrationConcern) {
     reasons.push(
-      "Tuning changes are held while a vibration finding is open — filters come before PIDs. Fix the mechanical source, fly again, and the tuning instruments are read fresh."
+      "Tuning changes are held while a vibration finding is open — filters come before PIDs. Fix the mechanical source, fly again, and the tuning instruments are read fresh.",
     );
   }
 
   const behavior = context.responseBehavior ?? [];
   const axisEvidence = context.axisEvidence ?? {};
-  const thinAxes = [...new Set(
-    behavior
-      .filter((check) => check.status === "Insufficient Data")
-      .map((check) => check.axis)
-  )].filter((axis) => (axisEvidence[axis] ?? 0) < 5);
-  const clearAxes = [...new Set(
-    behavior
-      .filter((check) => check.status === "Clear")
-      .map((check) => check.axis)
-  )].filter((axis) => !thinAxes.includes(axis));
+  const thinAxes = [
+    ...new Set(
+      behavior
+        .filter((check) => check.status === "Insufficient Data")
+        .map((check) => check.axis),
+    ),
+  ].filter((axis) => (axisEvidence[axis] ?? 0) < 5);
+  const clearAxes = [
+    ...new Set(
+      behavior
+        .filter((check) => check.status === "Clear")
+        .map((check) => check.axis),
+    ),
+  ].filter((axis) => !thinAxes.includes(axis));
 
   if (behavior.length > 0) {
     const parts = [];
     if (clearAxes.length > 0) {
       parts.push(
         `${listWords(clearAxes)} response checks read Clear` +
-          (context.pidConfidence ? ` at ${context.pidConfidence} confidence` : "") +
-          "."
+          (context.pidConfidence
+            ? ` at ${context.pidConfidence} confidence`
+            : "") +
+          ".",
       );
     }
     for (const axis of thinAxes) {
@@ -3052,7 +3066,7 @@ function packEmptyStory(pack, context) {
         (count === 0
           ? `${axis} flew no clean command at all — nothing to judge yet;`
           : `${axis} flew only ${count} clean command${count === 1 ? "" : "s"} — too few to judge;`) +
-          ` 4–6 deliberate ${axis.toLowerCase()} stops and reversals at one headspeed would settle it.`
+          ` 4–6 deliberate ${axis.toLowerCase()} stops and reversals at one headspeed would settle it.`,
       );
     }
     if (parts.length > 0) reasons.push(parts.join(" "));
@@ -3062,7 +3076,7 @@ function packEmptyStory(pack, context) {
 
   if (context.governorCapability && context.governorCapability !== "full") {
     reasons.push(
-      "No usable governor target is logged, so the governor lane has nothing to weigh."
+      "No usable governor target is logged, so the governor lane has nothing to weigh.",
     );
   }
 
@@ -3083,24 +3097,28 @@ const copyPackText = (sourceId, button) => {
   const done = () => {
     const previous = button.textContent;
     button.textContent = "Copied";
-    setTimeout(() => { button.textContent = previous; }, 1400);
+    setTimeout(() => {
+      button.textContent = previous;
+    }, 1400);
   };
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(() => {});
+    navigator.clipboard
+      .writeText(text)
+      .then(done)
+      .catch(() => {});
   }
 };
 
 el("packCopyButton")?.addEventListener("click", (event) =>
-  copyPackText("packSnippetText", event.currentTarget)
+  copyPackText("packSnippetText", event.currentTarget),
 );
 el("packRevertCopyButton")?.addEventListener("click", (event) =>
-  copyPackText("packRevertText", event.currentTarget)
+  copyPackText("packRevertText", event.currentTarget),
 );
 
 function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   const cardStatus = (key) =>
-    dataset?.verdict?.cards?.find((card) => card.key === key)?.status ??
-    null;
+    dataset?.verdict?.cards?.find((card) => card.key === key)?.status ?? null;
 
   const events = dataset?.flightEvents?.summary ?? null;
   const entries = [];
@@ -3151,7 +3169,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   const behaviorReviews = (pidAnalysis?.findings ?? []).filter(
     (line) =>
       typeof line === "string" &&
-      / (bounce-back|settling|ringing) status: Review$/.test(line)
+      / (bounce-back|settling|ringing) status: Review$/.test(line),
   ).length;
 
   const nonCleanEvents = events
@@ -3164,10 +3182,8 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
   const eventBits = events
     ? [
         events.overshoot > 0 ? `${events.overshoot} overshot` : null,
-        events.oscillation > 0
-          ? `${events.oscillation} oscillated`
-          : null,
-        events.slow > 0 ? `${events.slow} settled slowly` : null
+        events.oscillation > 0 ? `${events.oscillation} oscillated` : null,
+        events.slow > 0 ? `${events.slow} settled slowly` : null,
       ]
         .filter(Boolean)
         .join(", ")
@@ -3185,7 +3201,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           : gentleDemand
             ? "Fly deliberate stick steps — clear inputs, held briefly — then read this page again. Gentle flying cannot earn tuning advice."
             : "Nothing to change."),
-    actionableTone(pidRec, statusTone(cardStatus("tuning")))
+    actionableTone(pidRec, statusTone(cardStatus("tuning"))),
   );
 
   // ---- Governor: answer the dip from the data ----
@@ -3197,10 +3213,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
 
   if (govRec) {
     governorText = govRec.text;
-  } else if (
-    governor?.status === "attention" ||
-    governor?.status === "watch"
-  ) {
+  } else if (governor?.status === "attention" || governor?.status === "watch") {
     const dipRpm = Math.round(governor.droopRpm ?? 0);
     const dipOutput =
       governor.stableDipOutputPercent ??
@@ -3208,8 +3221,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       null;
 
     const loadDriven = (dataset?.governorEvents?.events ?? []).some(
-      (event) =>
-        event.cause === "load" || event.cause === "collective-drop"
+      (event) => event.cause === "load" || event.cause === "collective-drop",
     );
 
     if (
@@ -3244,7 +3256,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
       : governorText,
     governor && governor.hasRotorSpeedData !== false
       ? actionableTone(govRec, governorTone)
-      : "info"
+      : "info",
   );
 
   // ---- Filter: speak about THE peak the verdict named ----
@@ -3255,7 +3267,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     null;
 
   const vibrationCard = dataset?.verdict?.cards?.find(
-    (card) => card.key === "vibration"
+    (card) => card.key === "vibration",
   );
   const peak = vibrationCard?.peak ?? null;
 
@@ -3285,7 +3297,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
     "filter",
     "Vibration",
     filterText,
-    statusTone(cardStatus("vibration"))
+    statusTone(cardStatus("vibration")),
   );
 
   // ---- ESC ----
@@ -3305,11 +3317,11 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
         : escLab
           ? "Fly a longer steady stretch: output headroom is measured over steady flight, and this log had none long enough."
           : null,
-      "power"
+      "power",
     ),
     escLab && escLab.status !== "insufficient"
       ? statusTone(cardStatus("power") ?? escLab.status)
-      : "info"
+      : "info",
   );
   noteGap("power", "esc", "Power & ESC");
 
@@ -3330,11 +3342,11 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
         : batteryLab
           ? "Do not judge the pack from this flight: it offered no steady-load section to read it from."
           : null,
-      "battery"
+      "battery",
     ),
     batteryLab && batteryLab.status !== "insufficient"
       ? statusTone(cardStatus("battery") ?? batteryLab.status)
-      : "info"
+      : "info",
   );
   noteGap("battery", "battery", "Battery");
 
@@ -3355,7 +3367,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
           ? "Nothing to change yet: if dips keep landing in the same flight orientation across logs, reposition the antennas."
           : "Nothing to change."
       : cardGap("signal"),
-    signalLab ? statusTone(cardStatus("signal") ?? signalLab.status) : "info"
+    signalLab ? statusTone(cardStatus("signal") ?? signalLab.status) : "info",
   );
   noteGap("signal", "signal", "Signal");
 
@@ -3375,7 +3387,7 @@ function renderFirstSteps(dataset, nextSteps, pidAnalysis) {
             : "Nothing to change yet: keep logging — with power, repetition is what matters."
           : "Nothing to change."
       : cardGap("bec"),
-    becLab ? statusTone(cardStatus("bec") ?? becLab.status) : "info"
+    becLab ? statusTone(cardStatus("bec") ?? becLab.status) : "info",
   );
   noteGap("bec", "bec", "BEC output");
 
@@ -3400,7 +3412,7 @@ const FIRST_STEP_LAB_ORDER = [
   "esc",
   "battery",
   "signal",
-  "bec"
+  "bec",
 ];
 
 // What Home shows as the to-do list — kept so the exported report
@@ -3419,7 +3431,7 @@ function renderHomeFirstSteps(entries, gapEntries = []) {
       (a, b) =>
         rank[a.tone] - rank[b.tone] ||
         FIRST_STEP_LAB_ORDER.indexOf(a.screen) -
-          FIRST_STEP_LAB_ORDER.indexOf(b.screen)
+          FIRST_STEP_LAB_ORDER.indexOf(b.screen),
     );
 
   // The exported report renders THIS list, already in Home's order
@@ -3428,7 +3440,7 @@ function renderHomeFirstSteps(entries, gapEntries = []) {
   // Tuning ahead of the blocking Vibration finding).
   currentFirstSteps = {
     entries: [...actionable],
-    gapEntries: [...gapEntries]
+    gapEntries: [...gapEntries],
   };
 
   if (!card || !list) return;
@@ -3530,10 +3542,7 @@ function renderSignalLab(dataset) {
     return;
   }
 
-  const correlation = correlateSignalAndPower(
-    lab,
-    dataset?.becLab ?? null
-  );
+  const correlation = correlateSignalAndPower(lab, dataset?.becLab ?? null);
 
   story.textContent =
     lab.story + (correlation ? correlation.signalSentence : "");
@@ -3546,9 +3555,9 @@ function renderSignalLab(dataset) {
       eventsCard.hidden = true;
     } else {
       eventsCard.hidden = false;
-    eventsCard.open =
-      lab.status === "attention" ||
-      document.body.classList.contains("advanced-mode");
+      eventsCard.open =
+        lab.status === "attention" ||
+        document.body.classList.contains("advanced-mode");
       renderEventTable(
         eventsTable,
         ["When", "What", "Duration", "Detail"],
@@ -3567,8 +3576,8 @@ function renderSignalLab(dataset) {
             }</td>
             <td>${event.durationMs} ms</td>
             <td>${event.detail}</td>
-          </tr>`
-        )
+          </tr>`,
+        ),
       );
     }
   }
@@ -3578,7 +3587,7 @@ function renderSignalLab(dataset) {
     chartCard.hidden = !hasRssi;
     if (hasRssi) {
       renderSeriesChart(el("chartSignal"), dataset, [/^rssi$/i], {
-        yLabel: "signal (as logged)"
+        yLabel: "signal (as logged)",
       });
     }
   }
@@ -3604,13 +3613,9 @@ function renderBecLab(dataset) {
     return;
   }
 
-  const correlation = correlateSignalAndPower(
-    dataset?.signalLab ?? null,
-    lab
-  );
+  const correlation = correlateSignalAndPower(dataset?.signalLab ?? null, lab);
 
-  story.textContent =
-    lab.story + (correlation ? correlation.becSentence : "");
+  story.textContent = lab.story + (correlation ? correlation.becSentence : "");
   story.className = `lab-story status-text-${lab.status}`;
 
   renderMetricGrid(metricsElement, lab.metrics);
@@ -3620,9 +3625,9 @@ function renderBecLab(dataset) {
       eventsCard.hidden = true;
     } else {
       eventsCard.hidden = false;
-    eventsCard.open =
-      lab.status === "attention" ||
-      document.body.classList.contains("advanced-mode");
+      eventsCard.open =
+        lab.status === "attention" ||
+        document.body.classList.contains("advanced-mode");
       renderEventTable(
         eventsTable,
         ["When", "Lowest", "Depth", "Duration", "Servo context"],
@@ -3640,8 +3645,8 @@ function renderBecLab(dataset) {
                   ? "servos quiet: look at wiring/BEC"
                   : "—"
             }</td>
-          </tr>`
-        )
+          </tr>`,
+        ),
       );
     }
   }
@@ -3661,14 +3666,14 @@ function renderBecLab(dataset) {
           // chart with healthy-looking axes.
           convert: (values) =>
             values.map((value) =>
-              Number.isFinite(value) ? value / scale : null
-            )
-        }
+              Number.isFinite(value) ? value / scale : null,
+            ),
+        },
       ],
-      "BEC voltage (V)"
+      "BEC voltage (V)",
     );
     renderSeriesChart(el("chartBecServo"), dataset, [/^servo\[\d\]$/i], {
-      yLabel: "servo command (µs)"
+      yLabel: "servo command (µs)",
     });
   }
 }
@@ -3715,7 +3720,7 @@ function renderServoLimits(servoLimits) {
           <td>${event.side === "max" ? "upper" : "lower"} edge</td>
           <td>${event.durationMs} ms</td>
           <td>${Math.round(event.valueUs)} µs</td>
-        </tr>`
+        </tr>`,
     )
     .join("");
 
@@ -3805,7 +3810,7 @@ const GOVERNOR_SETTING_KEYS = [
   "yaw_collective_ff_gain",
   "yaw_cyclic_ff_gain",
   "pitch_f_gain",
-  "pitch_o_gain"
+  "pitch_o_gain",
 ];
 
 function renderPrecompBalance(dataset) {
@@ -3827,8 +3832,7 @@ function renderPrecompBalance(dataset) {
 
   if (governorStoryElement) {
     governorStoryElement.hidden = !precomp.governor;
-    governorStoryElement.textContent =
-      precomp.governor?.story ?? "";
+    governorStoryElement.textContent = precomp.governor?.story ?? "";
   }
 
   if (tailStoryElement) {
@@ -3841,28 +3845,28 @@ function renderPrecompBalance(dataset) {
   if (Number.isFinite(precomp.governor?.riseDroopPercent)) {
     metrics.push({
       label: "Rise droop (median)",
-      value: `${precomp.governor.riseDroopPercent}%`
+      value: `${precomp.governor.riseDroopPercent}%`,
     });
   }
 
   if (Number.isFinite(precomp.governor?.dropOvershootPercent)) {
     metrics.push({
       label: "Drop overspeed (median)",
-      value: `${precomp.governor.dropOvershootPercent}%`
+      value: `${precomp.governor.dropOvershootPercent}%`,
     });
   }
 
   if (precomp.transientCount > 0) {
     metrics.push({
       label: "Collective moves read",
-      value: `${precomp.riseCount} up · ${precomp.dropCount} down`
+      value: `${precomp.riseCount} up · ${precomp.dropCount} down`,
     });
   }
 
   if (Number.isFinite(precomp.tail?.kickRatio)) {
     metrics.push({
       label: "Tail kick vs baseline",
-      value: `${precomp.tail.kickRatio}×`
+      value: `${precomp.tail.kickRatio}×`,
     });
   }
 
@@ -3904,7 +3908,7 @@ function renderGovernorSettings(dataset) {
       <tr>
         <td>${key}</td>
         <td>${String(parsed[key])}</td>
-      </tr>`
+      </tr>`,
       )
       .join("")}
   `;
@@ -3958,8 +3962,7 @@ function showEventDetail(event) {
   // command start through response — so the selected event is
   // always inside the frame it is described by.
   const axisIndex = AXIS_INDEX[event.axis.toLowerCase()] ?? 0;
-  const column = (base) =>
-    new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
+  const column = (base) => new RegExp(`^${base}\\[${axisIndex}\\]$`, "i");
 
   // The command's whole story on one frame (#32): where the stick
   // started moving, where the target HELD (the response is measured
@@ -3974,8 +3977,7 @@ function showEventDetail(event) {
 
   const markers = [{ x: event.t, label: "command" }];
   const bands = [];
-  const heldLater =
-    Number.isFinite(event.tEnd) && event.tEnd - event.t > 0.15;
+  const heldLater = Number.isFinite(event.tEnd) && event.tEnd - event.t > 0.15;
 
   if (heldLater) {
     markers.push({ x: event.tEnd, label: "target held" });
@@ -3985,7 +3987,7 @@ function showEventDetail(event) {
     bands.push({
       min: event.tEnd,
       max: event.tMeasureEnd,
-      label: "measured response"
+      label: "measured response",
     });
   }
 
@@ -4001,15 +4003,15 @@ function showEventDetail(event) {
     currentDataset,
     [
       { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint },
-      { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro }
+      { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro },
     ],
     "deg/s",
     {
       height: 240,
       markers,
       bands,
-      initialWindow: window
-    }
+      initialWindow: window,
+    },
   );
 
   // The pilot's hands beside the machine's answer: replay the
@@ -4019,7 +4021,7 @@ function showEventDetail(event) {
     canvasId: "pidEventSticks",
     chartElements: [chartElement],
     anchorTime: event.t,
-    playFrom: window
+    playFrom: window,
   });
 
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -4031,7 +4033,8 @@ function showEventDetail(event) {
 function renderLabVerdictStories(verdict) {
   const stories = [
     { key: "vibration", element: el("filterVerdictStory") },
-    { key: "tuning", element: el("pidVerdictStory") }
+    { key: "tuning", element: el("pidVerdictStory") },
+    { key: "stepResponse", element: el("stepResponseVerdictStory") },
   ];
 
   for (const { key, element } of stories) {
@@ -4105,13 +4108,12 @@ function renderVerdict(dataset) {
         // Let the screen become visible, then zoom the
         // evidence chart to the exact moment.
         setTimeout(() => {
-          const chart =
-            el(card.focus.chartId)?.__blackboxLabChart;
+          const chart = el(card.focus.chartId)?.__blackboxLabChart;
 
           if (chart) {
             chart.setScale("x", {
               min: card.focus.min,
-              max: card.focus.max
+              max: card.focus.max,
             });
           }
         }, 120);
@@ -4161,13 +4163,13 @@ function renderSeriesChart(element, dataset, patterns, options = {}) {
   const series = columns.map((name, index) => ({
     label: name,
     values: decimate(dataset.columnValues(name)),
-    color: CHART_COLORS[index % CHART_COLORS.length]
+    color: CHART_COLORS[index % CHART_COLORS.length],
   }));
 
   renderTimeSeriesChart(element, {
     timeSeconds: decimate(dataset.timeSeconds),
     series,
-    yLabel: options.yLabel ?? ""
+    yLabel: options.yLabel ?? "",
   });
 }
 
@@ -4222,7 +4224,7 @@ function renderScaledChart(element, dataset, entries, yLabel) {
       series.push({
         label: entry.label ?? column,
         values: decimate(entry.convert(dataset.columnValues(column))),
-        color: CHART_COLORS[series.length % CHART_COLORS.length]
+        color: CHART_COLORS[series.length % CHART_COLORS.length],
       });
     }
   }
@@ -4236,7 +4238,7 @@ function renderScaledChart(element, dataset, entries, yLabel) {
   renderTimeSeriesChart(element, {
     timeSeconds: decimate(dataset.timeSeconds),
     series,
-    yLabel
+    yLabel,
   });
 }
 
@@ -4250,7 +4252,7 @@ const PRESET_COLORS = {
   gyro: CHART_COLORS[1], // orange — the response
   i: CHART_COLORS[2], // green — I-term
   p: CHART_COLORS[3], // amber — P-term
-  d: CHART_COLORS[4] // magenta — D-term
+  d: CHART_COLORS[4], // magenta — D-term
 };
 
 function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
@@ -4263,7 +4265,7 @@ function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
       series.push({
         label: column,
         values: decimate(dataset.columnValues(column)),
-        color: entry.color
+        color: entry.color,
       });
     }
   }
@@ -4283,30 +4285,57 @@ function renderPresetChart(element, dataset, entries, yLabel, options = {}) {
     height: options.height ?? 220,
     markers: options.markers ?? [],
     bands: options.bands ?? [],
-    initialWindow: options.initialWindow ?? null
+    initialWindow: options.initialWindow ?? null,
   });
 }
 
 function renderTuningPresets(dataset) {
   const axes = [
-    { index: 0, tracking: chartTracking, ff: chartFfRoll, terms: chartTermsRoll },
-    { index: 1, tracking: chartTrackingPitch, ff: chartFfPitch, terms: chartTermsPitch },
-    { index: 2, tracking: chartTrackingYaw, ff: chartFfYaw, terms: chartTermsYaw }
+    {
+      index: 0,
+      tracking: chartTracking,
+      ff: chartFfRoll,
+      terms: chartTermsRoll,
+    },
+    {
+      index: 1,
+      tracking: chartTrackingPitch,
+      ff: chartFfPitch,
+      terms: chartTermsPitch,
+    },
+    {
+      index: 2,
+      tracking: chartTrackingYaw,
+      ff: chartFfYaw,
+      terms: chartTermsYaw,
+    },
   ];
 
   for (const axis of axes) {
-    const column = (base) =>
-      new RegExp(`^${base}\\[${axis.index}\\]$`, "i");
+    const column = (base) => new RegExp(`^${base}\\[${axis.index}\\]$`, "i");
 
-    const setpoint = { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint };
+    const setpoint = {
+      patterns: [column("setpoint")],
+      color: PRESET_COLORS.setpoint,
+    };
     const gyro = { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro };
     const iTerm = { patterns: [column("axisI")], color: PRESET_COLORS.i };
     const pTerm = { patterns: [column("axisP")], color: PRESET_COLORS.p };
     const dTerm = { patterns: [column("axisD")], color: PRESET_COLORS.d };
 
     renderPresetChart(axis.tracking, dataset, [setpoint, gyro], "deg/s");
-    renderPresetChart(axis.ff, dataset, [setpoint, gyro, iTerm], "deg/s · term output");
-    renderPresetChart(axis.terms, dataset, [setpoint, pTerm, iTerm, dTerm], "deg/s · term output");
+    renderPresetChart(
+      axis.ff,
+      dataset,
+      [setpoint, gyro, iTerm],
+      "deg/s · term output",
+    );
+    renderPresetChart(
+      axis.terms,
+      dataset,
+      [setpoint, pTerm, iTerm, dTerm],
+      "deg/s · term output",
+    );
   }
 }
 
@@ -4322,9 +4351,7 @@ function toDegreesCelsius(values) {
   }
 
   // Logs store temperature either directly or ×10.
-  return max > 200
-    ? values.map((value) => value / 10)
-    : values;
+  return max > 200 ? values.map((value) => value / 10) : values;
 }
 
 function slicedSeries(dataset, window, entries) {
@@ -4347,7 +4374,7 @@ function slicedSeries(dataset, window, entries) {
     series.push({
       label: entry.label,
       values: values.slice(window.startIndex, window.endIndex + 1),
-      color: entry.color
+      color: entry.color,
     });
   }
 
@@ -4367,11 +4394,11 @@ function renderSyncedChart(element, dataset, window, entries, options) {
   renderTimeSeriesChart(element, {
     timeSeconds: dataset.timeSeconds.slice(
       window.startIndex,
-      window.endIndex + 1
+      window.endIndex + 1,
     ),
     series,
     height: 190,
-    ...options
+    ...options,
   });
 
   return true;
@@ -4399,12 +4426,12 @@ function renderGovernorTechnical(dataset) {
     value:
       gov.capability === "full"
         ? "Full: a logged governor target was accepted; droop is target-relative"
-        : "Partial: headspeed stability only; swings are measured against the rotor's own trend"
+        : "Partial: headspeed stability only; swings are measured against the rotor's own trend",
   });
 
   const targetColumns = dataset.findColumnsIn([
     /governorTarget/i,
-    /govTarget/i
+    /govTarget/i,
   ]);
   rows.push({
     label: "Governor-target source",
@@ -4413,13 +4440,13 @@ function renderGovernorTechnical(dataset) {
         ? "no governor-target column in this log"
         : gov.capability === "full"
           ? `${targetColumns[0]}: accepted as a rotor-speed target`
-          : `${targetColumns[0]}, present but rejected: it does not behave like a rotor-speed target (constant or passthrough, e.g. DIRECT mode)`
+          : `${targetColumns[0]}, present but rejected: it does not behave like a rotor-speed target (constant or passthrough, e.g. DIRECT mode)`,
   });
 
   for (const bank of gov.perBank ?? []) {
     rows.push({
       label: `Bank ${bank.targetRpm} rpm${bank.observed ? " (observed)" : ""}`,
-      value: describeBank(bank)
+      value: describeBank(bank),
     });
   }
 
@@ -4428,20 +4455,18 @@ function renderGovernorTechnical(dataset) {
       label: "Largest short-term swing",
       value:
         `${gov.droopRpm} rpm` +
-        (Number.isFinite(gov.droopPercent)
-          ? ` (${gov.droopPercent}%)`
-          : "") +
+        (Number.isFinite(gov.droopPercent) ? ` (${gov.droopPercent}%)` : "") +
         (Number.isFinite(gov.droopTimeSeconds)
           ? ` at ${gov.droopTimeSeconds} s`
           : "") +
-        ": against the rotor's own trend, not a target"
+        ": against the rotor's own trend, not a target",
     });
   }
 
   const stableSamples = gov.stableSampleCount ?? 0;
   rows.push({
     label: "Stable samples used",
-    value: stableSamples.toLocaleString()
+    value: stableSamples.toLocaleString(),
   });
   rows.push({
     label: "Evidence confidence",
@@ -4450,7 +4475,7 @@ function renderGovernorTechnical(dataset) {
         ? "High: a long stable-flight window backs these numbers"
         : stableSamples >= 1500
           ? "Moderate: a usable but not generous stable window"
-          : "Low: short stable window; treat conclusions as provisional"
+          : "Low: short stable window; treat conclusions as provisional",
   });
 
   const excursions = dataset.governorEvents?.summary;
@@ -4460,7 +4485,7 @@ function renderGovernorTechnical(dataset) {
       value:
         excursions.totalFound === 0
           ? "none detected in stable flight"
-          : `${excursions.totalFound} (${excursions.under} under · ${excursions.over} over)`
+          : `${excursions.totalFound} (${excursions.under} under · ${excursions.over} over)`,
     });
   }
 
@@ -4469,16 +4494,15 @@ function renderGovernorTechnical(dataset) {
     value:
       dataset.findColumnsIn([/^escThr/i, /throttle/i]).length > 0
         ? "available: significant dips carry output/headroom context"
-        : "not logged: output/headroom context unavailable for events"
+        : "not logged: output/headroom context unavailable for events",
   });
 
   const governorTerms = ["govP", "govI", "govD", "govF"].filter(
-    (name) =>
-      dataset.findColumnsIn([new RegExp(`^${name}`, "i")]).length > 0
+    (name) => dataset.findColumnsIn([new RegExp(`^${name}`, "i")]).length > 0,
   );
   rows.push({
     label: "Governor P/I/D/F telemetry",
-    value: governorTerms.length > 0 ? governorTerms.join(", ") : "not logged"
+    value: governorTerms.length > 0 ? governorTerms.join(", ") : "not logged",
   });
 
   const precompGovernor = dataset.precomp?.governor;
@@ -4492,14 +4516,14 @@ function renderGovernorTechnical(dataset) {
           : "") +
         (Number.isFinite(precompGovernor.dropOvershootPercent)
           ? `, drop overspeed ${precompGovernor.dropOvershootPercent}%`
-          : "")
+          : ""),
     });
   }
   const precompTail = dataset.precomp?.tail;
   if (precompTail && Number.isFinite(precompTail.kickRatio)) {
     rows.push({
       label: "Tail-kick evidence",
-      value: `${precompTail.kickRatio}× the tail's baseline error on collective moves`
+      value: `${precompTail.kickRatio}× the tail's baseline error on collective moves`,
     });
   }
 
@@ -4528,14 +4552,13 @@ function renderGovernorEvidence(dataset) {
     canvasId: "droopSticks",
     chartElements: [chartDroopRpm, chartDroopDrive, chartDroopPower],
     anchorTime: droopTime,
-    playFrom: null
+    playFrom: null,
   });
 
   // Droop is measured against a target. Without one, the same
   // moment is the largest short-term swing — the card says which
   // it is showing, and the target/error traces stay off the chart.
-  const hasTarget =
-    dataset.labs.governor?.capability === "full";
+  const hasTarget = dataset.labs.governor?.capability === "full";
 
   if (droopContextTitle) {
     droopContextTitle.textContent = hasTarget
@@ -4569,12 +4592,10 @@ function renderGovernorEvidence(dataset) {
       ? [
           { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
           { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
-          { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
+          { label: "RPM error", values: errorValues, color: CHART_COLORS[4] },
         ]
-      : [
-          { label: "headspeed", values: actualValues, color: CHART_COLORS[1] }
-        ],
-    { yLabel: "rpm", markers, linkGroup: "droopSync" }
+      : [{ label: "headspeed", values: actualValues, color: CHART_COLORS[1] }],
+    { yLabel: "rpm", markers, linkGroup: "droopSync" },
   );
 
   renderSyncedChart(
@@ -4586,15 +4607,15 @@ function renderGovernorEvidence(dataset) {
         patterns: [/^motor\[0\]$/i],
         label: "Motor output (%)",
         convert: toThrottlePercent,
-        color: CHART_COLORS[3]
+        color: CHART_COLORS[3],
       },
       {
         patterns: [/^setpoint\[3\]$/i],
         label: "Collective target",
-        color: CHART_COLORS[5]
-      }
+        color: CHART_COLORS[5],
+      },
     ],
-    { yLabel: "% · collective", markers, linkGroup: "droopSync" }
+    { yLabel: "% · collective", markers, linkGroup: "droopSync" },
   );
 
   renderSyncedChart(
@@ -4603,20 +4624,20 @@ function renderGovernorEvidence(dataset) {
     window,
     [
       {
-       patterns: dataset.voltagePatterns,
+        patterns: dataset.voltagePatterns,
         label: "Pack voltage (V)",
         convert: toVolts,
-        color: CHART_COLORS[0]
+        color: CHART_COLORS[0],
       },
-      
+
       {
-  patterns: [/^EscI$/i],
-  label: "Current (A)",
-  convert: toAmps,
-  color: CHART_COLORS[1]
-}
+        patterns: [/^EscI$/i],
+        label: "Current (A)",
+        convert: toAmps,
+        color: CHART_COLORS[1],
+      },
     ],
-    { yLabel: "volts · amps", markers, linkGroup: "droopSync" }
+    { yLabel: "volts · amps", markers, linkGroup: "droopSync" },
   );
 
   // Real recorded governor terms only — never derived.
@@ -4625,22 +4646,18 @@ function renderGovernorEvidence(dataset) {
     { patterns: [/^govI$/i], label: "govI", color: CHART_COLORS[2] },
     { patterns: [/^govD$/i], label: "govD", color: CHART_COLORS[4] },
     { patterns: [/^govF$/i], label: "govF", color: CHART_COLORS[5] },
-    { patterns: [/^govSum$/i], label: "govSum", color: CHART_COLORS[0] }
-  ].filter(
-    (entry) => dataset.findColumnsIn(entry.patterns).length > 0
-  );
+    { patterns: [/^govSum$/i], label: "govSum", color: CHART_COLORS[0] },
+  ].filter((entry) => dataset.findColumnsIn(entry.patterns).length > 0);
 
   if (governorTermEntries.length === 0) {
     droopGovBlock.hidden = true;
   } else {
     droopGovBlock.hidden = false;
-    renderSyncedChart(
-      chartDroopGov,
-      dataset,
-      window,
-      governorTermEntries,
-      { yLabel: "governor terms", markers, linkGroup: "droopSync" }
-    );
+    renderSyncedChart(chartDroopGov, dataset, window, governorTermEntries, {
+      yLabel: "governor terms",
+      markers,
+      linkGroup: "droopSync",
+    });
   }
 }
 
@@ -4663,9 +4680,7 @@ function renderEscEvidence(dataset) {
     return;
   }
 
-  const outputPercent = toThrottlePercent(
-    dataset.columnValues(outputColumn)
-  );
+  const outputPercent = toThrottlePercent(dataset.columnValues(outputColumn));
   const currentAmps = toAmps(dataset.columnValues(currentColumn));
   const voltageVolts = toVolts(dataset.columnValues(voltageColumn));
 
@@ -4684,9 +4699,7 @@ function renderEscEvidence(dataset) {
   const collectiveAbs = collectiveColumn
     ? dataset
         .columnValues(collectiveColumn)
-        .map((value) =>
-          Number.isFinite(value) ? Math.abs(value) : null
-        )
+        .map((value) => (Number.isFinite(value) ? Math.abs(value) : null))
     : null;
 
   const collectiveFlightStats = (() => {
@@ -4704,7 +4717,7 @@ function renderEscEvidence(dataset) {
 
     return {
       peak: sorted[sorted.length - 1],
-      median: sorted[Math.floor(sorted.length / 2)]
+      median: sorted[Math.floor(sorted.length / 2)],
     };
   })();
 
@@ -4713,12 +4726,15 @@ function renderEscEvidence(dataset) {
   const temperatureEntries = [
     { patterns: [/^Tesc$/i], label: "Tesc", color: CHART_COLORS[1] },
     { patterns: [/^Tesc2$/i], label: "Tesc2", color: CHART_COLORS[4] },
-    { patterns: [/^tempEsc/i, /escTemp/i], label: "ESC temp", color: CHART_COLORS[1] }
+    {
+      patterns: [/^tempEsc/i, /escTemp/i],
+      label: "ESC temp",
+      color: CHART_COLORS[1],
+    },
   ].filter((entry) => {
     const column = dataset.findColumnsIn(entry.patterns)[0];
     return (
-      Boolean(column) &&
-      dataset.columnValues(column).some((value) => value > 0)
+      Boolean(column) && dataset.columnValues(column).some((value) => value > 0)
     );
   });
 
@@ -4728,14 +4744,14 @@ function renderEscEvidence(dataset) {
   // must also be flown: startup/spool-up/shutdown are excluded by
   // the in-flight mask.
   const currentCarriesData = currentAmps.some(
-    (value) => Number.isFinite(value) && value !== 0
+    (value) => Number.isFinite(value) && value !== 0,
   );
   const loadSeries = currentCarriesData ? currentAmps : outputPercent;
 
   const airborneIndexes =
     detectInFlightSamples({
       timeSeconds: dataset.timeSeconds,
-      headspeed: dataset.headspeed
+      headspeed: dataset.headspeed,
     }) ?? null;
   const airborneMask = airborneIndexes
     ? (() => {
@@ -4756,7 +4772,7 @@ function renderEscEvidence(dataset) {
     ? qualifiedLoadEnvelope({
         timeSeconds: dataset.timeSeconds,
         headspeed: dataset.headspeed,
-        governorTarget: dataset.governorTarget
+        governorTarget: dataset.governorTarget,
       })
     : null;
 
@@ -4770,7 +4786,7 @@ function renderEscEvidence(dataset) {
 
   const events = findHighestLoadEvents(
     { timeSeconds: dataset.timeSeconds, load: loadSeries },
-    { windowSeconds: 2, count: 3, qualifiedMask: airborneMask }
+    { windowSeconds: 2, count: 3, qualifiedMask: airborneMask },
   );
 
   // No qualifying windows is an answer, not an absence: the card
@@ -4792,7 +4808,7 @@ function renderEscEvidence(dataset) {
       "chartLoadCollective",
       "chartLoadPower",
       "chartLoadWatts",
-      "chartLoadTemp"
+      "chartLoadTemp",
     ]) {
       const chart = el(chartId);
       if (chart) chart.innerHTML = "";
@@ -4831,13 +4847,13 @@ function renderEscEvidence(dataset) {
       if (values.length < sampleRateHz) {
         return {
           volts: flightTopVoltage,
-          reference: "flight"
+          reference: "flight",
         };
       }
 
       return {
         volts: values[Math.floor(values.length / 2)],
-        reference: "pre-event"
+        reference: "pre-event",
       };
     };
 
@@ -4845,7 +4861,7 @@ function renderEscEvidence(dataset) {
       const output = windowStats(
         outputPercent,
         event.startIndex,
-        event.endIndex
+        event.endIndex,
       );
 
       let saturatedCount = 0;
@@ -4863,31 +4879,21 @@ function renderEscEvidence(dataset) {
       const voltage = windowStats(
         voltageVolts,
         event.startIndex,
-        event.endIndex
+        event.endIndex,
       );
 
       const baseline = preEventVoltage(event.startIndex);
 
       const sagPercent =
-        Number.isFinite(baseline.volts) &&
-        baseline.volts > 0 &&
-        voltage
+        Number.isFinite(baseline.volts) && baseline.volts > 0 && voltage
           ? ((baseline.volts - voltage.min) / baseline.volts) * 100
           : null;
 
-      const watts = windowStats(
-        wattValues,
-        event.startIndex,
-        event.endIndex
-      );
+      const watts = windowStats(wattValues, event.startIndex, event.endIndex);
 
       const eventCollective =
         collectiveAbs && collectiveFlightStats
-          ? windowStats(
-              collectiveAbs,
-              event.startIndex,
-              event.endIndex
-            )
+          ? windowStats(collectiveAbs, event.startIndex, event.endIndex)
           : null;
 
       const explanation = explainLoadEvent({
@@ -4898,9 +4904,8 @@ function renderEscEvidence(dataset) {
         collectiveDriven: isCollectiveDriven({
           eventPeakCollective: eventCollective?.max ?? null,
           flightPeakCollective: collectiveFlightStats?.peak ?? null,
-          flightMedianCollective:
-            collectiveFlightStats?.median ?? null
-        })
+          flightMedianCollective: collectiveFlightStats?.median ?? null,
+        }),
       });
 
       return {
@@ -4910,14 +4915,12 @@ function renderEscEvidence(dataset) {
         baseline,
         sagPercent,
         watts,
-        explanation
+        explanation,
       };
     });
 
     const cell = (value, digits = 1, suffix = "") =>
-      Number.isFinite(value)
-        ? `${value.toFixed(digits)}${suffix}`
-        : "—";
+      Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "—";
 
     // When the ranking runs on ESC output (no usable current), the
     // load figures ARE output percentages — printing them in amps
@@ -4930,7 +4933,15 @@ function renderEscEvidence(dataset) {
       </tr>
       ${describedEvents
         .map(
-          ({ event, output, voltage, baseline, sagPercent, watts, explanation }) => `
+          ({
+            event,
+            output,
+            voltage,
+            baseline,
+            sagPercent,
+            watts,
+            explanation,
+          }) => `
         <tr>
           <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
           <td>${currentCarriesData ? cell(event.averageLoad, 1, " A") : "—"}</td>
@@ -4953,7 +4964,7 @@ function renderEscEvidence(dataset) {
                   ? "Battery sag"
                   : "Normal load"
           }</td>
-        </tr>`
+        </tr>`,
         )
         .join("")}
     `;
@@ -4969,17 +4980,16 @@ function renderEscEvidence(dataset) {
 
     // The biggest event gets the synchronized picture.
     const biggest = describedEvents.reduce((best, candidate) =>
-      (candidate.event.averageLoad ?? 0) >
-      (best.event.averageLoad ?? 0)
+      (candidate.event.averageLoad ?? 0) > (best.event.averageLoad ?? 0)
         ? candidate
-        : best
+        : best,
     );
 
     const window = sliceWindow(
       dataset.timeSeconds,
       biggest.event.peakSeconds,
       3,
-      3
+      3,
     );
 
     if (!window) {
@@ -4988,9 +4998,7 @@ function renderEscEvidence(dataset) {
     }
 
     if (window) {
-      const markers = [
-        { x: biggest.event.peakSeconds, label: "peak load" }
-      ];
+      const markers = [{ x: biggest.event.peakSeconds, label: "peak load" }];
 
       // The collective tells the load story better than any
       // sentence — pilot input at the peak, scrubbed by hover.
@@ -5002,10 +5010,10 @@ function renderEscEvidence(dataset) {
           chartLoadCollective,
           chartLoadPower,
           chartLoadWatts,
-          chartLoadTemp
+          chartLoadTemp,
         ],
         anchorTime: biggest.event.peakSeconds,
-        playFrom: null
+        playFrom: null,
       });
 
       renderSyncedChart(
@@ -5016,10 +5024,10 @@ function renderEscEvidence(dataset) {
           {
             label: "ESC output (%)",
             values: outputPercent,
-            color: CHART_COLORS[3]
-          }
+            color: CHART_COLORS[3],
+          },
         ],
-        { yLabel: "output (%)", markers, linkGroup: "loadSync" }
+        { yLabel: "output (%)", markers, linkGroup: "loadSync" },
       );
 
       if (collectiveColumn) {
@@ -5031,10 +5039,10 @@ function renderEscEvidence(dataset) {
             {
               patterns: [/^setpoint\[3\]$/i],
               label: "Collective target",
-              color: CHART_COLORS[5]
-            }
+              color: CHART_COLORS[5],
+            },
           ],
-          { yLabel: "collective", markers, linkGroup: "loadSync" }
+          { yLabel: "collective", markers, linkGroup: "loadSync" },
         );
       } else {
         chartLoadCollective.hidden = true;
@@ -5051,15 +5059,19 @@ function renderEscEvidence(dataset) {
           currentCarriesData && {
             label: "Current (A)",
             values: currentAmps,
-            color: CHART_COLORS[1]
+            color: CHART_COLORS[1],
           },
-          { label: "Voltage (V)", values: voltageVolts, color: CHART_COLORS[0] }
+          {
+            label: "Voltage (V)",
+            values: voltageVolts,
+            color: CHART_COLORS[0],
+          },
         ].filter(Boolean),
         {
           yLabel: currentCarriesData ? "amps · volts" : "volts",
           markers,
-          linkGroup: "loadSync"
-        }
+          linkGroup: "loadSync",
+        },
       );
 
       chartLoadWatts.hidden = !currentCarriesData;
@@ -5073,10 +5085,10 @@ function renderEscEvidence(dataset) {
             {
               label: "Electrical power (W)",
               values: wattValues,
-              color: CHART_COLORS[2]
-            }
+              color: CHART_COLORS[2],
+            },
           ],
-          { yLabel: "watts", markers, linkGroup: "loadSync" }
+          { yLabel: "watts", markers, linkGroup: "loadSync" },
         );
       } else {
         chartLoadWatts.innerHTML = "";
@@ -5089,9 +5101,9 @@ function renderEscEvidence(dataset) {
           window,
           temperatureEntries.map((entry) => ({
             ...entry,
-            convert: toDegreesCelsius
+            convert: toDegreesCelsius,
           })),
-          { yLabel: "°C", markers, linkGroup: "loadSync" }
+          { yLabel: "°C", markers, linkGroup: "loadSync" },
         );
       } else {
         chartLoadTemp.hidden = true;
@@ -5105,14 +5117,14 @@ function renderEscEvidence(dataset) {
       ? detectStableFlightPhase({
           timeSeconds: dataset.timeSeconds,
           headspeed: dataset.headspeed,
-          governorTarget: dataset.governorTarget
+          governorTarget: dataset.governorTarget,
         })
       : null;
 
   const banks = phase
     ? groupByGovernorTarget({
         governorTarget: dataset.governorTarget,
-        sampleIndexes: phase.stableIndexes ?? []
+        sampleIndexes: phase.stableIndexes ?? [],
       })
     : [];
 
@@ -5154,15 +5166,13 @@ function renderEscEvidence(dataset) {
     temperatureEntries.length > 0
       ? toDegreesCelsius(
           dataset.columnValues(
-            dataset.findColumnsIn(temperatureEntries[0].patterns)[0]
-          )
+            dataset.findColumnsIn(temperatureEntries[0].patterns)[0],
+          ),
         )
       : null;
 
   const profileCell = (value, digits = 1, suffix = "") =>
-    Number.isFinite(value)
-      ? `${value.toFixed(digits)}${suffix}`
-      : "—";
+    Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "—";
 
   escProfileCard.hidden = false;
   escProfileTable.innerHTML = `
@@ -5191,7 +5201,7 @@ function renderEscEvidence(dataset) {
             ? profileCell(maximumAt(temperatureValues, bank.indexes), 0, " °C")
             : "—"
         }</td>
-      </tr>`
+      </tr>`,
       )
       .join("")}
   `;
@@ -5200,11 +5210,23 @@ function renderEscEvidence(dataset) {
 function renderAllCharts(dataset) {
   if (!dataset) {
     for (const element of [
-      chartGyro, chartTracking, chartTrackingPitch, chartTrackingYaw,
-      chartFfRoll, chartFfPitch, chartFfYaw,
-      chartTermsRoll, chartTermsPitch, chartTermsYaw,
-      chartHeadspeed, chartThrottle, chartPower,
-      chartSpectrum, chartGovernor, chartEsc, chartBattery
+      chartGyro,
+      chartTracking,
+      chartTrackingPitch,
+      chartTrackingYaw,
+      chartFfRoll,
+      chartFfPitch,
+      chartFfYaw,
+      chartTermsRoll,
+      chartTermsPitch,
+      chartTermsYaw,
+      chartHeadspeed,
+      chartThrottle,
+      chartPower,
+      chartSpectrum,
+      chartGovernor,
+      chartEsc,
+      chartBattery,
     ]) {
       element.innerHTML =
         '<p class="chart-empty">No plottable telemetry found in this log.</p>';
@@ -5219,9 +5241,14 @@ function renderAllCharts(dataset) {
     return;
   }
 
-  renderSeriesChart(chartGyro, dataset, [/^gyroADC/i, /^gyroUnfilt/i, /^gyroRAW/i], {
-    yLabel: "deg/s"
-  });
+  renderSeriesChart(
+    chartGyro,
+    dataset,
+    [/^gyroADC/i, /^gyroUnfilt/i, /^gyroRAW/i],
+    {
+      yLabel: "deg/s",
+    },
+  );
 
   renderTuningPresets(dataset);
 
@@ -5229,17 +5256,25 @@ function renderAllCharts(dataset) {
     chartHeadspeed,
     dataset,
     [/headspeed/i, /^rpm/i, /governor/i],
-    { yLabel: "rpm" }
+    { yLabel: "rpm" },
   );
 
   renderScaledChart(
     chartThrottle,
     dataset,
     [
-      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
-      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+      {
+        patterns: [/^motor\[0\]/i],
+        label: "main motor %",
+        convert: toThrottlePercent,
+      },
+      {
+        patterns: [/^motor\[1\]/i],
+        label: "motor 2 %",
+        convert: toThrottlePercent,
+      },
     ],
-    "throttle (%)"
+    "throttle (%)",
   );
 
   renderScaledChart(
@@ -5247,17 +5282,19 @@ function renderAllCharts(dataset) {
     dataset,
     [
       { patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts },
-      { patterns: [/amperage/i, /^Ibat/i, /current/i], label: "current (A)", convert: toAmps }
+      {
+        patterns: [/amperage/i, /^Ibat/i, /current/i],
+        label: "current (A)",
+        convert: toAmps,
+      },
     ],
-    "volts · amps"
+    "volts · amps",
   );
 
   {
-    const governorColumns = dataset.findColumnsIn([
-      /headspeed/i,
-      /governorTarget/i,
-      /govTarget/i
-    ]).slice(0, 6);
+    const governorColumns = dataset
+      .findColumnsIn([/headspeed/i, /governorTarget/i, /govTarget/i])
+      .slice(0, 6);
 
     // Models on an ESC or external governor log rotor speed with
     // no target beside it. The chart then carries one trace, so it
@@ -5286,7 +5323,7 @@ function renderAllCharts(dataset) {
         series: governorColumns.map((name, index) => ({
           label: name,
           values: decimate(dataset.columnValues(name)),
-          color: CHART_COLORS[index % CHART_COLORS.length]
+          color: CHART_COLORS[index % CHART_COLORS.length],
         })),
         yLabel: "rpm",
         markers: dataset.labs.governor
@@ -5296,10 +5333,10 @@ function renderAllCharts(dataset) {
                 label:
                   dataset.labs.governor.capability === "full"
                     ? "worst droop"
-                    : "largest swing"
-              }
+                    : "largest swing",
+              },
             ]
-          : []
+          : [],
       });
     }
   }
@@ -5308,28 +5345,36 @@ function renderAllCharts(dataset) {
     chartEsc,
     dataset,
     [
-      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
-      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+      {
+        patterns: [/^motor\[0\]/i],
+        label: "main motor %",
+        convert: toThrottlePercent,
+      },
+      {
+        patterns: [/^motor\[1\]/i],
+        label: "motor 2 %",
+        convert: toThrottlePercent,
+      },
     ],
-    "throttle (%)"
+    "throttle (%)",
   );
 
- renderScaledChart(
-  chartBattery,
-  dataset,
-  [
-    {
-     patterns: dataset.voltagePatterns,
-      label: "pack voltage (V)",
-      convert: toVolts
-    }
-  ],
-  "pack voltage (V)"
-);
+  renderScaledChart(
+    chartBattery,
+    dataset,
+    [
+      {
+        patterns: dataset.voltagePatterns,
+        label: "pack voltage (V)",
+        convert: toVolts,
+      },
+    ],
+    "pack voltage (V)",
+  );
 
   if (dataset.spectra.length > 0) {
     renderSpectrumChart(chartSpectrum, dataset.spectra, {
-      markers: dataset.markers
+      markers: dataset.markers,
     });
   } else {
     chartSpectrum.innerHTML = `<p class="chart-empty">${
@@ -5359,13 +5404,12 @@ function renderQuality(dataset, flightStats) {
 
   const quality = assessLogQuality({
     sampleRateHz: dataset.sampleRateHz,
-    durationSeconds:
-      dataset.timeSeconds[dataset.timeSeconds.length - 1],
+    durationSeconds: dataset.timeSeconds[dataset.timeSeconds.length - 1],
     corruptFrames: flightStats?.corruptFrames ?? 0,
     totalFrames: flightStats
       ? flightStats.intraFrames + flightStats.interFrames
       : 0,
-    ...dataset.columnPresence
+    ...dataset.columnPresence,
   });
 
   currentLogQuality = quality;
@@ -5410,7 +5454,7 @@ function renderFilterAdvisor(dataset) {
   // action's own detail and opens itself.
   const topRecommendation =
     (advice.recommendations ?? []).find(
-      (recommendation) => recommendation.priority === "first"
+      (recommendation) => recommendation.priority === "first",
     ) ?? (advice.recommendations ?? [])[0];
   filterAdvisorCard.open =
     topRecommendation?.priority === "filters" ||
@@ -5431,7 +5475,7 @@ function renderFilterAdvisor(dataset) {
           <td>${row.magnitude}</td>
           <td>${row.filteredMagnitude ?? "—"}</td>
           <td>${row.reductionPercent !== null ? row.reductionPercent + "%" : "—"}</td>
-        </tr>`
+        </tr>`,
         )
         .join("")}
     `;
@@ -5462,11 +5506,11 @@ function renderFilterAdvisor(dataset) {
 
 function renderPidProfileBreakdown(pidAnalysis, lines) {
   const trackingProfiles =
-    pidAnalysis?.detectedColumns?.trackingAnalysis
-      ?.profileTrackingAnalysis ?? [];
+    pidAnalysis?.detectedColumns?.trackingAnalysis?.profileTrackingAnalysis ??
+    [];
 
   const usableProfiles = trackingProfiles.filter((profile) =>
-    Number.isFinite(profile.averageTrackingError)
+    Number.isFinite(profile.averageTrackingError),
   );
 
   if (usableProfiles.length < 2) {
@@ -5479,24 +5523,19 @@ function renderPidProfileBreakdown(pidAnalysis, lines) {
   // The adapter's header line may quote column names — accept
   // both, like the PID analysis itself does.
   const gyroColumns = (analysisContext.telemetry?.allColumns ?? [])
-    .filter((name) =>
-      /^"?gyroADC\[[0-2]\]"?$/i.test(String(name).trim())
-    )
+    .filter((name) => /^"?gyroADC\[[0-2]\]"?$/i.test(String(name).trim()))
     .sort();
 
   const responseProfiles = analyzeProfileResponse({
     lines,
-    telemetryHeaderIndex:
-      analysisContext.flight?.telemetryHeaderIndex,
-    headspeedProfiles:
-      analysisContext.flight?.headspeedProfiles ?? [],
-    setpointColumns:
-      pidAnalysis.detectedColumns?.axisSetpoint ?? [],
-    gyroColumns
+    telemetryHeaderIndex: analysisContext.flight?.telemetryHeaderIndex,
+    headspeedProfiles: analysisContext.flight?.headspeedProfiles ?? [],
+    setpointColumns: pidAnalysis.detectedColumns?.axisSetpoint ?? [],
+    gyroColumns,
   });
 
   const responseByRpm = new Map(
-    responseProfiles.map((profile) => [profile.targetRpm, profile])
+    responseProfiles.map((profile) => [profile.targetRpm, profile]),
   );
 
   const numberCell = (value, digits = 1, suffix = "") =>
@@ -5515,7 +5554,7 @@ function renderPidProfileBreakdown(pidAnalysis, lines) {
         return (profile.axisResults ?? [])
           .map((axisResult, axisIndex) => {
             const axisResponse = response?.axisResults?.find(
-              (candidate) => candidate.axis === axisResult.axis
+              (candidate) => candidate.axis === axisResult.axis,
             );
 
             return `
@@ -5533,10 +5572,10 @@ function renderPidProfileBreakdown(pidAnalysis, lines) {
   `;
 
   const best = usableProfiles.reduce((a, b) =>
-    a.averageTrackingError <= b.averageTrackingError ? a : b
+    a.averageTrackingError <= b.averageTrackingError ? a : b,
   );
   const worst = usableProfiles.reduce((a, b) =>
-    a.averageTrackingError >= b.averageTrackingError ? a : b
+    a.averageTrackingError >= b.averageTrackingError ? a : b,
   );
 
   // Ranking is a claim the evidence must carry: the same
@@ -5545,7 +5584,7 @@ function renderPidProfileBreakdown(pidAnalysis, lines) {
   // qualification standard on every surface (#33).
   const largestSampleCount = usableProfiles.reduce(
     (max, profile) => Math.max(max, profile.sampleCount ?? 0),
-    0
+    0,
   );
   const underSampled = (profile) =>
     (profile.sampleCount ?? 0) < 5000 ||
@@ -5592,7 +5631,7 @@ function renderFilterProfileBreakdown(dataset) {
 
     renderSpectrumChart(chartElement, bank.spectra, {
       height: 220,
-      markers: buildSpectrumMarkers(bank.spectra, bank.actualRpm)
+      markers: buildSpectrumMarkers(bank.spectra, bank.actualRpm),
     });
 
     const advice = bank.advice;
@@ -5612,11 +5651,9 @@ function renderFilterProfileBreakdown(dataset) {
             <td>${row.hz} Hz</td>
             <td>${row.source}</td>
             <td>${
-              row.reductionPercent !== null
-                ? row.reductionPercent + "%"
-                : "—"
+              row.reductionPercent !== null ? row.reductionPercent + "%" : "—"
             }</td>
-          </tr>`
+          </tr>`,
           )
           .join("")}
       `;
@@ -5633,8 +5670,7 @@ function renderFilterProfileBreakdown(dataset) {
       }
 
       const item = document.createElement("div");
-      item.className =
-        "advisor-recommendation priority-filters";
+      item.className = "advisor-recommendation priority-filters";
       item.innerHTML = `<span>Filters:</span> ${recommendation.text}`;
       filterProfileBlocks.appendChild(item);
     }
@@ -5676,11 +5712,11 @@ function analyzeFlight(flightIndex) {
     telemetryText,
     filterAnalysis,
     pidAnalysis,
-    profileSegments
+    profileSegments,
   } = buildLogAnalysis({
     fileType,
     lines,
-    aircraftProfiles
+    aircraftProfiles,
   });
 
   updateScreen({
@@ -5706,7 +5742,7 @@ function analyzeFlight(flightIndex) {
     pidAnalysisConfidence,
     pidAnalysisFindings,
     pidAnalysisRecommendations,
-    rawPreview
+    rawPreview,
   });
 
   currentFilterAnalysisResult = filterAnalysis ?? null;
@@ -5718,9 +5754,7 @@ function analyzeFlight(flightIndex) {
     // the pack builder attributes earned changes with these.
     currentDataset.profileSegments = profileSegments ?? [];
   }
-  currentPilotInput = currentDataset
-    ? readPilotInput(currentDataset)
-    : null;
+  currentPilotInput = currentDataset ? readPilotInput(currentDataset) : null;
 
   renderFlightEvents(currentDataset?.flightEvents ?? null);
   renderServoLimits(currentDataset?.servoLimits ?? null);
@@ -5739,7 +5773,7 @@ function analyzeFlight(flightIndex) {
     currentDataset?.labs.governor,
     governorStory,
     governorMetrics,
-    "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed can still be viewed, but governor tracking and droop cannot be scored."
+    "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed can still be viewed, but governor tracking and droop cannot be scored.",
   );
   renderGovernorEvents(currentDataset);
   renderGovernorSettings(currentDataset);
@@ -5748,10 +5782,7 @@ function analyzeFlight(flightIndex) {
   // One page, one story: when the flight produced excursions, the
   // verdict sentence carries their summary too — "excellent hold"
   // must never sit silently above an event strip that disagrees.
-  if (
-    currentDataset?.governorEvents?.summary?.total > 0 &&
-    governorStory
-  ) {
+  if (currentDataset?.governorEvents?.summary?.total > 0 && governorStory) {
     governorStory.textContent += ` ${currentDataset.governorEvents.summary.sentence}`;
   }
 
@@ -5768,10 +5799,9 @@ function analyzeFlight(flightIndex) {
     precomp: currentDataset?.precomp,
     vibrationConcern: Boolean(
       currentDataset?.verdict?.cards?.some(
-        (card) =>
-          card.key === "vibration" && card.status === "attention"
-      )
-    )
+        (card) => card.key === "vibration" && card.status === "attention",
+      ),
+    ),
   });
   currentRecommendations = nextSteps;
   renderFirstSteps(currentDataset, nextSteps, pidAnalysis);
@@ -5781,7 +5811,7 @@ function analyzeFlight(flightIndex) {
     for (const axisResult of pidAnalysis?.detectedColumns?.trackingAnalysis
       ?.commandEvents ?? []) {
       axisEvidence[axisResult.axis] = (axisResult.events ?? []).filter(
-        (event) => Number.isFinite(event.responsePeak)
+        (event) => Number.isFinite(event.responsePeak),
       ).length;
     }
     renderPackCard(
@@ -5801,29 +5831,25 @@ function analyzeFlight(flightIndex) {
         governorCapability: currentDataset?.labs?.governor?.capability ?? null,
         vibrationConcern: Boolean(
           currentDataset?.verdict?.cards?.some(
-            (card) => card.key === "vibration" && card.status === "attention"
-          )
-        )
-      }
+            (card) => card.key === "vibration" && card.status === "attention",
+          ),
+        ),
+      },
     );
   }
   renderNextSteps("pidNextCard", "pidNextList", nextSteps.pid);
-  renderNextSteps(
-    "governorNextCard",
-    "governorNextList",
-    nextSteps.governor
-  );
+  renderNextSteps("governorNextCard", "governorNextList", nextSteps.governor);
   renderLab(
     currentDataset?.labs.esc,
     escStory,
     escMetrics,
-    "This log has no motor data to analyze."
+    "This log has no motor data to analyze.",
   );
   renderLab(
     currentDataset?.labs.battery,
     batteryStory,
     batteryMetrics,
-    "This log has no voltage data to analyze."
+    "This log has no voltage data to analyze.",
   );
 
   buildReportButton.disabled = !currentDataset;
@@ -5848,26 +5874,21 @@ function analyzeFlight(flightIndex) {
       // The selected flight's own lines, so each flight of a
       // multi-flight file carries its own identity.
       sourceHash: hashFlightLines(currentFlightLines),
-      flightDateMs: resolveFlightDateMs(
-        currentFlightLines,
-        file.lastModified
-      ),
+      flightDateMs: resolveFlightDateMs(currentFlightLines, file.lastModified),
       durationSeconds:
         currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1],
-   dataset: {
-  ...currentDataset,
-  pidScore: Number.isFinite(
-    Number.parseFloat(pidAnalysis?.score)
-  )
-    ? Number.parseFloat(pidAnalysis.score)
-    : currentDataset.pidScore
-}
-});
+      dataset: {
+        ...currentDataset,
+        pidScore: Number.isFinite(Number.parseFloat(pidAnalysis?.score))
+          ? Number.parseFloat(pidAnalysis.score)
+          : currentDataset.pidScore,
+      },
+    });
 
     const craftKey = recordFlight(
       localStorage,
       craftName === "Not found" ? "Unknown craft" : craftName,
-      entry
+      entry,
     );
 
     refreshHistoryScreen(craftKey);
@@ -5902,12 +5923,17 @@ function analyzeFlight(flightIndex) {
     // them, so contributing them would only fill the community
     // bucket with identical copies.
     if (!file.name.startsWith("sample-")) {
-      maybeContributeFlight(flight.decoded, fileType, `${file.name}#${flightIndex}`, {
-        dataset: currentDataset,
-        pidAnalysis,
-        logQuality: currentLogQuality,
-        craftName: craftKeyName
-      });
+      maybeContributeFlight(
+        flight.decoded,
+        fileType,
+        `${file.name}#${flightIndex}`,
+        {
+          dataset: currentDataset,
+          pidAnalysis,
+          logQuality: currentLogQuality,
+          craftName: craftKeyName,
+        },
+      );
     }
   }
 
@@ -5934,7 +5960,7 @@ function analyzeFlight(flightIndex) {
 // too, then the analysis summary follows — one story, two surfaces.
 function verdictStoryFor(key) {
   const card = currentDataset?.verdict?.cards?.find(
-    (entry) => entry.key === key
+    (entry) => entry.key === key,
   );
   return card ? `${card.headline}. ${card.detail}` : null;
 }
@@ -5952,7 +5978,7 @@ function pidLabForReport(analysis) {
   // tuning change, the report says what to fly next instead of
   // stopping at "worth reviewing".
   const behaviorReviews = (analysis.responseBehavior ?? []).filter(
-    (checkResult) => checkResult.status === "Review"
+    (checkResult) => checkResult.status === "Review",
   );
 
   // An axis under Review exports its WHOLE response story: the
@@ -5966,7 +5992,7 @@ function pidLabForReport(analysis) {
       checkResult.status !== "Review" &&
       reviewAxes.has(checkResult.axis) &&
       checkResult.evidence &&
-      !/^0 valid/.test(checkResult.evidence)
+      !/^0 valid/.test(checkResult.evidence),
   );
 
   const describeCheck = (checkResult, flagged) =>
@@ -5988,7 +6014,7 @@ function pidLabForReport(analysis) {
 
   const behaviorStory = [
     ...behaviorReviews.map((c) => describeCheck(c, true)),
-    ...behaviorCompanions.map((c) => describeCheck(c, false))
+    ...behaviorCompanions.map((c) => describeCheck(c, false)),
   ].join(" ");
 
   const reviewedAxisList = [...reviewAxes];
@@ -5996,7 +6022,7 @@ function pidLabForReport(analysis) {
   const nextFlightStep =
     reviewedAxisList.length > 0
       ? `Repeat several deliberate ${reviewedAxisList.join(
-          " and "
+          " and ",
         )} inputs with clean stops and reversals at the same headspeed. If the same response pattern returns, those confirmed events determine the tuning change — this flight alone does not earn one.`
       : null;
 
@@ -6007,13 +6033,17 @@ function pidLabForReport(analysis) {
         : analysis.overallStatus === "Review"
           ? "watch"
           : "insufficient",
-    story: [verdictStoryFor("tuning"), analysis.summary.join(" "), behaviorStory]
+    story: [
+      verdictStoryFor("tuning"),
+      analysis.summary.join(" "),
+      behaviorStory,
+    ]
       .filter(Boolean)
       .join(" "),
     metrics: [
       Number.isFinite(analysis.score) && {
         label: "Tracking score",
-        value: `${analysis.score}/100`
+        value: `${analysis.score}/100`,
       },
       analysis.confidence?.level && {
         label: "Confidence",
@@ -6021,7 +6051,7 @@ function pidLabForReport(analysis) {
           `${analysis.confidence.level}` +
           (analysis.confidence.demand === "gentle"
             ? ": gentle flight demand"
-            : "")
+            : ""),
       },
       { label: "Overall status", value: analysis.overallStatus ?? "—" },
       behaviorReviews.length > 0 && {
@@ -6030,13 +6060,13 @@ function pidLabForReport(analysis) {
           .map(
             (checkResult) =>
               `${checkResult.axis} ${checkResult.check}: Review` +
-              (checkResult.evidence ? ` (${checkResult.evidence})` : "")
+              (checkResult.evidence ? ` (${checkResult.evidence})` : ""),
           )
-          .join("; ")
+          .join("; "),
       },
       nextFlightStep && {
         label: "Next flight",
-        value: nextFlightStep
+        value: nextFlightStep,
       },
       recommendations.length > 0 && {
         label: "Top recommendation",
@@ -6044,9 +6074,9 @@ function pidLabForReport(analysis) {
           recommendations[0] +
           (recommendations.length > 1
             ? ` (+${recommendations.length - 1} more in the app)`
-            : "")
-      }
-    ].filter(Boolean)
+            : ""),
+      },
+    ].filter(Boolean),
   };
 }
 
@@ -6058,17 +6088,17 @@ function filterLabForReport(analysis, advice = null) {
   // The Filter Advisor is what the Filter Lab page leads with: the
   // peaks, their likely source, and the do-this-first / filters /
   // worth-knowing lines. The report's Filter Lab carries the same.
-  const advisorMetrics = (advice?.recommendations ?? []).slice(0, 4).map(
-    (recommendation) => ({
+  const advisorMetrics = (advice?.recommendations ?? [])
+    .slice(0, 4)
+    .map((recommendation) => ({
       label:
         recommendation.priority === "first"
           ? "Do this first"
           : recommendation.priority === "filters"
             ? "Filters"
             : "Worth knowing",
-      value: recommendation.text
-    })
-  );
+      value: recommendation.text,
+    }));
   const advisorRows = (advice?.rows ?? []).slice(0, 4).map((row) => ({
     label: `Peak ${row.hz} Hz`,
     value:
@@ -6078,7 +6108,7 @@ function filterLabForReport(analysis, advice = null) {
         : "") +
       (row.reductionPercent !== null && row.reductionPercent !== undefined
         ? ` (${row.reductionPercent}% reduction)`
-        : "")
+        : ""),
   }));
 
   return {
@@ -6090,18 +6120,18 @@ function filterLabForReport(analysis, advice = null) {
     story: [
       verdictStoryFor("vibration"),
       (analysis.summaryFindings ?? []).join(" ") ||
-        String(analysis.status ?? "")
+        String(analysis.status ?? ""),
     ]
       .filter(Boolean)
       .join(" "),
     metrics: [
       Number.isFinite(analysis.score) && {
         label: "Filter score",
-        value: `${analysis.score}/100`
+        value: `${analysis.score}/100`,
       },
       analysis.confidence?.label && {
         label: "Confidence",
-        value: `${analysis.confidence.label} (${analysis.confidence.score}/100)`
+        value: `${analysis.confidence.label} (${analysis.confidence.score}/100)`,
       },
       { label: "Status", value: String(analysis.status ?? "—") },
       ...advisorRows,
@@ -6112,9 +6142,9 @@ function filterLabForReport(analysis, advice = null) {
           recommendations[0] +
           (recommendations.length > 1
             ? ` (+${recommendations.length - 1} more in the app)`
-            : "")
-      }
-    ].filter(Boolean)
+            : ""),
+      },
+    ].filter(Boolean),
   };
 }
 
@@ -6148,35 +6178,39 @@ buildReportButton.addEventListener("click", () => {
         wide: true,
         analysis: filterLabForReport(
           currentFilterAnalysisResult,
-          currentDataset.filterAdvice
-        )
+          currentDataset.filterAdvice,
+        ),
       },
-      { title: "PID Lab", wide: true, analysis: pidLabForReport(currentPidAnalysisResult) },
+      {
+        title: "PID Lab",
+        wide: true,
+        analysis: pidLabForReport(currentPidAnalysisResult),
+      },
       {
         title: "Governor Lab",
         analysis: currentDataset.labs.governor,
-        absent: el("governorStory")?.textContent?.trim() ?? null
+        absent: el("governorStory")?.textContent?.trim() ?? null,
       },
       {
         title: "ESC Lab",
         analysis: currentDataset.labs.esc,
-        absent: el("escStory")?.textContent?.trim() ?? null
+        absent: el("escStory")?.textContent?.trim() ?? null,
       },
       {
         title: "Battery Lab",
         analysis: currentDataset.labs.battery,
-        absent: el("batteryStory")?.textContent?.trim() ?? null
+        absent: el("batteryStory")?.textContent?.trim() ?? null,
       },
       {
         title: "Signal Lab",
         analysis: currentDataset.signalLab,
-        absent: el("signalStory")?.textContent?.trim() ?? null
+        absent: el("signalStory")?.textContent?.trim() ?? null,
       },
       {
         title: "BEC Lab",
         analysis: currentDataset.becLab,
-        absent: el("becStory")?.textContent?.trim() ?? null
-      }
+        absent: el("becStory")?.textContent?.trim() ?? null,
+      },
     ],
     chartElements: [
       { title: "Noise Spectrum", element: chartSpectrum, wide: true },
@@ -6186,12 +6220,14 @@ buildReportButton.addEventListener("click", () => {
       { title: "Yaw: Target vs Gyro", element: chartTrackingYaw },
       { title: "Headspeed & Governor", element: chartGovernor },
       { title: "Throttle", element: chartThrottle },
-      { title: "Battery & Current", element: chartPower }
-    ]
+      { title: "Battery & Current", element: chartPower },
+    ],
   });
 
-  const baseName = (summaryFileName.textContent || "flight")
-    .replace(/\.[^.]+$/, "");
+  const baseName = (summaryFileName.textContent || "flight").replace(
+    /\.[^.]+$/,
+    "",
+  );
 
   // Desktop: a PDF through Chromium's own renderer — identical on
   // every machine, one file to share. Outside Electron (the web
@@ -6217,8 +6253,7 @@ buildReportButton.addEventListener("click", () => {
         } else if (result?.canceled) {
           reportStatus.textContent = "Report not saved.";
         } else {
-          reportStatus.textContent =
-            `The PDF could not be written${result?.error ? `: ${result.error}` : ""}. Saving the HTML version instead.`;
+          reportStatus.textContent = `The PDF could not be written${result?.error ? `: ${result.error}` : ""}. Saving the HTML version instead.`;
           downloadReport(html, `blackbox-lab-report-${baseName}.html`);
         }
       })
@@ -6234,10 +6269,8 @@ buildReportButton.addEventListener("click", () => {
   }
 
   downloadReport(html, `blackbox-lab-report-${baseName}.html`);
-  reportStatus.textContent =
-    "Report saved: check your downloads folder.";
+  reportStatus.textContent = "Report saved: check your downloads folder.";
 });
-
 
 // ======================================================
 // 08. COMPARE FLIGHTS (before vs after)
@@ -6252,8 +6285,7 @@ function strongestSpectrumOf(dataset) {
 
   for (const entry of dataset.spectra) {
     if (
-      spectrumPeakValue(entry.spectrum) >
-      spectrumPeakValue(strongest.spectrum)
+      spectrumPeakValue(entry.spectrum) > spectrumPeakValue(strongest.spectrum)
     ) {
       strongest = entry;
     }
@@ -6277,7 +6309,7 @@ function datasetForComparisonFlight(flightIndex) {
     const { pidAnalysis } = buildLogAnalysis({
       fileType: logData.fileType,
       lines,
-      aircraftProfiles
+      aircraftProfiles,
     });
 
     const name =
@@ -6288,7 +6320,7 @@ function datasetForComparisonFlight(flightIndex) {
     datasets.set(flightIndex, {
       dataset: buildDataset(lines, pidAnalysis),
       name,
-      setup: extractComparableSetup(lines)
+      setup: extractComparableSetup(lines),
     });
   }
 
@@ -6337,7 +6369,7 @@ function refreshCompareButtons() {
   compareBaselineInfo.textContent = ready
     ? `Before: ${summaryFileName.textContent}` +
       (currentFlightSummary ? `, ${currentFlightSummary}` : "")
-    : 'No baseline yet: open a log first (Home screen).';
+    : "No baseline yet: open a log first (Home screen).";
 
   const sameFileHint = el("compareSameFileHint");
   if (sameFileHint) {
@@ -6362,7 +6394,7 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
   lastComparison = {
     dataset: comparisonDataset,
     name: comparisonName,
-    setup: comparisonSetup
+    setup: comparisonSetup,
   };
 
   if (opts.autoOrder !== false) {
@@ -6370,7 +6402,7 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     // "swap": the open log started later, so it becomes After.
     const order = chronologicalOrder(
       currentSetup?.startIso,
-      comparisonSetup?.startIso
+      comparisonSetup?.startIso,
     );
     compareSwapped = order === "swap";
   }
@@ -6380,14 +6412,22 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     (currentFlightSummary ? `, ${currentFlightSummary}` : "");
 
   const beforeSide = compareSwapped
-    ? { dataset: comparisonDataset, name: comparisonName, setup: comparisonSetup }
+    ? {
+        dataset: comparisonDataset,
+        name: comparisonName,
+        setup: comparisonSetup,
+      }
     : { dataset: currentDataset, name: openIdentity, setup: currentSetup };
   const afterSide = compareSwapped
     ? { dataset: currentDataset, name: openIdentity, setup: currentSetup }
-    : { dataset: comparisonDataset, name: comparisonName, setup: comparisonSetup };
+    : {
+        dataset: comparisonDataset,
+        name: comparisonName,
+        setup: comparisonSetup,
+      };
 
   const result = compareFlights(beforeSide.dataset, afterSide.dataset, {
-    setupDiff: diffSetups(beforeSide.setup, afterSide.setup)
+    setupDiff: diffSetups(beforeSide.setup, afterSide.setup),
   });
 
   // The same flight on both sides is a SELF-CHECK, not a comparison
@@ -6400,7 +6440,7 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
     currentSetup?.startIso === comparisonSetup?.startIso &&
     Math.abs(
       (currentDataset?.timeSeconds?.at(-1) ?? 0) -
-        (comparisonDataset?.timeSeconds?.at(-1) ?? 0)
+        (comparisonDataset?.timeSeconds?.at(-1) ?? 0),
     ) < 0.05;
 
   if (sameFlight) {
@@ -6456,7 +6496,7 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
         const verdictWord = {
           match: "comparable",
           partial: "partly",
-          mismatch: "not comparable"
+          mismatch: "not comparable",
         };
         const table = el("compareComparabilityTable");
         if (table) {
@@ -6467,14 +6507,16 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
                   (row) => `
               <tr data-verdict="${row.verdict ?? "unknown"}">
                 <td class="dim">${escapeHtml(row.dimension)}${
-                  row.note ? `<span class="note">${escapeHtml(row.note)}</span>` : ""
+                  row.note
+                    ? `<span class="note">${escapeHtml(row.note)}</span>`
+                    : ""
                 }</td>
                 <td>${escapeHtml(row.before ?? "—")}</td>
                 <td>${escapeHtml(row.after ?? "—")}</td>
                 <td class="verdict"><span class="status-dot"></span>${
                   row.verdict ? verdictWord[row.verdict] : "not judged"
                 }</td>
-              </tr>`
+              </tr>`,
                 )
                 .join("")
             : "";
@@ -6541,13 +6583,13 @@ function renderComparison(comparisonDataset, comparisonName, opts = {}) {
       {
         label: `Before (${beforeSide.name})`,
         spectrum: beforeSpectrum,
-        color: CHART_COLORS[1]
+        color: CHART_COLORS[1],
       },
       {
         label: `After (${afterSide.name})`,
         spectrum: afterSpectrum,
-        color: CHART_COLORS[0]
-      }
+        color: CHART_COLORS[0],
+      },
     ]);
   }
 }
@@ -6560,7 +6602,7 @@ if (compareSwapButton) {
     compareSwapped = !compareSwapped;
     renderComparison(lastComparison.dataset, lastComparison.name, {
       autoOrder: false,
-      setup: lastComparison.setup
+      setup: lastComparison.setup,
     });
   });
 }
@@ -6586,8 +6628,7 @@ compareFileInput.addEventListener("change", async () => {
         "Could not read flight data from the comparison log.";
     }
   } catch (error) {
-    compareBaselineInfo.textContent =
-      "Something went wrong: " + error.message;
+    compareBaselineInfo.textContent = "Something went wrong: " + error.message;
   }
 
   compareFileInput.value = "";
@@ -6600,25 +6641,20 @@ compareFlightSelect.addEventListener("change", () => {
     return;
   }
 
-  const result = datasetForComparisonFlight(
-    Number(compareFlightSelect.value)
-  );
+  const result = datasetForComparisonFlight(Number(compareFlightSelect.value));
   renderComparison(result.dataset, result.name, { setup: result.setup });
 });
 
 compareSampleButton.addEventListener("click", async () => {
   const bytes = await window.blackboxLab.readSampleLog(
-    "sample-clean-tuned.bbl"
+    "sample-clean-tuned.bbl",
   );
 
   if (!bytes) {
     return;
   }
 
-  const file = new File(
-    [new Uint8Array(bytes)],
-    "sample-clean-tuned.bbl"
-  );
+  const file = new File([new Uint8Array(bytes)], "sample-clean-tuned.bbl");
 
   const result = await loadComparisonFile(file);
 
@@ -6673,7 +6709,7 @@ function resetStepResponseView() {
   for (const element of [
     chartStepResponseRoll,
     chartStepResponsePitch,
-    chartStepResponseYaw
+    chartStepResponseYaw,
   ]) {
     if (element) {
       element.innerHTML =
@@ -6684,7 +6720,7 @@ function resetStepResponseView() {
   for (const metricsElement of [
     stepResponseRollMetrics,
     stepResponsePitchMetrics,
-    stepResponseYawMetrics
+    stepResponseYawMetrics,
   ]) {
     if (metricsElement) {
       metricsElement.innerHTML = "";
@@ -6694,7 +6730,7 @@ function resetStepResponseView() {
   for (const compareElement of [
     stepResponseRollCompare,
     stepResponsePitchCompare,
-    stepResponseYawCompare
+    stepResponseYawCompare,
   ]) {
     if (compareElement) {
       compareElement.innerHTML = "";
@@ -6706,23 +6742,15 @@ function getStepResponseOptions() {
   return {
     smoothFactor: Math.max(
       1,
-      Math.min(
-        4,
-        Number(stepResponseSmoothSelect?.value || 1)
-      )
+      Math.min(4, Number(stepResponseSmoothSelect?.value || 1)),
     ),
     yCorrection: stepResponseYCorrection?.checked ?? true,
-    minInput: Math.max(
-      5,
-      Number(stepResponseMinInput?.value || 20)
-    )
+    minInput: Math.max(5, Number(stepResponseMinInput?.value || 20)),
   };
 }
 
 function formatStepResponseMetric(value, suffix = "") {
-  return Number.isFinite(value)
-    ? `${value.toFixed(1)}${suffix}`
-    : "—";
+  return Number.isFinite(value) ? `${value.toFixed(1)}${suffix}` : "—";
 }
 
 function formatPid(pid) {
@@ -6783,10 +6811,11 @@ function renderStepResponseCompareTable(compareElement, axisResult) {
     return;
   }
 
-  const rows = series.map((s, index) => {
-    const color = CHART_COLORS[index % CHART_COLORS.length];
-    const overshoot = s.metrics.maxOvershoot * 100;
-    return `
+  const rows = series
+    .map((s, index) => {
+      const color = CHART_COLORS[index % CHART_COLORS.length];
+      const overshoot = s.metrics.maxOvershoot * 100;
+      return `
       <tr>
         <td class="swatch"><span class="swatch-dot" style="background:${color}"></span></td>
         <td class="label">${s.label}</td>
@@ -6797,7 +6826,8 @@ function renderStepResponseCompareTable(compareElement, axisResult) {
         <td>${s.numSegments}</td>
       </tr>
     `;
-  }).join("");
+    })
+    .join("");
 
   compareElement.innerHTML = `
     <table>
@@ -6822,9 +6852,7 @@ function renderStepResponseCompareTable(compareElement, axisResult) {
 function renderStepResponseResults(result) {
   if (!result) return;
 
-  const axisByName = new Map(
-    result.axes.map((axis) => [axis.axis, axis])
-  );
+  const axisByName = new Map(result.axes.map((axis) => [axis.axis, axis]));
 
   const roll = axisByName.get("Roll");
   const pitch = axisByName.get("Pitch");
@@ -6838,12 +6866,12 @@ function renderStepResponseResults(result) {
         timeMs: s.timeMs,
         response: s.stepResponse,
         metrics: s.metrics,
-        color: CHART_COLORS[index % CHART_COLORS.length]
+        color: CHART_COLORS[index % CHART_COLORS.length],
       }));
       renderStepResponseChart(chartStepResponseRoll, {
         series,
         average: { response: roll.stepResponse, metrics: roll.metrics },
-        height: 260
+        height: 260,
       });
     }
     renderStepResponseCompareTable(stepResponseRollCompare, roll);
@@ -6857,12 +6885,12 @@ function renderStepResponseResults(result) {
         timeMs: s.timeMs,
         response: s.stepResponse,
         metrics: s.metrics,
-        color: CHART_COLORS[index % CHART_COLORS.length]
+        color: CHART_COLORS[index % CHART_COLORS.length],
       }));
       renderStepResponseChart(chartStepResponsePitch, {
         series,
         average: { response: pitch.stepResponse, metrics: pitch.metrics },
-        height: 260
+        height: 260,
       });
     }
     renderStepResponseCompareTable(stepResponsePitchCompare, pitch);
@@ -6876,12 +6904,12 @@ function renderStepResponseResults(result) {
         timeMs: s.timeMs,
         response: s.stepResponse,
         metrics: s.metrics,
-        color: CHART_COLORS[index % CHART_COLORS.length]
+        color: CHART_COLORS[index % CHART_COLORS.length],
       }));
       renderStepResponseChart(chartStepResponseYaw, {
         series,
         average: { response: yaw.stepResponse, metrics: yaw.metrics },
-        height: 260
+        height: 260,
       });
     }
     renderStepResponseCompareTable(stepResponseYawCompare, yaw);
@@ -6912,9 +6940,12 @@ function runStepResponseAnalysis() {
   const selected = stepResponseFlightSelect?.value || "all";
 
   requestIdleCallback
-    ? requestIdleCallback(() => {
-        computeAndRenderStepResponse(selected, options);
-      }, { timeout: 500 })
+    ? requestIdleCallback(
+        () => {
+          computeAndRenderStepResponse(selected, options);
+        },
+        { timeout: 500 },
+      )
     : setTimeout(() => computeAndRenderStepResponse(selected, options), 30);
 }
 
@@ -6923,7 +6954,7 @@ function computeAndRenderStepResponse(selected, options) {
     if (selected === "all") {
       currentStepResponseResults = analyzeAllFlightsStepResponse(
         loadedLog,
-        options
+        options,
       );
       renderStepResponseResults(currentStepResponseResults.aggregated);
     } else {
@@ -6935,7 +6966,7 @@ function computeAndRenderStepResponse(selected, options) {
       }
       const singleResult = analyzeAllFlightsStepResponse(
         { flights: [flight] },
-        options
+        options,
       );
       currentStepResponseResults = singleResult;
       renderStepResponseResults(singleResult.aggregated);
@@ -6962,7 +6993,7 @@ stepResponseFlightSelect?.addEventListener("change", () => {
 [
   stepResponseSmoothSelect,
   stepResponseYCorrection,
-  stepResponseMinInput
+  stepResponseMinInput,
 ].forEach((control) => {
   control?.addEventListener("change", () => {
     if (currentStepResponseResults) {
@@ -6971,7 +7002,6 @@ stepResponseFlightSelect?.addEventListener("change", () => {
     }
   });
 });
-
 
 // ======================================================
 // 10. HEALTH RECORD (per-craft history)
@@ -7007,9 +7037,7 @@ function refreshHistoryScreen(selectedCraft) {
   }
 
   const craft =
-    selectedCraft && history[selectedCraft]
-      ? selectedCraft
-      : craftNames[0];
+    selectedCraft && history[selectedCraft] ? selectedCraft : craftNames[0];
   historyCraftSelect.value = craft;
 
   const entries = history[craft];
@@ -7037,7 +7065,7 @@ function refreshHistoryScreen(selectedCraft) {
 
   const trendChart = (element, key, yLabel) => {
     const values = entries.map((entry) =>
-      Number.isFinite(entry[key]) ? entry[key] : null
+      Number.isFinite(entry[key]) ? entry[key] : null,
     );
 
     if (values.filter((value) => value !== null).length < 2) {
@@ -7055,13 +7083,13 @@ function refreshHistoryScreen(selectedCraft) {
           // Below the trend threshold the dots stand alone: a
           // connecting line between two flights already reads as a
           // direction, and two flights cannot carry one (#65).
-          pointsOnly: entries.length < 4
-        }
+          pointsOnly: entries.length < 4,
+        },
       ],
       yLabel,
       xLabel: "Flight #",
       height: 200,
-      formatX: (value) => `Flight ${Math.round(value)}`
+      formatX: (value) => `Flight ${Math.round(value)}`,
     });
   };
 
@@ -7108,7 +7136,7 @@ function refreshHistoryScreen(selectedCraft) {
     "droopRpm",
     rotorWording.label === "Governor droop"
       ? "worst droop (rpm)"
-      : "largest RPM deviation"
+      : "largest RPM deviation",
   );
 
   // ---- flights table ----
@@ -7140,7 +7168,7 @@ function refreshHistoryScreen(selectedCraft) {
         <td>${cell(entry.internalResistance, " mΩ")}</td>
         <td><button class="history-remove" data-index="${index}"
           title="Remove this flight from the record">✕</button></td>
-      </tr>`
+      </tr>`,
       )
       .join("")}
   `;
@@ -7167,7 +7195,7 @@ historyTable.addEventListener("click", (event) => {
 
   if (
     confirm(
-      `Remove "${entry.fileName}" from the health record? Trends recompute without it.`
+      `Remove "${entry.fileName}" from the health record? Trends recompute without it.`,
     )
   ) {
     deleteFlight(localStorage, craft, entry.fileName);
@@ -7219,14 +7247,12 @@ function contributionEnabled() {
 
 function loadContributeCats() {
   try {
-    const stored = JSON.parse(
-      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
-    );
+    const stored = JSON.parse(localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? "");
     return {
       power: stored.power === true,
       gps: stored.gps === true,
       setup: stored.setup === true,
-      dump: stored.dump === true
+      dump: stored.dump === true,
     };
   } catch {
     return { power: true, gps: false, setup: true, dump: false };
@@ -7238,9 +7264,7 @@ function loadContributeCats() {
 // what decides if the one-time inline ask still shows.
 function dumpConsentAnswered() {
   try {
-    const stored = JSON.parse(
-      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
-    );
+    const stored = JSON.parse(localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? "");
     return typeof stored.dump === "boolean";
   } catch {
     return false;
@@ -7257,8 +7281,7 @@ function refreshContributeCard() {
   if (!CONTRIBUTE_ENDPOINT) return;
 
   const cats = loadContributeCats();
-  contributeToggle.checked =
-    localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on";
+  contributeToggle.checked = localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on";
   contributePower.checked = cats.power;
   contributeGps.checked = cats.gps;
   contributeSetup.checked = cats.setup;
@@ -7268,7 +7291,7 @@ function refreshContributeCard() {
   [contributePower, contributeGps, contributeSetup, contributeDump].forEach(
     (el) => {
       el.disabled = disabled;
-    }
+    },
   );
 }
 
@@ -7297,12 +7320,12 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
         logQuality: extras.logQuality ?? null,
         fingerprint: buildFingerprint({
           dataset: extras.dataset,
-          pidAnalysis: extras.pidAnalysis
+          pidAnalysis: extras.pidAnalysis,
         }),
         flightEvents: extras.dataset?.flightEvents ?? null,
         governorEvents: extras.dataset?.governorEvents ?? null,
-        precomp: extras.dataset?.precomp ?? null
-      }
+        precomp: extras.dataset?.precomp ?? null,
+      },
     );
 
     // Same flight already confirmed uploaded from this
@@ -7320,13 +7343,13 @@ async function maybeContributeFlight(flight, fileType, key, extras = {}) {
         fields: contribution.frames.fields,
         frames: contribution.frames.frames,
         gps: contribution.frames.gps,
-        categories: contribution.payload.categories
+        categories: contribution.payload.categories,
       })} …`;
     }
 
     const result = await uploadContributionV1(
       CONTRIBUTE_ENDPOINT,
-      contribution
+      contribution,
     );
 
     if (result.ok) {
@@ -7350,7 +7373,7 @@ if (contributeToggle) {
   contributeToggle.addEventListener("change", () => {
     localStorage.setItem(
       CONTRIBUTE_PREF_KEY,
-      contributeToggle.checked ? "on" : "off"
+      contributeToggle.checked ? "on" : "off",
     );
     refreshContributeCard();
   });
@@ -7362,10 +7385,10 @@ if (contributeToggle) {
           power: contributePower.checked,
           gps: contributeGps.checked,
           setup: contributeSetup.checked,
-          dump: contributeDump.checked
+          dump: contributeDump.checked,
         });
       });
-    }
+    },
   );
 }
 
@@ -7381,7 +7404,7 @@ if (contributeAsk && CONTRIBUTE_ENDPOINT) {
         power: document.getElementById("askPower").checked,
         gps: document.getElementById("askGps").checked,
         setup: document.getElementById("askSetup").checked,
-        dump: document.getElementById("askDump").checked
+        dump: document.getElementById("askDump").checked,
       });
       contributeAsk.hidden = true;
       refreshContributeCard();
@@ -7455,16 +7478,14 @@ function openCraftCardPanel(craftName, prefill) {
   // a pilot who consented to sharing before the dump category
   // existed, at their first dump read. Once answered — there,
   // or on the first-run ask card — it never appears again.
-  dumpConsentRow.hidden = !(
-    contributionEnabled() && !dumpConsentAnswered()
-  );
+  dumpConsentRow.hidden = !(contributionEnabled() && !dumpConsentAnswered());
 
   const existingDump = getCraftDump(localStorage, craftName);
   if (existingDump) {
     showDumpResult(
       null,
       "This model already has its settings on file.",
-      `${existingDump.stats.kept} settings kept. Read a dump again only to replace them.`
+      `${existingDump.stats.kept} settings kept. Read a dump again only to replace them.`,
     );
   } else {
     craftDumpStatus.hidden = true;
@@ -7511,7 +7532,7 @@ function stageCraftDump(text) {
     showDumpResult(
       "warn",
       "That doesn't look like a Rotorflight `dump all` yet.",
-      "Paste (or pick) the whole output of the `dump all` CLI command."
+      "Paste (or pick) the whole output of the `dump all` CLI command.",
     );
     return;
   }
@@ -7552,16 +7573,14 @@ function stageCraftDump(text) {
       ? ` (${stagedCraftDump.report.join(", ")})`
       : "") +
     "." +
-    (filled.length > 0
-      ? ` Filled in: ${filled.join(" + ")}.`
-      : "") +
+    (filled.length > 0 ? ` Filled in: ${filled.join(" + ")}.` : "") +
     " Nothing is saved yet: press Save model below to keep these settings.";
 
   if (who && !matches) {
     showDumpResult(
       "warn",
       `✓ Configuration read, but it says "${who}", and this panel is about "${craftCardTarget}". Right file?`,
-      detail
+      detail,
     );
   } else {
     showDumpResult(
@@ -7569,7 +7588,7 @@ function stageCraftDump(text) {
       who
         ? `✓ Configuration read: ${who}. That's this model.`
         : "✓ Configuration read.",
-      detail
+      detail,
     );
 
     // Reading is not the end: the pilot reviews and completes
@@ -7577,8 +7596,13 @@ function stageCraftDump(text) {
     // scroll the fields back into view and focus the first one
     // the dump could not know.
     const nextField =
-      [craftCardSize, craftCardBlade, craftCardPower, craftCardHeadspeed, craftCardDrive]
-        .find((field) => !field.value) ?? craftCardSize;
+      [
+        craftCardSize,
+        craftCardBlade,
+        craftCardPower,
+        craftCardHeadspeed,
+        craftCardDrive,
+      ].find((field) => !field.value) ?? craftCardSize;
     nextField.scrollIntoView({ behavior: "smooth", block: "center" });
     nextField.focus({ preventScroll: true });
   }
@@ -7590,7 +7614,7 @@ function stageCraftDump(text) {
     dumpConsentRow.hidden = false;
     saveContributeCats({
       ...loadContributeCats(),
-      dump: dumpConsentInline.checked
+      dump: dumpConsentInline.checked,
     });
     refreshContributeCard();
   }
@@ -7604,7 +7628,7 @@ if (craftDumpReadButton) {
       showDumpResult(
         "warn",
         "Nothing to read yet.",
-        "Paste your `dump all` above, or use the file button."
+        "Paste your `dump all` above, or use the file button.",
       );
       return;
     }
@@ -7646,9 +7670,8 @@ function maybeAskCraftCard(craftName) {
     prefillCraftCard({
       medianHeadspeedRpm:
         currentDataset?.labs?.governor?.averageHeadspeed ?? null,
-      hasElectricalTelemetry:
-        currentDataset?.columnPresence?.hasVbat === true
-    })
+      hasElectricalTelemetry: currentDataset?.columnPresence?.hasVbat === true,
+    }),
   );
 }
 
@@ -7660,7 +7683,7 @@ if (craftCardSave) {
         blade_length_mm: craftCardBlade.value,
         power_type: craftCardPower.value || null,
         typical_headspeed_rpm: craftCardHeadspeed.value,
-        drive: craftCardDrive.value || null
+        drive: craftCardDrive.value || null,
       });
 
       if (stagedCraftDump) {
@@ -7674,7 +7697,9 @@ if (craftCardSave) {
         refreshPackCard();
         if (fileStatus) {
           fileStatus.textContent = `Settings dump saved for ${savedFor}${
-            Number.isFinite(savedCount) ? ` — ${savedCount} settings on file` : ""
+            Number.isFinite(savedCount)
+              ? ` — ${savedCount} settings on file`
+              : ""
           }.`;
         }
       }
@@ -7722,9 +7747,7 @@ function refreshUnlockCard() {
 
 function setUnlockCraft(craftName, isSample) {
   unlockCraftTarget =
-    !isSample && craftName && craftName !== "Unknown craft"
-      ? craftName
-      : null;
+    !isSample && craftName && craftName !== "Unknown craft" ? craftName : null;
   refreshUnlockCard();
 }
 
@@ -7750,8 +7773,8 @@ if (unlockDumpButton) {
           medianHeadspeedRpm:
             currentDataset?.labs?.governor?.averageHeadspeed ?? null,
           hasElectricalTelemetry:
-            currentDataset?.columnPresence?.hasVbat === true
-        })
+            currentDataset?.columnPresence?.hasVbat === true,
+        }),
       );
     }
   });
@@ -7840,9 +7863,7 @@ if (academyRevealButton) {
     const opening = academyReveal.hidden;
     setAcademyRevealOpen(opening);
     if (opening) {
-      noteAction(
-        `academy reveal: ${activeAcademyEntry?.id ?? "unknown"}`
-      );
+      noteAction(`academy reveal: ${activeAcademyEntry?.id ?? "unknown"}`);
     }
   });
 }
@@ -7853,12 +7874,9 @@ if (academyDumpCopyButton) {
     if (!entry?.dumpFile || !window.blackboxLab?.readSampleText) {
       return;
     }
-    const text = await window.blackboxLab.readSampleText(
-      entry.dumpFile
-    );
+    const text = await window.blackboxLab.readSampleText(entry.dumpFile);
     if (!text) {
-      academyDumpCopyButton.textContent =
-        "Could not read the paired dump";
+      academyDumpCopyButton.textContent = "Could not read the paired dump";
       return;
     }
     await navigator.clipboard.writeText(text);
@@ -7873,12 +7891,9 @@ if (academyFreshDumpButton) {
     if (!entry?.freshDumpFile || !window.blackboxLab?.readSampleText) {
       return;
     }
-    const text = await window.blackboxLab.readSampleText(
-      entry.freshDumpFile
-    );
+    const text = await window.blackboxLab.readSampleText(entry.freshDumpFile);
     if (!text) {
-      academyFreshDumpButton.textContent =
-        "Could not read the fresh dump";
+      academyFreshDumpButton.textContent = "Could not read the fresh dump";
       return;
     }
     await navigator.clipboard.writeText(text);
@@ -7903,9 +7918,7 @@ async function loadAcademyEntry(entry) {
     return;
   }
 
-  await loadFromFile(
-    new File([new Uint8Array(bytes)], entry.file)
-  );
+  await loadFromFile(new File([new Uint8Array(bytes)], entry.file));
 
   setAcademyEntry(entry);
   fileStatus.textContent = `Loaded: ${entry.title} — find the problem, then reveal.`;
@@ -7988,9 +8001,7 @@ window.addEventListener("drop", async (event) => {
   try {
     await loadFromFile(file);
   } catch (error) {
-    setLoadStatus(
-      "Something went wrong reading this log: " + error.message
-    );
+    setLoadStatus("Something went wrong reading this log: " + error.message);
     finishLoadProgress(false);
   }
 });
@@ -8045,11 +8056,9 @@ function describeLoadedFile() {
   return {
     name: loadedLog.file?.name ?? null,
     sizeKb: Number(loadedLog.sizeKb) || null,
-    frames: stats
-      ? (stats.intraFrames ?? 0) + (stats.interFrames ?? 0)
-      : null,
+    frames: stats ? (stats.intraFrames ?? 0) + (stats.interFrames ?? 0) : null,
     corruptFrames: stats?.corruptFrames ?? null,
-    sampleRateHz: currentDataset?.sampleRateHz ?? null
+    sampleRateHz: currentDataset?.sampleRateHz ?? null,
   };
 }
 
@@ -8061,10 +8070,10 @@ function showErrorReport(error) {
   currentErrorBundle = buildErrorBundle({
     error,
     screen:
-      document.querySelector("[data-screen].screen-active")?.dataset
-        .screen ?? null,
+      document.querySelector("[data-screen].screen-active")?.dataset.screen ??
+      null,
     lastAction: lastUserAction,
-    file: describeLoadedFile()
+    file: describeLoadedFile(),
   });
 
   errorReportSummary.textContent = currentErrorBundle.message;
@@ -8075,8 +8084,7 @@ function showErrorReport(error) {
 
   const fingerprint = bundleFingerprint(currentErrorBundle);
   const canSend = Boolean(CONTRIBUTE_ENDPOINT);
-  const sentBefore =
-    canSend && alreadySent(localStorage, fingerprint);
+  const sentBefore = canSend && alreadySent(localStorage, fingerprint);
 
   errorReportSend.hidden = !canSend;
   errorReportSend.disabled = sentBefore;
@@ -8100,9 +8108,7 @@ if (errorReportCopy) {
     }
 
     try {
-      await navigator.clipboard.writeText(
-        formatBundleText(currentErrorBundle)
-      );
+      await navigator.clipboard.writeText(formatBundleText(currentErrorBundle));
       errorReportCopy.textContent = "Copied!";
       setTimeout(() => {
         errorReportCopy.textContent = "Copy details";
@@ -8124,14 +8130,11 @@ if (errorReportSend) {
 
     const result = await sendErrorReport(
       CONTRIBUTE_ENDPOINT,
-      currentErrorBundle
+      currentErrorBundle,
     );
 
     if (result.ok) {
-      markSent(
-        localStorage,
-        bundleFingerprint(currentErrorBundle)
-      );
+      markSent(localStorage, bundleFingerprint(currentErrorBundle));
       errorReportSend.textContent = "Sent. Thank you!";
     } else {
       errorReportSend.disabled = false;
