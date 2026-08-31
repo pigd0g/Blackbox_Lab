@@ -13,7 +13,6 @@ import {
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import { analyzeAllFlightsStepResponse } from "./analysis/stepResponseAnalysis.js";
-import { analyzeAllFlightsStepResponse } from "./analysis/stepResponseAnalysis.js";
 import {
   buildContributionV1,
   describeContribution,
